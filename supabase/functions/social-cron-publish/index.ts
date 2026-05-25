@@ -581,12 +581,23 @@ async function publishToInstagram(
 
     console.log(`[cron-IG] Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}`);
 
-    const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(containerBody),
-    });
-    const containerData = await containerRes.json();
+    let containerData: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(containerBody),
+      });
+      containerData = await containerRes.json();
+
+      if (containerData.error?.is_transient && attempt < 2) {
+        console.warn(`[cron-IG] Transient error on attempt ${attempt + 1}, retrying in 3s...`);
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      break;
+    }
+
     if (containerData.error) {
       console.error("[cron-IG] container error:", containerData.error);
       return { error: `Instagram: ${containerData.error.message}` };
@@ -598,30 +609,47 @@ async function publishToInstagram(
     // Poll for ready — videos need much longer
     const maxPolls = isVideo ? 30 : 20;
     const pollInterval = isVideo ? 3000 : 2000;
+    let ready = false;
     for (let i = 0; i < maxPolls; i++) {
       await new Promise((r) => setTimeout(r, pollInterval));
-      const statusRes = await fetch(`${GRAPH_API}/${containerId}?fields=status_code&access_token=${accessToken}`);
+      const statusRes = await fetch(
+        `${GRAPH_API}/${containerId}?fields=status_code`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
       const statusData = await statusRes.json();
       console.log(`[cron-IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
 
       if (statusData.error) {
-        console.error(`[cron-IG] Poll error: ${statusData.error.message}`);
-        return { error: `Instagram polling error: ${statusData.error.message}` };
+        const msg = statusData.error.message || "";
+        const code = statusData.error.code;
+        const type = statusData.error.type || "";
+        const isAuth = code === 190 || code === 200 || code === 102 || /OAuth|Authorization/i.test(type) || /Authorization Error/i.test(msg);
+        console.error(`[cron-IG] Poll error: ${msg} (code=${code}, type=${type})`);
+        if (isAuth) {
+          return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
+        }
+        return { error: `Instagram polling error: ${msg}` };
       }
 
       if (statusData.status_code === "FINISHED") {
-        const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ creation_id: containerId, access_token: accessToken }),
-        });
-        const publishData = await publishRes.json();
-        if (publishData.error) return { error: `Instagram: ${publishData.error.message}` };
-        return { id: publishData.id };
+        ready = true;
+        break;
       }
-      if (statusData.status_code === "ERROR") return { error: "Instagram media processing failed" };
+      if (statusData.status_code === "ERROR") return { error: "Instagram media processing failed. Try a different image/video." };
     }
-    return { error: `Instagram media processing timed out after ${maxPolls * pollInterval / 1000}s. Try again.` };
+
+    if (!ready) {
+      return { error: `Instagram media processing timed out after ${maxPolls * pollInterval / 1000}s. Try again.` };
+    }
+
+    const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ creation_id: containerId, access_token: accessToken }),
+    });
+    const publishData = await publishRes.json();
+    if (publishData.error) return { error: `Instagram: ${publishData.error.message}` };
+    return { id: publishData.id };
   } catch (err) {
     return { error: `Instagram: ${err instanceof Error ? err.message : "Unknown"}` };
   }

@@ -1,78 +1,44 @@
-## Audit findings
+## Goal
+Make Facebook/Instagram publishing stay reliable after reconnect, so the app no longer shows connected status while Instagram publish still fails with token/permission errors.
 
-- The Integrations page calls `facebook-oauth` with `check-status` for both `facebook` and `instagram`.
-- `check-status` currently marks the connection as expired using only the stored `expires_at` timestamp.
-- The logged-in user has old `facebook` and `instagram` main token rows with `expires_at` in April, so the UI flips back to **Reconnect** even though newer team Meta tokens exist.
-- `social-publish` also uses owner-first token lookup, but it only falls back to a teammate when the owner token row is missing, not when it is expired/invalid.
-- Facebook and Instagram are treated as separate token records even though Meta OAuth should be handled as one combined connection for this app.
+## What I found
+- The current status check can show Meta as connected, but the publish path still fails later during Instagram media polling.
+- There is a concrete backend bug in `facebook-oauth/index.ts` under `refresh-accounts`: it overwrites the main `facebook` / `instagram` token rows with the first page token.
+- A page token is not a safe replacement for the long-lived user token. That can make the connection look healthy enough for page discovery while failing during Instagram container polling/publishing.
+- `social-publish` and `social-cron-publish` are also slightly inconsistent in how they poll Instagram media status, so the manual and cron publish paths can behave differently.
 
-## Root cause
+## Plan
+1. Fix the Meta token source bug in `facebook-oauth`
+- Update `refresh-accounts` so it never promotes a page token into the main `facebook` / `instagram` token rows.
+- Preserve the real long-lived user token as the main Meta token.
+- Restrict `refresh-accounts` to only refresh discovered pages / Instagram account mappings, not replace the primary auth token.
 
-The instability is a code/state mismatch:
+2. Harden Meta token resolution for publish
+- Keep using the existing shared resolver, but make sure publish only uses:
+  - main long-lived user token for discovery/refresh
+  - page token only where Meta actually requires a page token
+- Ensure Instagram publish uses the correct token consistently for container create, status polling, and publish.
 
-1. Reconnect may refresh one Meta side, while the other side can keep an old expired row.
-2. Status checks trust stale local expiry instead of validating and normalizing the active Meta connection.
-3. Publishing does not skip expired owner tokens before using team fallback.
+3. Unify the Instagram publish path
+- Make `social-cron-publish` follow the same safer Instagram polling/auth pattern already partially present in `social-publish`.
+- Standardize error handling so token/permission failures are classified the same way in both paths.
 
-## Implementation plan
+4. Add defensive logging only where needed
+- Add concise logs that reveal whether the function is using a main Meta token or page token, without exposing secrets.
+- This will make future failures clearly distinguish code-path bugs from real expired permissions.
 
-### 1. Unify Meta OAuth refresh
+5. Validate end-to-end
+- Re-check the Meta reconnect/status flow.
+- Verify that reconnect no longer degrades back into a broken publish state because of `refresh-accounts`.
+- Verify manual publish and cron publish use the same stable Instagram token behavior.
 
-Update `supabase/functions/facebook-oauth/index.ts` so one Facebook/Instagram reconnect refreshes both sides:
-
-- Always request the full combined Meta permission set for Facebook Pages + Instagram publishing.
-- During `exchange-code`, always discover:
-  - Facebook Pages
-  - linked Instagram Business accounts
-  - granted permissions
-- Upsert both main token rows:
-  - `platform = 'facebook'`
-  - `platform = 'instagram'`
-- Upsert page token rows for both prefixes:
-  - `facebook_page_<pageId>`
-  - `instagram_page_<pageId>`
-- Update both `integration_connections` rows together so Facebook and Instagram show the same healthy state.
-
-### 2. Make status checks stable and truthful
-
-Update `facebook-oauth` `check-status` to use a deterministic resolver:
-
-- Prefer the current user’s token only if it is not locally expired and validates against Meta.
-- If the current user’s token is expired/invalid, search same-company teammates for a valid Meta token.
-- If a valid team token exists, return `connected` and identify it as team-backed instead of showing `Reconnect`.
-- If no valid token exists, return `error` with a clear reconnect message.
-- Update `integration_connections` from the result so the UI does not oscillate between database state and function state.
-
-### 3. Harden publishing token selection
-
-Update `supabase/functions/social-publish/index.ts` and the matching cron path in `supabase/functions/social-cron-publish/index.ts`:
-
-- Select a Meta token with the same resolver logic instead of blindly using the owner row.
-- Skip expired/invalid owner tokens and fall back to a valid same-company teammate token.
-- Keep page matching strict; no fallback to wrong pages.
-- Keep Neel approval and existing publish locks untouched.
-
-### 4. Preserve security and tenant isolation
-
-- Only fallback within the same `company_id`.
-- Do not expose tokens to the frontend.
-- Do not weaken approval gates or RLS.
-- Do not store roles on user/profile tables.
-
-### 5. Validate without posting anything
-
-After implementation:
-
-- Deploy only the changed backend functions.
-- Call `facebook-oauth` `check-status` for `facebook` and `instagram`.
-- Confirm both return stable `connected` when a valid same-company Meta token exists.
-- Confirm stale current-user rows no longer force the UI into `Reconnect`.
-- Check recent edge logs for remaining Meta auth failures.
-
-## Files expected to change
-
+## Files to change
 - `supabase/functions/facebook-oauth/index.ts`
 - `supabase/functions/social-publish/index.ts`
 - `supabase/functions/social-cron-publish/index.ts`
 
-No frontend UI redesign is planned; the fix is in the Meta auth/status/publishing logic.
+## Technical notes
+- This is not just an operations issue.
+- The screenshot error message is real, but there is also a backend state bug causing valid reconnects to become unstable again.
+- The main risky line is the `refresh-accounts` flow that currently sets the main Meta token from `pageTokenRows[0].access_token`.
+- I will keep tenant isolation and the existing approval/publish locks unchanged.

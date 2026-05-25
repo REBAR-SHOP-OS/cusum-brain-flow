@@ -26,6 +26,27 @@ const SCOPES: Record<string, string[]> = {
   ],
 };
 
+const META_COMBINED_SCOPES = [...new Set([...SCOPES.facebook, ...SCOPES.instagram])];
+
+function requiredScopesForIntegration(integration: "facebook" | "instagram") {
+  return integration === "instagram"
+    ? ["pages_show_list", "pages_read_engagement", "instagram_basic", "instagram_content_publish"]
+    : ["pages_show_list", "pages_read_engagement", "pages_manage_posts"];
+}
+
+async function fetchGrantedScopes(accessToken: string): Promise<string[]> {
+  try {
+    const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${accessToken}`);
+    if (!permRes.ok) return [];
+    const permData = await permRes.json();
+    return (permData.data || [])
+      .filter((p: any) => p.status === "granted")
+      .map((p: any) => p.permission);
+  } catch {
+    return [];
+  }
+}
+
 function getMetaCredentials() {
   const appId = Deno.env.get("FACEBOOK_APP_ID");
   const appSecret = Deno.env.get("FACEBOOK_APP_SECRET");
@@ -48,10 +69,7 @@ Deno.serve((req) =>
       const { appId } = getMetaCredentials();
       if (!appId) throw new Error("Facebook App ID not configured");
 
-      const scopes = SCOPES[integration] || SCOPES.facebook;
-      const allScopes = integration === "instagram"
-        ? [...new Set([...SCOPES.facebook, ...SCOPES.instagram])]
-        : scopes;
+      const allScopes = META_COMBINED_SCOPES;
 
       const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
       authUrl.searchParams.set("client_id", appId);
@@ -125,7 +143,7 @@ Deno.serve((req) =>
 
       // Step 5: If Instagram, get Instagram Business Account IDs
       let instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
-      if (integration === "instagram" && pages.length > 0) {
+      if (pages.length > 0) {
         for (const page of pages) {
           try {
             const igRes = await fetch(
@@ -160,7 +178,7 @@ Deno.serve((req) =>
           grantedScopes = (permData.data || [])
             .filter((p: any) => p.status === "granted")
             .map((p: any) => p.permission);
-          const requiredForPublish = ["pages_read_engagement", "pages_manage_posts"];
+          const requiredForPublish = META_COMBINED_SCOPES;
           missingScopes = requiredForPublish.filter(s => !grantedScopes.includes(s));
           publishReady = missingScopes.length === 0;
           console.log(`[facebook-oauth] Granted scopes: ${grantedScopes.join(", ")}`);
@@ -300,6 +318,36 @@ Deno.serve((req) =>
         );
       }
 
+      const grantedScopes = await fetchGrantedScopes(resolved.accessToken);
+      const requiredScopes = requiredScopesForIntegration(integration);
+      const missingScopes = requiredScopes.filter((scope) => !grantedScopes.includes(scope));
+
+      if (missingScopes.length > 0) {
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: integration,
+            status: "error",
+            last_checked_at: new Date().toISOString(),
+            error_message: `Missing Meta permissions: ${missingScopes.join(", ")}`,
+            config: {
+              publish_ready: false,
+              granted_scopes: grantedScopes,
+              missing_scopes: missingScopes,
+              source: resolved.source,
+            },
+          }, { onConflict: "user_id,integration_id" });
+
+        return new Response(
+          JSON.stringify({
+            status: "error",
+            error: `Missing permissions: ${missingScopes.join(", ")}. Please reconnect Facebook/Instagram.`,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // Healthy — sync DB row to connected
       await supabaseAdmin
         .from("integration_connections")
@@ -310,6 +358,12 @@ Deno.serve((req) =>
           last_checked_at: new Date().toISOString(),
           last_sync_at: new Date().toISOString(),
           error_message: null,
+          config: {
+            publish_ready: true,
+            granted_scopes: grantedScopes,
+            missing_scopes: [],
+            source: resolved.source,
+          },
         }, { onConflict: "user_id,integration_id" });
 
       return new Response(
@@ -327,6 +381,24 @@ Deno.serve((req) =>
     // ─── Refresh / rediscover IG accounts from existing page tokens ─
     if (action === "refresh-accounts") {
       const integration = (body.integration as string) || "instagram";
+
+      const { data: mainTokenRow } = await supabaseAdmin
+        .from("user_meta_tokens")
+        .select("platform, access_token, expires_at, meta_user_name")
+        .eq("user_id", userId)
+        .in("platform", ["facebook", "instagram"])
+        .order("platform", { ascending: true })
+        .limit(2);
+
+      const primaryTokenRow = (mainTokenRow || []).find((row: any) => row.platform === "facebook")
+        || (mainTokenRow || []).find((row: any) => row.platform === "instagram");
+
+      if (!primaryTokenRow?.access_token) {
+        return new Response(
+          JSON.stringify({ error: "No main Meta token found. Please reconnect Facebook/Instagram first." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       // Find all page token rows for this user
       const { data: pageTokenRows } = await supabaseAdmin
@@ -373,50 +445,61 @@ Deno.serve((req) =>
         }
       }
 
-      // Use the first page token as the main token for the instagram platform row
-      const mainToken = pageTokenRows[0].access_token;
+      const allPagesDeduped = Array.from(new Map(allPages.map((page) => [page.id, page])).values());
+      const instagramAccountsDeduped = Array.from(new Map(instagramAccounts.map((account) => [account.id, account])).values());
+      const grantedScopes = await fetchGrantedScopes(primaryTokenRow.access_token);
+      const requiredScopes = requiredScopesForIntegration(integration === "facebook" ? "facebook" : "instagram");
+      const missingScopes = requiredScopes.filter((scope) => !grantedScopes.includes(scope));
 
-      // Upsert main instagram platform row
-      const { error: upsertError } = await supabaseAdmin
-        .from("user_meta_tokens")
-        .upsert({
-          user_id: userId,
-          platform: integration,
-          access_token: mainToken,
-          token_type: "long_lived",
-          meta_user_name: allPages[0]?.name || "",
-          pages: allPages,
-          instagram_accounts: instagramAccounts,
-          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        }, { onConflict: "user_id,platform" });
+      // Refresh discovered pages/accounts without overwriting the main long-lived user token.
+      for (const plat of ["facebook", "instagram"] as const) {
+        const { error: upsertError } = await supabaseAdmin
+          .from("user_meta_tokens")
+          .upsert({
+            user_id: userId,
+            platform: plat,
+            access_token: primaryTokenRow.access_token,
+            token_type: "long_lived",
+            meta_user_name: primaryTokenRow.meta_user_name || allPagesDeduped[0]?.name || "",
+            pages: allPagesDeduped,
+            instagram_accounts: instagramAccountsDeduped,
+            expires_at: primaryTokenRow.expires_at,
+          }, { onConflict: "user_id,platform" });
 
-      if (upsertError) {
-        console.error("Failed to upsert main token:", upsertError);
-        throw new Error("Failed to save refreshed accounts");
+        if (upsertError) {
+          console.error(`Failed to upsert main token for ${plat}:`, upsertError);
+          throw new Error("Failed to save refreshed accounts");
+        }
+
+        const platMissingScopes = requiredScopesForIntegration(plat).filter((scope) => !grantedScopes.includes(scope));
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: plat,
+            status: platMissingScopes.length === 0 ? "connected" : "error",
+            last_checked_at: new Date().toISOString(),
+            last_sync_at: new Date().toISOString(),
+            error_message: platMissingScopes.length === 0 ? null : `Missing Meta permissions: ${platMissingScopes.join(", ")}`,
+            config: {
+              pagesCount: allPagesDeduped.length,
+              instagramAccounts: instagramAccountsDeduped.length,
+              publish_ready: platMissingScopes.length === 0,
+              granted_scopes: grantedScopes,
+              missing_scopes: platMissingScopes,
+            },
+          }, { onConflict: "user_id,integration_id" });
       }
-
-      // Also ensure facebook platform row exists
-      await supabaseAdmin
-        .from("user_meta_tokens")
-        .upsert({
-          user_id: userId,
-          platform: "facebook",
-          access_token: mainToken,
-          token_type: "long_lived",
-          meta_user_name: allPages[0]?.name || "",
-          pages: allPages,
-          instagram_accounts: instagramAccounts,
-          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        }, { onConflict: "user_id,platform" });
 
       return new Response(
         JSON.stringify({
           success: true,
-          pagesFound: allPages.length,
-          instagramAccountsFound: instagramAccounts.length,
-          instagramAccounts,
-          message: instagramAccounts.length > 0
-            ? `Found ${instagramAccounts.length} Instagram Business Account(s): ${instagramAccounts.map(a => a.username || a.id).join(", ")}`
+          pagesFound: allPagesDeduped.length,
+          instagramAccountsFound: instagramAccountsDeduped.length,
+          instagramAccounts: instagramAccountsDeduped,
+          missing_scopes: missingScopes,
+          message: instagramAccountsDeduped.length > 0
+            ? `Found ${instagramAccountsDeduped.length} Instagram Business Account(s): ${instagramAccountsDeduped.map(a => a.username || a.id).join(", ")}`
             : "No Instagram Business Accounts linked to your Facebook Pages. Make sure your Page is connected to an Instagram Business Account in Meta Business Suite.",
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
