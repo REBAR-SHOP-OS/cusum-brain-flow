@@ -4,7 +4,13 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { hasAnyRole } from "../_shared/roleCheck.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
-import { acquirePublishLock, releasePublishLock, normalizePageName, initPageResults, recordPageResult } from "../_shared/publishLock.ts";
+import {
+  acquirePublishLock,
+  initPageResults,
+  normalizePageName,
+  recordPageResult,
+  releasePublishLock,
+} from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
 import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
@@ -16,11 +22,11 @@ const GRAPH_API = "https://graph.facebook.com/v21.0";
  */
 async function refreshPageToken(
   userLongLivedToken: string,
-  pageId: string
+  pageId: string,
 ): Promise<string | null> {
   try {
     const res = await fetch(
-      `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userLongLivedToken}`
+      `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userLongLivedToken}`,
     );
     if (res.ok) {
       const data = await res.json();
@@ -30,7 +36,9 @@ async function refreshPageToken(
       }
     } else {
       const errBody = await res.text();
-      console.warn(`[social-publish] Page token refresh failed (${res.status}): ${errBody}`);
+      console.warn(
+        `[social-publish] Page token refresh failed (${res.status}): ${errBody}`,
+      );
     }
   } catch (e) {
     console.warn(`[social-publish] Page token refresh exception:`, e);
@@ -39,471 +47,778 @@ async function refreshPageToken(
 }
 
 Deno.serve((req) =>
-  handleRequest(req, async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
+  handleRequest(
+    req,
+    async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
+      // Flexible auth: allow admin/marketing roles OR super admin emails
+      const hasPublishRole = await hasAnyRole(supabaseAdmin, userId, [
+        "admin",
+        "marketing",
+      ]);
+      if (!hasPublishRole) {
+        const { data: profile } = await supabaseAdmin
+          .from("profiles")
+          .select("email")
+          .eq("user_id", userId)
+          .maybeSingle();
+        const email = (profile?.email ?? "").toLowerCase();
+        if (!SUPER_ADMIN_EMAILS.includes(email)) {
+          return new Response(
+            JSON.stringify({
+              error:
+                "Forbidden: requires admin, marketing role or super admin access",
+            }),
+            {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+      }
 
-    // Flexible auth: allow admin/marketing roles OR super admin emails
-    const hasPublishRole = await hasAnyRole(supabaseAdmin, userId, ["admin", "marketing"]);
-    if (!hasPublishRole) {
-      const { data: profile } = await supabaseAdmin
-        .from("profiles")
-        .select("email")
-        .eq("user_id", userId)
-        .maybeSingle();
-      const email = (profile?.email ?? "").toLowerCase();
-      if (!SUPER_ADMIN_EMAILS.includes(email)) {
+      const publishSchema = z.object({
+        platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
+        message: z.string().max(63206).optional().default(""),
+        image_url: z.string().url().max(2000).optional(),
+        post_id: z.string().uuid().optional(),
+        page_name: z.string().optional(),
+        force_publish: z.boolean().optional(),
+        content_type: z.enum(["post", "reel", "story"]).optional().default(
+          "post",
+        ),
+        cover_image_url: z.string().url().max(2000).optional(),
+      });
+      const parsed = publishSchema.safeParse(body);
+      if (!parsed.success) {
         return new Response(
-          JSON.stringify({ error: "Forbidden: requires admin, marketing role or super admin access" }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          JSON.stringify({
+            error: "Validation failed",
+            details: parsed.error.flatten().fieldErrors,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
         );
       }
-    }
-
-    const publishSchema = z.object({
-      platform: z.enum(["facebook", "instagram", "linkedin", "twitter"]),
-      message: z.string().max(63206).optional().default(""),
-      image_url: z.string().url().max(2000).optional(),
-      post_id: z.string().uuid().optional(),
-      page_name: z.string().optional(),
-      force_publish: z.boolean().optional(),
-      content_type: z.enum(["post", "reel", "story"]).optional().default("post"),
-      cover_image_url: z.string().url().max(2000).optional(),
-    });
-    const parsed = publishSchema.safeParse(body);
-    if (!parsed.success) {
-      return new Response(
-        JSON.stringify({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      const {
+        platform,
+        message: rawMessage,
+        image_url,
+        post_id,
+        page_name,
+        force_publish,
+        content_type,
+        cover_image_url,
+      } = parsed.data;
+      console.log(
+        `[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`,
       );
-    }
-    const { platform, message: rawMessage, image_url, post_id, page_name, force_publish, content_type, cover_image_url } = parsed.data;
-    console.log(`[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`);
 
-    let message = rawMessage;
+      let message = rawMessage;
 
-    // Load the full post record for duplicate checking and multi-page publishing
-    let postRecord: any = null;
-    if (post_id) {
-      const { data: existing } = await supabaseAdmin
-        .from("social_posts")
-        .select("status, neel_approved, declined_by, title, platform, page_name, scheduled_date, content, image_url")
-        .eq("id", post_id)
-        .maybeSingle();
-      postRecord = existing;
-
-      if (existing?.status === "published") {
-        return new Response(
-          JSON.stringify({ error: "This post has already been published." }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      if (existing?.status === "publishing") {
-        return new Response(
-          JSON.stringify({ error: "This post is currently being published. Please wait." }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // HARD GATE: declined posts can NEVER be published
-      if (existing?.status === "declined") {
-        console.warn(`[social-publish] BLOCKED — post ${post_id} was declined by ${existing.declined_by}`);
-        return new Response(
-          JSON.stringify({ error: `This post was declined${existing.declined_by ? ` by ${existing.declined_by}` : ''} and cannot be published.` }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // ── Enhanced Duplicate Guard ──────────────────────────────────
-      if (existing && !force_publish) {
-        // Use workspace timezone for accurate "today" boundaries
-        const tz = await getWorkspaceTimezone(supabaseAdmin);
-        const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
-        const dayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
-        // Compute UTC boundaries for the local day
-        const localMidnight = new Date(`${dayStr}T00:00:00`);
-        const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getTime();
-        const dayStartUtc = new Date(localMidnight.getTime() + offsetMs).toISOString();
-        const dayEndUtc = new Date(localMidnight.getTime() + offsetMs + 86400000 - 1).toISOString();
-
-        const { data: publishedToday } = await supabaseAdmin
+      // Load the full post record for duplicate checking and multi-page publishing
+      let postRecord: any = null;
+      if (post_id) {
+        const { data: existing } = await supabaseAdmin
           .from("social_posts")
-          .select("id, title, content, image_url, page_name")
-          .eq("platform", existing.platform)
-          .eq("status", "published")
-          .neq("id", post_id)
-          .gte("scheduled_date", dayStartUtc)
-          .lte("scheduled_date", dayEndUtc)
-          .limit(50);
+          .select(
+            "status, neel_approved, declined_by, title, platform, page_name, scheduled_date, content, image_url",
+          )
+          .eq("id", post_id)
+          .maybeSingle();
+        postRecord = existing;
 
-        const postPages = existing.page_name
-          ? existing.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
-          : [];
+        if (existing?.status === "published") {
+          return new Response(
+            JSON.stringify({ error: "This post has already been published." }),
+            {
+              status: 409,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
 
-        if (publishedToday && publishedToday.length > 0) {
-          for (const pub of publishedToday) {
-            const sameContent = pub.content === existing.content && pub.image_url === existing.image_url;
-            const sameTitle = pub.title && existing.title && pub.title === existing.title;
+        if (existing?.status === "publishing") {
+          return new Response(
+            JSON.stringify({
+              error: "This post is currently being published. Please wait.",
+            }),
+            {
+              status: 409,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
 
-            // Only block on content+image match, not title alone
-            if (sameContent) {
-              const pubPages = pub.page_name
-                ? pub.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
-                : [];
-              // Only overlap when both sides have pages and they intersect
-              const hasPageOverlap = postPages.length > 0 && pubPages.length > 0
-                && postPages.some((pg: string) => pubPages.includes(pg));
+        // HARD GATE: declined posts can NEVER be published
+        if (existing?.status === "declined") {
+          console.warn(
+            `[social-publish] BLOCKED — post ${post_id} was declined by ${existing.declined_by}`,
+          );
+          return new Response(
+            JSON.stringify({
+              error: `This post was declined${
+                existing.declined_by ? ` by ${existing.declined_by}` : ""
+              } and cannot be published.`,
+            }),
+            {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
 
-              if (hasPageOverlap) {
-                console.warn(`[social-publish] BLOCKED — duplicate content already published: ${pub.id}`);
-                return new Response(
-                  JSON.stringify({ error: "Duplicate — this content was already published to this platform today." }),
-                  { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        // ── Enhanced Duplicate Guard ──────────────────────────────────
+        if (existing && !force_publish) {
+          // Use workspace timezone for accurate "today" boundaries
+          const tz = await getWorkspaceTimezone(supabaseAdmin);
+          const nowLocal = new Date(
+            new Date().toLocaleString("en-US", { timeZone: tz }),
+          );
+          const dayStr = `${nowLocal.getFullYear()}-${
+            String(nowLocal.getMonth() + 1).padStart(2, "0")
+          }-${String(nowLocal.getDate()).padStart(2, "0")}`;
+          // Compute UTC boundaries for the local day
+          const localMidnight = new Date(`${dayStr}T00:00:00`);
+          const offsetMs = new Date().getTime() -
+            new Date(new Date().toLocaleString("en-US", { timeZone: tz }))
+              .getTime();
+          const dayStartUtc = new Date(localMidnight.getTime() + offsetMs)
+            .toISOString();
+          const dayEndUtc = new Date(
+            localMidnight.getTime() + offsetMs + 86400000 - 1,
+          ).toISOString();
+
+          const { data: publishedToday } = await supabaseAdmin
+            .from("social_posts")
+            .select("id, title, content, image_url, page_name")
+            .eq("platform", existing.platform)
+            .eq("status", "published")
+            .neq("id", post_id)
+            .gte("scheduled_date", dayStartUtc)
+            .lte("scheduled_date", dayEndUtc)
+            .limit(50);
+
+          const postPages = existing.page_name
+            ? existing.page_name.split(", ").map((p: string) => p.trim())
+              .filter(Boolean)
+            : [];
+
+          if (publishedToday && publishedToday.length > 0) {
+            for (const pub of publishedToday) {
+              const sameContent = pub.content === existing.content &&
+                pub.image_url === existing.image_url;
+              const sameTitle = pub.title && existing.title &&
+                pub.title === existing.title;
+
+              // Only block on content+image match, not title alone
+              if (sameContent) {
+                const pubPages = pub.page_name
+                  ? pub.page_name.split(", ").map((p: string) => p.trim())
+                    .filter(Boolean)
+                  : [];
+                // Only overlap when both sides have pages and they intersect
+                const hasPageOverlap = postPages.length > 0 &&
+                  pubPages.length > 0 &&
+                  postPages.some((pg: string) => pubPages.includes(pg));
+
+                if (hasPageOverlap) {
+                  console.warn(
+                    `[social-publish] BLOCKED — duplicate content already published: ${pub.id}`,
+                  );
+                  return new Response(
+                    JSON.stringify({
+                      error:
+                        "Duplicate — this content was already published to this platform today.",
+                    }),
+                    {
+                      status: 409,
+                      headers: {
+                        ...corsHeaders,
+                        "Content-Type": "application/json",
+                      },
+                    },
+                  );
+                }
+              } else if (sameTitle) {
+                console.log(
+                  `[social-publish] INFO — same title as ${pub.id} but different content, allowing publish`,
                 );
               }
-            } else if (sameTitle) {
-              console.log(`[social-publish] INFO — same title as ${pub.id} but different content, allowing publish`);
             }
           }
         }
-      }
 
-      // HARD GATE: ONLY Neel-approved posts may publish. No admin/email bypass.
-      if (!existing?.neel_approved) {
-        console.warn(`[social-publish] BLOCKED — post ${post_id} not approved by Neel`);
-        return new Response(
-          JSON.stringify({ error: "This post requires Neel's approval before publishing." }),
-          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        // HARD GATE: ONLY Neel-approved posts may publish. No admin/email bypass.
+        if (!existing?.neel_approved) {
+          console.warn(
+            `[social-publish] BLOCKED — post ${post_id} not approved by Neel`,
+          );
+          return new Response(
+            JSON.stringify({
+              error: "This post requires Neel's approval before publishing.",
+            }),
+            {
+              status: 403,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        // ── Atomic Lock ──────────────────────────────────────────────
+        // Allow retry from "failed" when manually triggered (force_publish)
+        const allowedStatuses = force_publish
+          ? ["scheduled", "draft", "failed", "pending_approval"]
+          : ["scheduled", "draft"];
+        const lock = await acquirePublishLock(
+          supabaseAdmin,
+          post_id,
+          allowedStatuses,
+        );
+        if (!lock.locked) {
+          console.warn(
+            `[social-publish] Cannot acquire lock for post ${post_id}: ${lock.reason}`,
+          );
+          return new Response(
+            JSON.stringify({ error: `Cannot publish: ${lock.reason}` }),
+            {
+              status: 409,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+        console.log(
+          `[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`,
         );
       }
 
-      // ── Atomic Lock ──────────────────────────────────────────────
-      // Allow retry from "failed" when manually triggered (force_publish)
-      const allowedStatuses = force_publish
-        ? ["scheduled", "draft", "failed", "pending_approval"]
-        : ["scheduled", "draft"];
-      const lock = await acquirePublishLock(supabaseAdmin, post_id, allowedStatuses);
-      if (!lock.locked) {
-        console.warn(`[social-publish] Cannot acquire lock for post ${post_id}: ${lock.reason}`);
-        return new Response(
-          JSON.stringify({ error: `Cannot publish: ${lock.reason}` }),
-          { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      // Get user token via unified resolver — self → same-company teammate, both health-checked.
+      const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
+      let tokenData: {
+        access_token: string;
+        pages: any;
+        instagram_accounts: any;
+        user_id: string;
+      } | null = null;
+      let tokenOwnerUserId = userId;
+
+      if (platform === "facebook" || platform === "instagram") {
+        const resolved = await resolveMetaToken(
+          supabaseAdmin,
+          userId,
+          tokenPlatform as "facebook" | "instagram",
         );
-      }
-      console.log(`[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`);
-    }
+        if (resolved) {
+          tokenData = {
+            access_token: resolved.accessToken,
+            pages: resolved.pages,
+            instagram_accounts: resolved.instagramAccounts,
+            user_id: resolved.tokenOwnerUserId,
+          };
+          tokenOwnerUserId = resolved.tokenOwnerUserId;
+          if (resolved.source === "team") {
+            console.log(
+              `[social-publish] Using team-shared ${tokenPlatform} token from user ${tokenOwnerUserId}`,
+            );
+          }
+        }
 
-    // Get user token via unified resolver — self → same-company teammate, both health-checked.
-    const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
-    let tokenData: { access_token: string; pages: any; instagram_accounts: any; user_id: string } | null = null;
-    let tokenOwnerUserId = userId;
-
-    if (platform === "facebook" || platform === "instagram") {
-      const resolved = await resolveMetaToken(supabaseAdmin, userId, tokenPlatform as "facebook" | "instagram");
-      if (resolved) {
-        tokenData = {
-          access_token: resolved.accessToken,
-          pages: resolved.pages,
-          instagram_accounts: resolved.instagramAccounts,
-          user_id: resolved.tokenOwnerUserId,
-        };
-        tokenOwnerUserId = resolved.tokenOwnerUserId;
-        if (resolved.source === "team") {
-          console.log(`[social-publish] Using team-shared ${tokenPlatform} token from user ${tokenOwnerUserId}`);
+        if (!tokenData) {
+          const errMsg =
+            `${platform} not connected (no healthy token for you or any teammate). Please reconnect from Integrations.`;
+          if (post_id) {
+            const lockId = (await supabaseAdmin.from("social_posts").select(
+              "publishing_lock_id",
+            ).eq("id", post_id).maybeSingle()).data?.publishing_lock_id;
+            if (lockId) {
+              await releasePublishLock(
+                supabaseAdmin,
+                post_id,
+                lockId,
+                "failed",
+                { last_error: errMsg },
+              );
+            }
+          }
+          return new Response(
+            JSON.stringify({ error: errMsg }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
         }
       }
 
-      if (!tokenData) {
-        const errMsg = `${platform} not connected (no healthy token for you or any teammate). Please reconnect from Integrations.`;
+      // ── Multi-Page Publishing Loop ────────────────────────────────
+      // CRITICAL: For manual publish (force_publish=true), the request's page_name
+      // takes priority over the DB record's page_name. This prevents the backend
+      // from fan-out publishing to ALL pages stored on the DB row when the frontend
+      // has already split each page into separate publish calls.
+      const resolvedPageName = (force_publish && page_name)
+        ? page_name
+        : (postRecord?.page_name || page_name || "");
+      const individualPages = resolvedPageName
+        ? resolvedPageName.split(", ").map((p: string) => p.trim()).filter(
+          Boolean,
+        )
+        : [];
+      console.log(
+        `[social-publish] Resolved pages: [${
+          individualPages.join(", ")
+        }] (force_publish=${force_publish}, request_page="${page_name}", db_page="${postRecord?.page_name}")`,
+      );
+
+      const pageErrors: string[] = [];
+      const pageSuccesses: string[] = [];
+
+      // Get lock ID for final status update
+      let lockId: string | null = null;
+      if (post_id) {
+        const { data: lockData } = await supabaseAdmin.from("social_posts")
+          .select("publishing_lock_id").eq("id", post_id).maybeSingle();
+        lockId = lockData?.publishing_lock_id;
+      }
+
+      // Initialize per-page results so stale-lock recovery can preserve partial successes.
+      if (post_id && individualPages.length > 0) {
+        try {
+          await initPageResults(supabaseAdmin, post_id, individualPages);
+        } catch (e) {
+          console.warn(
+            `[social-publish] initPageResults failed: ${(e as Error).message}`,
+          );
+        }
+      }
+
+      // Helpers that mirror push() into structured page_results (fire-and-forget; failures non-fatal).
+      const markSuccess = (name: string, platformPostId?: string) => {
+        pageSuccesses.push(name);
         if (post_id) {
-          const lockId = (await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle()).data?.publishing_lock_id;
-          if (lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
-        }
-        return new Response(
-          JSON.stringify({ error: errMsg }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
-
-
-    // ── Multi-Page Publishing Loop ────────────────────────────────
-    // CRITICAL: For manual publish (force_publish=true), the request's page_name
-    // takes priority over the DB record's page_name. This prevents the backend
-    // from fan-out publishing to ALL pages stored on the DB row when the frontend
-    // has already split each page into separate publish calls.
-    const resolvedPageName = (force_publish && page_name) ? page_name : (postRecord?.page_name || page_name || "");
-    const individualPages = resolvedPageName ? resolvedPageName.split(", ").map((p: string) => p.trim()).filter(Boolean) : [];
-    console.log(`[social-publish] Resolved pages: [${individualPages.join(", ")}] (force_publish=${force_publish}, request_page="${page_name}", db_page="${postRecord?.page_name}")`);
-
-    const pageErrors: string[] = [];
-    const pageSuccesses: string[] = [];
-
-    // Get lock ID for final status update
-    let lockId: string | null = null;
-    if (post_id) {
-      const { data: lockData } = await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle();
-      lockId = lockData?.publishing_lock_id;
-    }
-
-    // Initialize per-page results so stale-lock recovery can preserve partial successes.
-    if (post_id && individualPages.length > 0) {
-      try { await initPageResults(supabaseAdmin, post_id, individualPages); } catch (e) {
-        console.warn(`[social-publish] initPageResults failed: ${(e as Error).message}`);
-      }
-    }
-
-    // Helpers that mirror push() into structured page_results (fire-and-forget; failures non-fatal).
-    const markSuccess = (name: string, platformPostId?: string) => {
-      pageSuccesses.push(name);
-      if (post_id) {
-        recordPageResult(supabaseAdmin, post_id, {
-          name, status: "success", platform_post_id: platformPostId,
-        }).catch((e) => console.warn(`[social-publish] recordPageResult success failed: ${e?.message}`));
-      }
-    };
-    const markFailure = (name: string, error: string) => {
-      pageErrors.push(`Page "${name}": ${error}`);
-      if (post_id) {
-        recordPageResult(supabaseAdmin, post_id, {
-          name, status: "failed", error,
-        }).catch((e) => console.warn(`[social-publish] recordPageResult failed failed: ${e?.message}`));
-      }
-    };
-
-
-    if (platform === "facebook" || platform === "instagram") {
-      const pages = (tokenData!.pages as Array<{ id: string; name: string }>) || [];
-      if (pages.length === 0) {
-        const errMsg = "No Facebook Pages found. Make sure your account has at least one Page.";
-        if (post_id && lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
-        return new Response(
-          JSON.stringify({ error: errMsg }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      // NO FALLBACK: if no pages assigned, fail explicitly
-      if (individualPages.length === 0) {
-        const errMsg = "No pages assigned to post (page_name is empty). Cannot publish without explicit page assignment.";
-        console.error(`[social-publish] FAIL: ${errMsg}`);
-        if (post_id && lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
-        return new Response(
-          JSON.stringify({ error: errMsg }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      console.log(`[social-publish] target_pages=[${individualPages.join(", ")}], available_pages=[${pages.map(p => p.name).join(", ")}]`);
-
-      const publishedFbPageIds = new Set<string>();
-      const publishedIgIds = new Set<string>();
-      const igPublishQueue: Array<{ igAccountId: string; pageAccessToken: string; targetPageName: string }> = [];
-
-      for (const targetPageName of individualPages) {
-        if (!targetPageName) {
-          console.warn(`[social-publish] SKIP — empty page name, no fallback`);
-          pageErrors.push("Empty page name — skipped");
-          continue;
-        }
-
-        // Normalized matching
-        const normalizedTarget = normalizePageName(targetPageName);
-        const selectedPage = pages.find((p) => normalizePageName(p.name || "") === normalizedTarget);
-        if (!selectedPage) {
-          console.warn(`[social-publish] SKIP — page "${targetPageName}" not found among [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
-          markFailure(targetPageName, "not found in connected pages — skipped");
-          continue;
-        }
-        const pageId = selectedPage.id;
-
-        // Get page-specific access token (use token owner, not post owner)
-        const { data: pageTokenData } = await supabaseAdmin
-          .from("user_meta_tokens")
-          .select("access_token")
-          .eq("user_id", tokenOwnerUserId)
-          .eq("platform", `${tokenPlatform}_page_${pageId}`)
-          .maybeSingle();
-        let pageAccessToken = pageTokenData?.access_token || tokenData!.access_token;
-
-        let result: { id?: string; error?: string };
-
-        if (platform === "facebook") {
-          // Refresh page token
-          const userLongLivedToken = tokenData!.access_token;
-          const refreshedToken = await refreshPageToken(userLongLivedToken, pageId);
-          if (refreshedToken) {
-            pageAccessToken = refreshedToken;
-            await supabaseAdmin
-              .from("user_meta_tokens")
-              .upsert({
-                user_id: tokenOwnerUserId,
-                platform: `facebook_page_${pageId}`,
-                access_token: refreshedToken,
-              }, { onConflict: "user_id,platform" });
-          }
-
-          // Pre-flight: verify token
-          const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
-          const preflightData = await preflightRes.json();
-          if (preflightData.error) {
-            console.error(`[social-publish] Facebook pre-flight failed for page "${targetPageName}":`, preflightData.error);
-            markFailure(targetPageName, preflightData.error.message || "Permission check failed");
-            if (post_id) {
-              await supabaseAdmin.from("social_posts").update({ last_error: `Facebook permission error on page "${targetPageName}"` }).eq("id", post_id);
-            }
-            continue;
-          }
-
-          // Verify pages_manage_posts permission
-          try {
-            const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${pageAccessToken}`);
-            const permData = await permRes.json();
-            if (permData.data && Array.isArray(permData.data)) {
-              const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
-              if (!managePostsPerm || managePostsPerm.status !== "granted") {
-                markFailure(targetPageName, "Missing pages_manage_posts permission");
-                continue;
-              }
-            }
-          } catch (permErr) {
-            console.warn(`[social-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
-          }
-
-          if (publishedFbPageIds.has(pageId)) {
-            console.log(`[social-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
-            markSuccess(targetPageName);
-            continue;
-          }
-          publishedFbPageIds.add(pageId);
-
-          result = await publishToFacebook(pageId, pageAccessToken, message, image_url, content_type);
-        } else {
-          // Instagram — collect for parallel publishing below
-          const userLongLivedToken = tokenData!.access_token;
-          const refreshedToken = await refreshPageToken(userLongLivedToken, pageId);
-          if (refreshedToken) {
-            pageAccessToken = refreshedToken;
-            await supabaseAdmin
-              .from("user_meta_tokens")
-              .upsert({
-                user_id: tokenOwnerUserId,
-                platform: `instagram_page_${pageId}`,
-                access_token: refreshedToken,
-              }, { onConflict: "user_id,platform" });
-            console.log(`[social-publish] Refreshed page token for IG (page ${pageId})`);
-          }
-
-          const igAccounts = (tokenData!.instagram_accounts as Array<{ id: string; username: string; pageId: string }>) || [];
-          console.log(`[social-publish] IG accounts available: [${igAccounts.map(ig => `${ig.id}(page=${ig.pageId})`).join(", ")}]`);
-          if (igAccounts.length === 0) {
-            markFailure(targetPageName, "No Instagram Business Account found");
-            continue;
-          }
-          const selectedIg = igAccounts.find((ig) => ig.pageId === pageId);
-          if (!selectedIg) {
-            console.warn(`[social-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
-            markFailure(targetPageName, "no linked Instagram account — skipped");
-            continue;
-          }
-          console.log(`[social-publish] Matched IG account: id=${selectedIg.id}, username=${selectedIg.username || "unknown"}, for page "${targetPageName}"`);
-          if (publishedIgIds.has(selectedIg.id)) {
-            console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
-            markSuccess(targetPageName);
-            continue;
-          }
-          publishedIgIds.add(selectedIg.id);
-          // Queue for parallel execution
-          igPublishQueue.push({ igAccountId: selectedIg.id, pageAccessToken, targetPageName });
-          continue; // Don't process result here — handled after parallel publish
-        }
-
-        if (result.error) {
-          console.error(`[social-publish] Failed on page "${targetPageName}": ${result.error}`);
-          markFailure(targetPageName, result.error);
-        } else {
-          console.log(`[social-publish] Published to page "${targetPageName}" (id: ${result.id})`);
-          markSuccess(targetPageName, result.id);
-        }
-      }
-
-      // --- Parallel Instagram publishing ---
-      if (igPublishQueue.length > 0) {
-        console.log(`[social-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`);
-        const igResults = await Promise.allSettled(
-          igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }, index) =>
-            new Promise((r) => setTimeout(r, index * 1500)).then(() =>
-              publishToInstagram(igAccountId, pat, message, image_url, content_type, cover_image_url)
-                .then(r => ({ ...r, targetPageName: tpn }))
-                .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
+          recordPageResult(supabaseAdmin, post_id, {
+            name,
+            status: "success",
+            platform_post_id: platformPostId,
+          }).catch((e) =>
+            console.warn(
+              `[social-publish] recordPageResult success failed: ${e?.message}`,
             )
-          )
+          );
+        }
+      };
+      const markFailure = (name: string, error: string) => {
+        pageErrors.push(`Page "${name}": ${error}`);
+        if (post_id) {
+          recordPageResult(supabaseAdmin, post_id, {
+            name,
+            status: "failed",
+            error,
+          }).catch((e) =>
+            console.warn(
+              `[social-publish] recordPageResult failed failed: ${e?.message}`,
+            )
+          );
+        }
+      };
+
+      if (platform === "facebook" || platform === "instagram") {
+        const pages =
+          (tokenData!.pages as Array<{ id: string; name: string }>) || [];
+        if (pages.length === 0) {
+          const errMsg =
+            "No Facebook Pages found. Make sure your account has at least one Page.";
+          if (post_id && lockId) {
+            await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", {
+              last_error: errMsg,
+            });
+          }
+          return new Response(
+            JSON.stringify({ error: errMsg }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        // NO FALLBACK: if no pages assigned, fail explicitly
+        if (individualPages.length === 0) {
+          const errMsg =
+            "No pages assigned to post (page_name is empty). Cannot publish without explicit page assignment.";
+          console.error(`[social-publish] FAIL: ${errMsg}`);
+          if (post_id && lockId) {
+            await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", {
+              last_error: errMsg,
+            });
+          }
+          return new Response(
+            JSON.stringify({ error: errMsg }),
+            {
+              status: 400,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            },
+          );
+        }
+
+        console.log(
+          `[social-publish] target_pages=[${
+            individualPages.join(", ")
+          }], available_pages=[${pages.map((p) => p.name).join(", ")}]`,
         );
-        for (const settled of igResults) {
-          const r = settled.status === "fulfilled" ? settled.value : { error: (settled.reason?.message || String(settled.reason)), targetPageName: "unknown" };
-          if (r.error) {
-            console.error(`[social-publish] IG parallel failed on "${r.targetPageName}": ${r.error}`);
-            markFailure(r.targetPageName, r.error);
+
+        const publishedFbPageIds = new Set<string>();
+        const publishedIgIds = new Set<string>();
+        const igPublishQueue: Array<
+          {
+            igAccountId: string;
+            pageAccessToken: string;
+            targetPageName: string;
+          }
+        > = [];
+
+        for (const targetPageName of individualPages) {
+          if (!targetPageName) {
+            console.warn(
+              `[social-publish] SKIP — empty page name, no fallback`,
+            );
+            pageErrors.push("Empty page name — skipped");
+            continue;
+          }
+
+          // Normalized matching
+          const normalizedTarget = normalizePageName(targetPageName);
+          const selectedPage = pages.find((p) =>
+            normalizePageName(p.name || "") === normalizedTarget
+          );
+          if (!selectedPage) {
+            console.warn(
+              `[social-publish] SKIP — page "${targetPageName}" not found among [${
+                pages.map((p) => p.name).join(", ")
+              }]. Will NOT fall back.`,
+            );
+            markFailure(
+              targetPageName,
+              "not found in connected pages — skipped",
+            );
+            continue;
+          }
+          const pageId = selectedPage.id;
+
+          // Get page-specific access token (use token owner, not post owner)
+          const { data: pageTokenData } = await supabaseAdmin
+            .from("user_meta_tokens")
+            .select("access_token")
+            .eq("user_id", tokenOwnerUserId)
+            .eq("platform", `${tokenPlatform}_page_${pageId}`)
+            .maybeSingle();
+          let pageAccessToken = pageTokenData?.access_token ||
+            tokenData!.access_token;
+
+          let result: { id?: string; error?: string };
+
+          if (platform === "facebook") {
+            // Refresh page token
+            const userLongLivedToken = tokenData!.access_token;
+            const refreshedToken = await refreshPageToken(
+              userLongLivedToken,
+              pageId,
+            );
+            if (refreshedToken) {
+              pageAccessToken = refreshedToken;
+              await supabaseAdmin
+                .from("user_meta_tokens")
+                .upsert({
+                  user_id: tokenOwnerUserId,
+                  platform: `facebook_page_${pageId}`,
+                  access_token: refreshedToken,
+                }, { onConflict: "user_id,platform" });
+            }
+
+            // Pre-flight: verify token
+            const preflightRes = await fetch(
+              `${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`,
+            );
+            const preflightData = await preflightRes.json();
+            if (preflightData.error) {
+              console.error(
+                `[social-publish] Facebook pre-flight failed for page "${targetPageName}":`,
+                preflightData.error,
+              );
+              markFailure(
+                targetPageName,
+                preflightData.error.message || "Permission check failed",
+              );
+              if (post_id) {
+                await supabaseAdmin.from("social_posts").update({
+                  last_error:
+                    `Facebook permission error on page "${targetPageName}"`,
+                }).eq("id", post_id);
+              }
+              continue;
+            }
+
+            // Verify pages_manage_posts permission
+            try {
+              const permRes = await fetch(
+                `${GRAPH_API}/me/permissions?access_token=${pageAccessToken}`,
+              );
+              const permData = await permRes.json();
+              if (permData.data && Array.isArray(permData.data)) {
+                const managePostsPerm = permData.data.find((p: any) =>
+                  p.permission === "pages_manage_posts"
+                );
+                if (!managePostsPerm || managePostsPerm.status !== "granted") {
+                  markFailure(
+                    targetPageName,
+                    "Missing pages_manage_posts permission",
+                  );
+                  continue;
+                }
+              }
+            } catch (permErr) {
+              console.warn(
+                `[social-publish] Permission check failed for page "${targetPageName}", proceeding:`,
+                permErr,
+              );
+            }
+
+            if (publishedFbPageIds.has(pageId)) {
+              console.log(
+                `[social-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`,
+              );
+              markSuccess(targetPageName);
+              continue;
+            }
+            publishedFbPageIds.add(pageId);
+
+            result = await publishToFacebook(
+              pageId,
+              pageAccessToken,
+              message,
+              image_url,
+              content_type,
+            );
           } else {
-            console.log(`[social-publish] IG parallel published to "${r.targetPageName}" (id: ${(r as any).id})`);
-            markSuccess(r.targetPageName, (r as any).id);
+            // Instagram — collect for parallel publishing below
+            const userLongLivedToken = tokenData!.access_token;
+            const refreshedToken = await refreshPageToken(
+              userLongLivedToken,
+              pageId,
+            );
+            if (refreshedToken) {
+              pageAccessToken = refreshedToken;
+              await supabaseAdmin
+                .from("user_meta_tokens")
+                .upsert({
+                  user_id: tokenOwnerUserId,
+                  platform: `instagram_page_${pageId}`,
+                  access_token: refreshedToken,
+                }, { onConflict: "user_id,platform" });
+              console.log(
+                `[social-publish] Refreshed page token for IG (page ${pageId})`,
+              );
+            }
+
+            const igAccounts = (tokenData!.instagram_accounts as Array<
+              { id: string; username: string; pageId: string }
+            >) || [];
+            console.log(
+              `[social-publish] IG accounts available: [${
+                igAccounts.map((ig) => `${ig.id}(page=${ig.pageId})`).join(", ")
+              }]`,
+            );
+            if (igAccounts.length === 0) {
+              markFailure(
+                targetPageName,
+                "No Instagram Business Account found",
+              );
+              continue;
+            }
+            const selectedIg = igAccounts.find((ig) => ig.pageId === pageId);
+            if (!selectedIg) {
+              console.warn(
+                `[social-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`,
+              );
+              markFailure(
+                targetPageName,
+                "no linked Instagram account — skipped",
+              );
+              continue;
+            }
+            console.log(
+              `[social-publish] Matched IG account: id=${selectedIg.id}, username=${
+                selectedIg.username || "unknown"
+              }, for page "${targetPageName}"`,
+            );
+            if (publishedIgIds.has(selectedIg.id)) {
+              console.log(
+                `[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`,
+              );
+              markSuccess(targetPageName);
+              continue;
+            }
+            publishedIgIds.add(selectedIg.id);
+            // Queue for parallel execution
+            igPublishQueue.push({
+              igAccountId: selectedIg.id,
+              pageAccessToken,
+              targetPageName,
+            });
+            continue; // Don't process result here — handled after parallel publish
+          }
+
+          if (result.error) {
+            console.error(
+              `[social-publish] Failed on page "${targetPageName}": ${result.error}`,
+            );
+            markFailure(targetPageName, result.error);
+          } else {
+            console.log(
+              `[social-publish] Published to page "${targetPageName}" (id: ${result.id})`,
+            );
+            markSuccess(targetPageName, result.id);
           }
         }
-      }
-    } else if (platform === "linkedin") {
-      // Support multi-page LinkedIn (personal + company pages)
-      const linkedInPages = individualPages.length > 0 ? individualPages : [null];
-      for (const targetPage of linkedInPages) {
-        const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url, targetPage || undefined);
-        const label = targetPage || "linkedin";
-        if (result.error) {
-          markFailure(label, result.error);
-        } else {
-          markSuccess(label, (result as any).id);
-        }
-      }
-    } else if (platform === "twitter") {
-      const result = await publishToTwitter(message, image_url);
-      if (result.error) {
-        pageErrors.push(result.error);
-      } else {
-        pageSuccesses.push("twitter");
-      }
-    } else {
-      if (post_id && lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: `Platform ${platform} not supported` });
-      return new Response(
-        JSON.stringify({ error: `Publishing to ${platform} is not yet supported.` }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
 
-    // Determine final result
-    if (pageSuccesses.length > 0) {
-      if (post_id && lockId) {
-        const partialError = pageErrors.length > 0 ? `Partial: ${pageErrors.join("; ")}` : null;
-        await releasePublishLock(supabaseAdmin, post_id, lockId, "published", {
-          ...(partialError ? { last_error: partialError } : {}),
-        });
+        // --- Parallel Instagram publishing ---
+        if (igPublishQueue.length > 0) {
+          console.log(
+            `[social-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`,
+          );
+          const igResults = await Promise.allSettled(
+            igPublishQueue.map((
+              { igAccountId, pageAccessToken: pat, targetPageName: tpn },
+              index,
+            ) =>
+              new Promise((r) => setTimeout(r, index * 1500)).then(() =>
+                publishToInstagram(
+                  igAccountId,
+                  pat,
+                  message,
+                  image_url,
+                  content_type,
+                  cover_image_url,
+                )
+                  .then((r) => ({ ...r, targetPageName: tpn }))
+                  .catch((e) => ({
+                    error: e?.message || String(e),
+                    targetPageName: tpn,
+                  }))
+              )
+            ),
+          );
+          for (const settled of igResults) {
+            const r = settled.status === "fulfilled" ? settled.value : {
+              error: settled.reason?.message || String(settled.reason),
+              targetPageName: "unknown",
+            };
+            if (r.error) {
+              console.error(
+                `[social-publish] IG parallel failed on "${r.targetPageName}": ${r.error}`,
+              );
+              markFailure(r.targetPageName, r.error);
+            } else {
+              console.log(
+                `[social-publish] IG parallel published to "${r.targetPageName}" (id: ${
+                  (r as any).id
+                })`,
+              );
+              markSuccess(r.targetPageName, (r as any).id);
+            }
+          }
+        }
+      } else if (platform === "linkedin") {
+        // Support multi-page LinkedIn (personal + company pages)
+        const linkedInPages = individualPages.length > 0
+          ? individualPages
+          : [null];
+        for (const targetPage of linkedInPages) {
+          const result = await publishToLinkedIn(
+            supabaseAdmin,
+            userId,
+            message,
+            image_url,
+            targetPage || undefined,
+          );
+          const label = targetPage || "linkedin";
+          if (result.error) {
+            markFailure(label, result.error);
+          } else {
+            markSuccess(label, (result as any).id);
+          }
+        }
+      } else if (platform === "twitter") {
+        const result = await publishToTwitter(message, image_url);
+        if (result.error) {
+          pageErrors.push(result.error);
+        } else {
+          pageSuccesses.push("twitter");
+        }
+      } else {
+        if (post_id && lockId) {
+          await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", {
+            last_error: `Platform ${platform} not supported`,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            error: `Publishing to ${platform} is not yet supported.`,
+          }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
-      return new Response(
-        JSON.stringify({ success: true, platform, pages: pageSuccesses, errors: pageErrors.length > 0 ? pageErrors : undefined }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    } else {
-      const errMsg = pageErrors.join("; ") || "Unknown publishing error";
-      if (post_id && lockId) {
-        await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
+
+      // Determine final result
+      if (pageSuccesses.length > 0) {
+        if (post_id && lockId) {
+          const partialError = pageErrors.length > 0
+            ? `Partial: ${pageErrors.join("; ")}`
+            : null;
+          await releasePublishLock(
+            supabaseAdmin,
+            post_id,
+            lockId,
+            "published",
+            {
+              ...(partialError ? { last_error: partialError } : {}),
+            },
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            success: true,
+            platform,
+            pages: pageSuccesses,
+            errors: pageErrors.length > 0 ? pageErrors : undefined,
+          }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      } else {
+        const errMsg = pageErrors.join("; ") || "Unknown publishing error";
+        if (post_id && lockId) {
+          await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", {
+            last_error: errMsg,
+          });
+        }
+        return new Response(
+          JSON.stringify({ error: errMsg }),
+          {
+            status: 400,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
       }
-      return new Response(
-        JSON.stringify({ error: errMsg }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-  }, {
-    functionName: "social-publish",
-    requireCompany: false,
-    wrapResult: false,
-    
-  })
+    },
+    {
+      functionName: "social-publish",
+      requireCompany: false,
+      wrapResult: false,
+    },
+  )
 );
 
 async function publishToFacebook(
@@ -511,7 +826,7 @@ async function publishToFacebook(
   accessToken: string,
   message: string,
   imageUrl?: string,
-  contentType: string = "post"
+  contentType: string = "post",
 ): Promise<{ id?: string; error?: string }> {
   try {
     let url: string;
@@ -535,7 +850,9 @@ async function publishToFacebook(
       url = `${GRAPH_API}/${pageId}/videos`;
       params.file_url = imageUrl;
       params.description = message;
-      console.log(`[social-publish] Facebook video detected, using /videos endpoint`);
+      console.log(
+        `[social-publish] Facebook video detected, using /videos endpoint`,
+      );
     } else if (imageUrl) {
       // Photo → use /photos endpoint
       url = `${GRAPH_API}/${pageId}/photos`;
@@ -561,7 +878,11 @@ async function publishToFacebook(
 
     return { id: data.id || data.post_id };
   } catch (err) {
-    return { error: `Facebook publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      error: `Facebook publish failed: ${
+        err instanceof Error ? err.message : "Unknown"
+      }`,
+    };
   }
 }
 
@@ -571,7 +892,7 @@ async function publishToInstagram(
   caption: string,
   imageUrl?: string,
   contentType: string = "post",
-  coverImageUrl?: string
+  coverImageUrl?: string,
 ): Promise<{ id?: string; error?: string }> {
   return publishInstagramMedia({
     igAccountId,
@@ -599,7 +920,9 @@ async function refreshLinkedInToken(
   const clientId = Deno.env.get("LINKEDIN_CLIENT_ID");
   const clientSecret = Deno.env.get("LINKEDIN_CLIENT_SECRET");
   if (!clientId || !clientSecret) {
-    console.error("[linkedin-refresh] Missing LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET");
+    console.error(
+      "[linkedin-refresh] Missing LINKEDIN_CLIENT_ID or LINKEDIN_CLIENT_SECRET",
+    );
     return null;
   }
 
@@ -635,7 +958,10 @@ async function refreshLinkedInToken(
       .eq("user_id", userId)
       .eq("integration_id", "linkedin");
 
-    console.log("[linkedin-refresh] Token refreshed successfully for user", userId);
+    console.log(
+      "[linkedin-refresh] Token refreshed successfully for user",
+      userId,
+    );
     return tokens.access_token;
   } catch (err) {
     console.error("[linkedin-refresh] Exception:", err);
@@ -653,7 +979,9 @@ type LinkedInConnectionConfig = {
 };
 
 function getLinkedInScopeSet(scope?: string): Set<string> {
-  return new Set((scope || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean));
+  return new Set(
+    (scope || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean),
+  );
 }
 
 function getLinkedInReconnectError(
@@ -662,8 +990,12 @@ function getLinkedInReconnectError(
 ): string {
   const reasons: string[] = [];
   const personalName = config?.profile_name || "";
-  const requestedPages = (opts?.pageName || "").split(",").map((item) => item.trim()).filter(Boolean);
-  const isOrgPublish = requestedPages.some((item) => item && item !== personalName);
+  const requestedPages = (opts?.pageName || "").split(",").map((item) =>
+    item.trim()
+  ).filter(Boolean);
+  const isOrgPublish = requestedPages.some((item) =>
+    item && item !== personalName
+  );
   const scopeSet = getLinkedInScopeSet(config?.scope);
   const orgIds = config?.organization_ids || {};
 
@@ -671,17 +1003,26 @@ function getLinkedInReconnectError(
   if ((config?.expires_at || 0) < Date.now() && !config?.refresh_token) {
     reasons.push("the authorization is expired and cannot auto-refresh");
   }
-  if (opts?.status === "error") reasons.push("the connection is already marked as unhealthy");
+  if (opts?.status === "error") {
+    reasons.push("the connection is already marked as unhealthy");
+  }
   if (isOrgPublish) {
-    if (!scopeSet.has("w_organization_social") || !scopeSet.has("r_organization_social")) {
+    if (
+      !scopeSet.has("w_organization_social") ||
+      !scopeSet.has("r_organization_social")
+    ) {
       reasons.push("company page permissions are missing");
     }
     if (Object.keys(orgIds).length === 0) {
-      reasons.push("no LinkedIn company pages were discovered on this connection");
+      reasons.push(
+        "no LinkedIn company pages were discovered on this connection",
+      );
     }
   }
 
-  const detail = reasons.length > 0 ? ` (${Array.from(new Set(reasons)).join("; ")})` : "";
+  const detail = reasons.length > 0
+    ? ` (${Array.from(new Set(reasons)).join("; ")})`
+    : "";
   return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
 }
 
@@ -690,7 +1031,7 @@ async function publishToLinkedIn(
   userId: string,
   text: string,
   imageUrl?: string,
-  pageName?: string
+  pageName?: string,
 ): Promise<{ id?: string; error?: string }> {
   try {
     // OWNER-FIRST with team fallback. Track the actual owner of the chosen connection
@@ -706,10 +1047,13 @@ async function publishToLinkedIn(
 
     // If the caller has no connection, OR their connection is unusable (expired with no
     // refresh path / missing token), fall back to a teammate's LinkedIn connection.
-    const ownerConfig = connection?.config as LinkedInConnectionConfig | undefined;
-    const ownerUnusable = !connection
-      || !ownerConfig?.access_token
-      || ((ownerConfig.expires_at || 0) < Date.now() && !ownerConfig.refresh_token);
+    const ownerConfig = connection?.config as
+      | LinkedInConnectionConfig
+      | undefined;
+    const ownerUnusable = !connection ||
+      !ownerConfig?.access_token ||
+      ((ownerConfig.expires_at || 0) < Date.now() &&
+        !ownerConfig.refresh_token);
 
     if (ownerUnusable) {
       const { data: ownerProfile } = await supabase
@@ -733,15 +1077,24 @@ async function publishToLinkedIn(
             .eq("integration_id", "linkedin")
             .maybeSingle();
           if (!tmConn) continue;
-          const tmConfig = tmConn.config as { expires_at: number; refresh_token?: string };
+          const tmConfig = tmConn.config as {
+            expires_at: number;
+            refresh_token?: string;
+          };
           if (tmConfig.expires_at > Date.now()) {
             connection = tmConn;
             tokenOwnerUserId = tm.user_id as string;
-            console.log(`[social-publish] LinkedIn team fallback: using token from user ${tokenOwnerUserId}`);
+            console.log(
+              `[social-publish] LinkedIn team fallback: using token from user ${tokenOwnerUserId}`,
+            );
             break;
           }
           if (tmConfig.refresh_token) {
-            const newToken = await refreshLinkedInToken(supabase, tm.user_id as string, tmConfig as any);
+            const newToken = await refreshLinkedInToken(
+              supabase,
+              tm.user_id as string,
+              tmConfig as any,
+            );
             if (newToken) {
               const { data: refreshedConn } = await supabase
                 .from("integration_connections")
@@ -752,7 +1105,9 @@ async function publishToLinkedIn(
               if (refreshedConn) {
                 connection = refreshedConn;
                 tokenOwnerUserId = tm.user_id as string;
-                console.log(`[social-publish] LinkedIn team fallback: refreshed token for user ${tokenOwnerUserId}`);
+                console.log(
+                  `[social-publish] LinkedIn team fallback: refreshed token for user ${tokenOwnerUserId}`,
+                );
                 break;
               }
             }
@@ -761,29 +1116,58 @@ async function publishToLinkedIn(
       }
 
       if (!connection) {
-        return { error: getLinkedInReconnectError(ownerConfig, { pageName, status: "error" }) };
+        return {
+          error: getLinkedInReconnectError(ownerConfig, {
+            pageName,
+            status: "error",
+          }),
+        };
       }
     }
 
     let config = connection.config as LinkedInConnectionConfig;
     if (!config?.access_token) {
-      return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+      return {
+        error: getLinkedInReconnectError(config, {
+          pageName,
+          status: connection.status,
+        }),
+      };
     }
 
     // Auto-refresh expired token — ALWAYS refresh against the actual owner (tokenOwnerUserId), never the caller.
     let accessToken = config.access_token;
     if ((config.expires_at || 0) < Date.now()) {
-      console.log(`[social-publish] LinkedIn token expired for owner ${tokenOwnerUserId}, attempting refresh...`);
+      console.log(
+        `[social-publish] LinkedIn token expired for owner ${tokenOwnerUserId}, attempting refresh...`,
+      );
       if (!config.refresh_token) {
-        return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+        return {
+          error: getLinkedInReconnectError(config, {
+            pageName,
+            status: connection.status,
+          }),
+        };
       }
-      const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
-      if (!refreshed) return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+      const refreshed = await refreshLinkedInToken(
+        supabase,
+        tokenOwnerUserId,
+        config as any,
+      );
+      if (!refreshed) {
+        return {
+          error: getLinkedInReconnectError(config, {
+            pageName,
+            status: connection.status,
+          }),
+        };
+      }
       accessToken = refreshed;
     }
 
     // Determine author URN based on page_name
-    const personalName = (config as any).profile_name || "Sattar Esmaeili-Oureh";
+    const personalName = (config as any).profile_name ||
+      "Sattar Esmaeili-Oureh";
     const isPersonal = !pageName || pageName === personalName;
     let authorUrn: string;
 
@@ -794,20 +1178,32 @@ async function publishToLinkedIn(
       if (!profileRes.ok) {
         // If 401 on profile fetch, try refresh once
         if (profileRes.status === 401) {
-          const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
+          const refreshed = await refreshLinkedInToken(
+            supabase,
+            tokenOwnerUserId,
+            config as any,
+          );
           if (refreshed) {
             accessToken = refreshed;
-            const retryRes = await fetch("https://api.linkedin.com/v2/userinfo", {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
+            const retryRes = await fetch(
+              "https://api.linkedin.com/v2/userinfo",
+              {
+                headers: { Authorization: `Bearer ${accessToken}` },
+              },
+            );
             if (retryRes.ok) {
               const profile = await retryRes.json();
               authorUrn = `urn:li:person:${profile.sub}`;
             } else {
-              return { error: "Failed to get LinkedIn identity after token refresh" };
+              return {
+                error: "Failed to get LinkedIn identity after token refresh",
+              };
             }
           } else {
-            return { error: "LinkedIn token expired and refresh failed. Please reconnect." };
+            return {
+              error:
+                "LinkedIn token expired and refresh failed. Please reconnect.",
+            };
           }
         } else {
           return { error: "Failed to get LinkedIn identity" };
@@ -819,10 +1215,14 @@ async function publishToLinkedIn(
     } else {
       // Company page publishing — look up org ID from config
       // page_name may be comma-separated (e.g. "Rebar.shop Ontario, Rebar.shop")
-      const pageNames = pageName.split(",").map((s: string) => s.trim()).filter(Boolean);
+      const pageNames = pageName.split(",").map((s: string) => s.trim()).filter(
+        Boolean,
+      );
       const findOrg = (ids: Record<string, string>, names: string[]) => {
         const lower: Record<string, string> = {};
-        for (const k of Object.keys(ids || {})) lower[k.trim().toLowerCase()] = ids[k];
+        for (const k of Object.keys(ids || {})) {
+          lower[k.trim().toLowerCase()] = ids[k];
+        }
         for (const pn of names) {
           const v = ids?.[pn] || lower[pn.trim().toLowerCase()];
           if (v) return { orgId: v, matchedPage: pn };
@@ -835,7 +1235,8 @@ async function publishToLinkedIn(
       // Team fallback: scan teammates' LinkedIn connections for the org ID
       if (!match) {
         const { data: ownerProfile } = await supabase
-          .from("profiles").select("company_id").eq("user_id", userId).maybeSingle();
+          .from("profiles").select("company_id").eq("user_id", userId)
+          .maybeSingle();
         if (ownerProfile?.company_id) {
           const { data: teammates } = await supabase
             .from("profiles").select("user_id")
@@ -843,8 +1244,11 @@ async function publishToLinkedIn(
           for (const tm of teammates || []) {
             const { data: tmConn } = await supabase
               .from("integration_connections").select("config, user_id, status")
-              .eq("user_id", tm.user_id).eq("integration_id", "linkedin").maybeSingle();
-            const tmConfig = (tmConn?.config as LinkedInConnectionConfig | undefined);
+              .eq("user_id", tm.user_id).eq("integration_id", "linkedin")
+              .maybeSingle();
+            const tmConfig = tmConn?.config as
+              | LinkedInConnectionConfig
+              | undefined;
             const tmIds = tmConfig?.organization_ids || {};
             const m = findOrg(tmIds, pageNames);
             if (!m || !tmConfig?.access_token) continue;
@@ -857,25 +1261,48 @@ async function publishToLinkedIn(
 
             if ((tmConfig.expires_at || 0) < Date.now()) {
               if (!tmConfig.refresh_token) {
-                return { error: getLinkedInReconnectError(tmConfig, { pageName, status: tmConn?.status }) };
+                return {
+                  error: getLinkedInReconnectError(tmConfig, {
+                    pageName,
+                    status: tmConn?.status,
+                  }),
+                };
               }
-              const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, tmConfig as any);
+              const refreshed = await refreshLinkedInToken(
+                supabase,
+                tokenOwnerUserId,
+                tmConfig as any,
+              );
               if (!refreshed) {
-                return { error: getLinkedInReconnectError(tmConfig, { pageName, status: tmConn?.status }) };
+                return {
+                  error: getLinkedInReconnectError(tmConfig, {
+                    pageName,
+                    status: tmConn?.status,
+                  }),
+                };
               }
               accessToken = refreshed;
             }
 
-            console.log(`[linkedin] Org ID for "${m.matchedPage}" found via teammate ${tm.user_id}; using teammate token owner ${tokenOwnerUserId}`);
+            console.log(
+              `[linkedin] Org ID for "${m.matchedPage}" found via teammate ${tm.user_id}; using teammate token owner ${tokenOwnerUserId}`,
+            );
             break;
           }
         }
       }
 
       if (!match) {
-        return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+        return {
+          error: getLinkedInReconnectError(config, {
+            pageName,
+            status: connection.status,
+          }),
+        };
       }
-      console.log(`[linkedin] Matched page "${match.matchedPage}" → org ${match.orgId}`);
+      console.log(
+        `[linkedin] Matched page "${match.matchedPage}" → org ${match.orgId}`,
+      );
       authorUrn = `urn:li:organization:${match.orgId}`;
     }
 
@@ -893,24 +1320,32 @@ async function publishToLinkedIn(
 
     if (imageUrl) {
       try {
-        const registerRes = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            registerUploadRequest: {
-              recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
-              owner: authorUrn,
-              serviceRelationships: [{ relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" }],
+        const registerRes = await fetch(
+          "https://api.linkedin.com/v2/assets?action=registerUpload",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
             },
-          }),
-        });
+            body: JSON.stringify({
+              registerUploadRequest: {
+                recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+                owner: authorUrn,
+                serviceRelationships: [{
+                  relationshipType: "OWNER",
+                  identifier: "urn:li:userGeneratedContent",
+                }],
+              },
+            }),
+          },
+        );
 
         if (registerRes.ok) {
           const registerData = await registerRes.json();
-          const uploadUrl = registerData.value?.uploadMechanism?.["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]?.uploadUrl;
+          const uploadUrl = registerData.value?.uploadMechanism
+            ?.["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]
+            ?.uploadUrl;
           const asset = registerData.value?.asset;
 
           if (uploadUrl && asset) {
@@ -919,11 +1354,17 @@ async function publishToLinkedIn(
               const imgBlob = await imgRes.blob();
               await fetch(uploadUrl, {
                 method: "PUT",
-                headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": imgBlob.type || "image/png" },
+                headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  "Content-Type": imgBlob.type || "image/png",
+                },
                 body: imgBlob,
               });
-              payload.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
-              payload.specificContent["com.linkedin.ugc.ShareContent"].media = [{ status: "READY", media: asset }];
+              payload.specificContent["com.linkedin.ugc.ShareContent"]
+                .shareMediaCategory = "IMAGE";
+              payload.specificContent["com.linkedin.ugc.ShareContent"].media = [
+                { status: "READY", media: asset },
+              ];
             }
           }
         }
@@ -933,23 +1374,30 @@ async function publishToLinkedIn(
     }
 
     // Post to LinkedIn with 401 retry
-    const doPost = async (token: string) => fetch("https://api.linkedin.com/v2/ugcPosts", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "X-Restli-Protocol-Version": "2.0.0",
-      },
-      body: JSON.stringify(payload),
-    });
+    const doPost = async (token: string) =>
+      fetch("https://api.linkedin.com/v2/ugcPosts", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "X-Restli-Protocol-Version": "2.0.0",
+        },
+        body: JSON.stringify(payload),
+      });
 
     let postRes = await doPost(accessToken);
 
     // If 401, attempt token refresh and retry once
     if (postRes.status === 401) {
-      console.log("[social-publish] LinkedIn ugcPosts returned 401, attempting token refresh...");
+      console.log(
+        "[social-publish] LinkedIn ugcPosts returned 401, attempting token refresh...",
+      );
       await postRes.text(); // consume body
-      const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
+      const refreshed = await refreshLinkedInToken(
+        supabase,
+        tokenOwnerUserId,
+        config as any,
+      );
       if (refreshed) {
         accessToken = refreshed;
         postRes = await doPost(accessToken);
@@ -963,36 +1411,59 @@ async function publishToLinkedIn(
       let detail = "";
       try {
         const parsed = JSON.parse(errText);
-        detail = parsed?.message || parsed?.error_description || parsed?.error || "";
-      } catch { detail = errText.slice(0, 200); }
-      return { error: `LinkedIn API error (${postRes.status})${detail ? `: ${detail}` : ""}` };
+        detail = parsed?.message || parsed?.error_description ||
+          parsed?.error || "";
+      } catch {
+        detail = errText.slice(0, 200);
+      }
+      return {
+        error: `LinkedIn API error (${postRes.status})${
+          detail ? `: ${detail}` : ""
+        }`,
+      };
     }
 
     return { id: postRes.headers.get("x-restli-id") || "published" };
   } catch (err) {
-    return { error: `LinkedIn publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      error: `LinkedIn publish failed: ${
+        err instanceof Error ? err.message : "Unknown"
+      }`,
+    };
   }
 }
 
 // ─── Twitter/X Publishing ───────────────────────────────────────────────────
 
 function percentEncode(str: string): string {
-  return encodeURIComponent(str).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
+  return encodeURIComponent(str).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
 }
 
 async function hmacSha1(key: string, message: string): Promise<string> {
   const encoder = new TextEncoder();
   const keyData = encoder.encode(key);
   const msgData = encoder.encode(message);
-  const cryptoKey = await crypto.subtle.importKey("raw", keyData, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    keyData,
+    { name: "HMAC", hash: "SHA-1" },
+    false,
+    ["sign"],
+  );
   const sig = await crypto.subtle.sign("HMAC", cryptoKey, msgData);
   return btoa(String.fromCharCode(...new Uint8Array(sig)));
 }
 
 function generateNonce(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const chars =
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
   let result = "";
-  for (let i = 0; i < 32; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+  for (let i = 0; i < 32; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
   return result;
 }
 
@@ -1003,7 +1474,7 @@ async function createOAuthHeader(
   consumerSecret: string,
   accessToken: string,
   accessTokenSecret: string,
-  extraParams?: Record<string, string>
+  extraParams?: Record<string, string>,
 ): Promise<string> {
   const oauthParams: Record<string, string> = {
     oauth_consumer_key: consumerKey,
@@ -1020,8 +1491,12 @@ async function createOAuthHeader(
     .map((k) => `${percentEncode(k)}=${percentEncode(allParams[k])}`)
     .join("&");
 
-  const baseStr = `${method.toUpperCase()}&${percentEncode(url)}&${percentEncode(paramStr)}`;
-  const signingKey = `${percentEncode(consumerSecret)}&${percentEncode(accessTokenSecret)}`;
+  const baseStr = `${method.toUpperCase()}&${percentEncode(url)}&${
+    percentEncode(paramStr)
+  }`;
+  const signingKey = `${percentEncode(consumerSecret)}&${
+    percentEncode(accessTokenSecret)
+  }`;
   const signature = await hmacSha1(signingKey, baseStr);
 
   oauthParams.oauth_signature = signature;
@@ -1036,7 +1511,7 @@ async function createOAuthHeader(
 
 async function publishToTwitter(
   text: string,
-  imageUrl?: string
+  imageUrl?: string,
 ): Promise<{ id?: string; error?: string }> {
   try {
     const consumerKey = Deno.env.get("TWITTER_CONSUMER_KEY");
@@ -1065,11 +1540,18 @@ async function publishToTwitter(
           };
 
           const formBody = Object.entries(uploadParams)
-            .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+            .map(([k, v]) =>
+              `${encodeURIComponent(k)}=${encodeURIComponent(v)}`
+            )
             .join("&");
 
           const uploadAuth = await createOAuthHeader(
-            "POST", uploadUrl, consumerKey, consumerSecret, accessToken, accessTokenSecret
+            "POST",
+            uploadUrl,
+            consumerKey,
+            consumerSecret,
+            accessToken,
+            accessTokenSecret,
           );
 
           const uploadRes = await fetch(uploadUrl, {
@@ -1085,7 +1567,10 @@ async function publishToTwitter(
             const uploadData = await uploadRes.json();
             mediaId = uploadData.media_id_string;
           } else {
-            console.error("Twitter media upload failed:", await uploadRes.text());
+            console.error(
+              "Twitter media upload failed:",
+              await uploadRes.text(),
+            );
           }
         }
       } catch (e) {
@@ -1100,7 +1585,12 @@ async function publishToTwitter(
     }
 
     const authHeader = await createOAuthHeader(
-      "POST", tweetUrl, consumerKey, consumerSecret, accessToken, accessTokenSecret
+      "POST",
+      tweetUrl,
+      consumerKey,
+      consumerSecret,
+      accessToken,
+      accessTokenSecret,
     );
 
     const tweetRes = await fetch(tweetUrl, {
@@ -1115,11 +1605,19 @@ async function publishToTwitter(
     const tweetData = await tweetRes.json();
     if (!tweetRes.ok) {
       console.error("Twitter API error:", tweetData);
-      return { error: `Twitter: ${tweetData.detail || tweetData.title || "Unknown error"}` };
+      return {
+        error: `Twitter: ${
+          tweetData.detail || tweetData.title || "Unknown error"
+        }`,
+      };
     }
 
     return { id: tweetData.data?.id };
   } catch (err) {
-    return { error: `Twitter publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      error: `Twitter publish failed: ${
+        err instanceof Error ? err.message : "Unknown"
+      }`,
+    };
   }
 }
