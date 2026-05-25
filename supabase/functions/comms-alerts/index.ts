@@ -42,12 +42,15 @@ const SKIP_SUBJECT_PATTERNS: RegExp[] = [
   /% off/i, /\bdeal(s)?\b/i, /\bcheap\b/i, /\bdiscount\b/i,
   /unsubscribe/i, /\bopt.out\b/i,
   /\[CMS\]/i, /\[Task Update\]/i, /Daily Report/i, /Daily Brief/i,
-  /\bnewsletter\b/i, /\bwebinar\b/i,
+  /\bnewsletter\b/i, /\bwebinar\b/i, /\bdigest\b/i, /weekly recap/i,
   /pick up where you left off/i,
   /unread messages?$/i,
   /Your messages\. Your Gmail/i,
   /\bflight\b.*\bdeal/i,
   /\bSynology\b/i,
+  /birthday sale/i, /flash sale/i, /summer (course|sale)/i,
+  /^reminder:/i, /delivery status notification/i, /mail delivery/i, /undeliverable/i,
+  /\bInstagram\b/i, /kylie jenner/i,
 ];
 
 const BOT_RECIPIENTS = ["ai@rebar.shop"];
@@ -261,6 +264,13 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: svc } = ctx;
 
+    // Kill switch — independent of EMAILS_DISABLED, lets us stop comms-alerts spam without disabling all email
+    if ((Deno.env.get("COMMS_ALERTS_DISABLED") || "").toLowerCase().match(/^(1|true|yes|on)$/)) {
+      console.log("[comms-alerts] skipped: COMMS_ALERTS_DISABLED is set");
+      return { success: true, skipped: true, reason: "COMMS_ALERTS_DISABLED" };
+    }
+
+
     // Load all comms_config rows (one per company) — iterate per-company
     const { data: configRows } = await svc
       .from("comms_config")
@@ -456,17 +466,20 @@ Deno.serve((req) =>
             .eq("alert_type", alert.type);
         }
 
-        const ceoAddr = extractEmailAddress(config.ceo_email);
-        if (isInternalRecipient(ceoAddr, config.internal_domain)) {
-          const ceoOk = await sendAlertEmail(accessToken, ceoAddr, subj, html);
-          if (ceoOk) {
-            await svc.from("comms_alerts")
-              .update({ ceo_notified_at: new Date().toISOString() })
-              .eq("communication_id", alert.commId)
-              .eq("alert_type", alert.type);
+        // CEO fallback ONLY when there is no owner — owned comms go to owner only (no CEO copy)
+        if (!alert.owner) {
+          const ceoAddr = extractEmailAddress(config.ceo_email);
+          if (isInternalRecipient(ceoAddr, config.internal_domain)) {
+            const ceoOk = await sendAlertEmail(accessToken, ceoAddr, subj, html);
+            if (ceoOk) {
+              await svc.from("comms_alerts")
+                .update({ ceo_notified_at: new Date().toISOString() })
+                .eq("communication_id", alert.commId)
+                .eq("alert_type", alert.type);
+            }
+          } else {
+            console.warn(`[guard] dropped external CEO recipient: ${config.ceo_email}`);
           }
-        } else {
-          console.warn(`[guard] dropped external CEO recipient: ${config.ceo_email}`);
         }
 
 
