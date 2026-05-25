@@ -1,8 +1,8 @@
-import { useState } from "react";
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Video, ChevronDown, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { Video, CheckCircle2, XCircle, Circle } from "lucide-react";
+
 import type { SocialPost } from "@/hooks/useSocialPosts";
 
 /** Parse last_error to determine which pages failed */
@@ -155,7 +155,6 @@ interface SocialCalendarProps {
 }
 
 function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: string }) {
-  const [open, setOpen] = useState(false);
   const pages = post.page_name ? post.page_name.split(", ").filter(Boolean) : [];
 
   if (pages.length === 0) {
@@ -167,30 +166,23 @@ function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: st
   }
 
   const pageStatuses = parsePageStatuses(post);
-  const hasFailed = pageStatuses?.some((p) => p.failed);
 
   return (
     <div>
-      <div
-        className="flex items-center gap-1 cursor-pointer"
-        onClick={(e) => {
-          e.stopPropagation();
-          setOpen((v) => !v);
-        }}
-      >
-        <p className="text-xs font-medium truncate">Pages ({pages.length})</p>
-        <ChevronDown className={cn("w-3 h-3 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </div>
-      {open && pageStatuses && (
-        <div className="mt-1 space-y-0.5" onClick={(e) => e.stopPropagation()}>
+      <p className="text-xs font-medium truncate">Pages ({pages.length})</p>
+      {pageStatuses && (
+        <div className="mt-1 space-y-0.5">
           {pageStatuses.map((ps) => (
             <div key={ps.name} className="flex items-center gap-1 text-[10px]">
-              {(post.status === "published" && !ps.failed) || (hasFailed && !ps.failed) ? (
-                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-              ) : (
+              {ps.failed ? (
                 <XCircle className="w-3 h-3 text-destructive shrink-0" />
+              ) : (
+                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
               )}
-              <span className={cn("truncate", ps.failed && "text-destructive")} title={ps.error || ps.name}>
+              <span
+                className={cn("truncate", ps.failed ? "text-destructive" : "text-green-500")}
+                title={ps.error || ps.name}
+              >
                 {ps.name}
               </span>
             </div>
@@ -200,6 +192,7 @@ function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: st
     </div>
   );
 }
+
 
 export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, selectedPostIds, onToggleSelect, onSelectDay }: SocialCalendarProps) {
   const days = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
