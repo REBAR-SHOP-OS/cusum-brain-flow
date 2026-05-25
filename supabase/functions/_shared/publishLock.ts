@@ -95,49 +95,158 @@ export async function releasePublishLock(
 }
 
 /**
+ * Per-page publish result entry stored in social_posts.page_results jsonb.
+ */
+export interface PageResult {
+  name: string;
+  status: "pending" | "success" | "failed";
+  error?: string;
+  platform_post_id?: string;
+  completed_at?: string;
+}
+
+/**
+ * Initialize page_results to a list of pending entries for the given pages.
+ * Should be called once at the start of a publish run (after lock acquired).
+ */
+export async function initPageResults(
+  supabase: ReturnType<typeof createClient>,
+  postId: string,
+  pageNames: string[],
+): Promise<void> {
+  const initial: PageResult[] = pageNames.map((name) => ({ name, status: "pending" }));
+  await supabase
+    .from("social_posts")
+    .update({ page_results: initial })
+    .eq("id", postId);
+}
+
+/**
+ * Record (upsert) a single page's publish outcome into page_results.
+ * Safe to call multiple times — last call wins for that page name.
+ * Uses read-modify-write; acceptable because publishing is serialized per post.
+ */
+export async function recordPageResult(
+  supabase: ReturnType<typeof createClient>,
+  postId: string,
+  result: PageResult,
+): Promise<void> {
+  const { data } = await supabase
+    .from("social_posts")
+    .select("page_results")
+    .eq("id", postId)
+    .maybeSingle();
+
+  const current: PageResult[] = Array.isArray((data as any)?.page_results)
+    ? ((data as any).page_results as PageResult[])
+    : [];
+
+  const idx = current.findIndex((p) => p.name === result.name);
+  const merged: PageResult = {
+    ...result,
+    completed_at: result.completed_at || new Date().toISOString(),
+  };
+  if (idx >= 0) current[idx] = merged;
+  else current.push(merged);
+
+  await supabase
+    .from("social_posts")
+    .update({ page_results: current })
+    .eq("id", postId);
+}
+
+/**
  * Recover stale locks: posts stuck in "publishing" for >10 minutes.
- * Clears lock fields and resets to "scheduled".
+ *
+ * Smart recovery using page_results:
+ *   - All pending pages → marked failed (timeout)
+ *   - All pages succeeded → status="published"
+ *   - Some succeeded → status="published" with Partial last_error
+ *   - None succeeded → status="failed"
+ *
+ * Falls back to flat "failed" for posts with no page_results (legacy).
  */
 export async function recoverStaleLocks(
   supabase: ReturnType<typeof createClient>,
 ): Promise<string[]> {
   const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
 
-  const { data: stale } = await supabase
+  // Find all stale candidates (both timestamped and legacy)
+  const { data: staleCandidates } = await supabase
     .from("social_posts")
-    .update({
-      status: "failed",
-      publishing_lock_id: null,
-      publishing_started_at: null,
-      last_error: "Publishing timed out — recovered from stale lock. Review before retrying.",
-      qa_status: "needs_review",
-    })
+    .select("id, page_results, publishing_started_at, updated_at")
     .eq("status", "publishing")
-    .lt("publishing_started_at", cutoff)
-    .select("id");
+    .or(`publishing_started_at.lt.${cutoff},and(publishing_started_at.is.null,updated_at.lt.${cutoff})`);
 
-  // Also recover posts stuck in publishing without a lock timestamp (legacy)
-  const { data: staleLegacy } = await supabase
-    .from("social_posts")
-    .update({
-      status: "failed",
-      publishing_lock_id: null,
-      publishing_started_at: null,
-      last_error: "Publishing timed out — recovered from stale lock (legacy). Review before retrying.",
-      qa_status: "needs_review",
-    })
-    .eq("status", "publishing")
-    .is("publishing_started_at", null)
-    .lt("updated_at", cutoff)
-    .select("id");
+  const recovered: string[] = [];
+  for (const post of (staleCandidates || []) as Array<{ id: string; page_results: unknown }>) {
+    const pageResults: PageResult[] = Array.isArray(post.page_results)
+      ? (post.page_results as PageResult[])
+      : [];
 
-  const recovered = [
-    ...(stale || []).map(p => p.id),
-    ...(staleLegacy || []).map(p => p.id),
-  ];
+    if (pageResults.length === 0) {
+      // Legacy: no per-page data → flat failed
+      await supabase
+        .from("social_posts")
+        .update({
+          status: "failed",
+          publishing_lock_id: null,
+          publishing_started_at: null,
+          last_error: "Publishing timed out — recovered from stale lock. Review before retrying.",
+          qa_status: "needs_review",
+        })
+        .eq("id", post.id);
+      recovered.push(post.id);
+      continue;
+    }
+
+    // Mark any still-pending pages as failed (timeout)
+    const finalized = pageResults.map<PageResult>((p) =>
+      p.status === "pending"
+        ? {
+            ...p,
+            status: "failed",
+            error: "Publishing timed out for this page",
+            completed_at: new Date().toISOString(),
+          }
+        : p,
+    );
+
+    const successes = finalized.filter((p) => p.status === "success").map((p) => p.name);
+    const failures = finalized.filter((p) => p.status === "failed");
+
+    let finalStatus: "published" | "failed";
+    let lastError: string | null;
+
+    if (successes.length === finalized.length) {
+      finalStatus = "published";
+      lastError = null;
+    } else if (successes.length > 0) {
+      finalStatus = "published";
+      lastError = `Partial: ${failures.map((f) => `Page "${f.name}": ${f.error || "unknown"}`).join("; ")}`;
+    } else {
+      finalStatus = "failed";
+      lastError = failures.map((f) => `Page "${f.name}": ${f.error || "unknown"}`).join("; ")
+        || "Publishing timed out — recovered from stale lock. Review before retrying.";
+    }
+
+    await supabase
+      .from("social_posts")
+      .update({
+        status: finalStatus,
+        publishing_lock_id: null,
+        publishing_started_at: null,
+        last_error: lastError,
+        page_results: finalized,
+        qa_status: finalStatus === "failed" ? "needs_review" : undefined,
+      })
+      .eq("id", post.id);
+    recovered.push(post.id);
+  }
 
   return recovered;
 }
+
 
 /**
  * Normalize a page name for matching: trim + lowercase.

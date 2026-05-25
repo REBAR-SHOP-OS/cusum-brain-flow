@@ -4,7 +4,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { hasAnyRole } from "../_shared/roleCheck.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
-import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
+import { acquirePublishLock, releasePublishLock, normalizePageName, initPageResults, recordPageResult } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
 import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
@@ -245,6 +245,32 @@ Deno.serve((req) =>
       lockId = lockData?.publishing_lock_id;
     }
 
+    // Initialize per-page results so stale-lock recovery can preserve partial successes.
+    if (post_id && individualPages.length > 0) {
+      try { await initPageResults(supabaseAdmin, post_id, individualPages); } catch (e) {
+        console.warn(`[social-publish] initPageResults failed: ${(e as Error).message}`);
+      }
+    }
+
+    // Helpers that mirror push() into structured page_results (fire-and-forget; failures non-fatal).
+    const markSuccess = (name: string, platformPostId?: string) => {
+      pageSuccesses.push(name);
+      if (post_id) {
+        recordPageResult(supabaseAdmin, post_id, {
+          name, status: "success", platform_post_id: platformPostId,
+        }).catch((e) => console.warn(`[social-publish] recordPageResult success failed: ${e?.message}`));
+      }
+    };
+    const markFailure = (name: string, error: string) => {
+      pageErrors.push(`Page "${name}": ${error}`);
+      if (post_id) {
+        recordPageResult(supabaseAdmin, post_id, {
+          name, status: "failed", error,
+        }).catch((e) => console.warn(`[social-publish] recordPageResult failed failed: ${e?.message}`));
+      }
+    };
+
+
     if (platform === "facebook" || platform === "instagram") {
       const pages = (tokenData!.pages as Array<{ id: string; name: string }>) || [];
       if (pages.length === 0) {
@@ -285,7 +311,7 @@ Deno.serve((req) =>
         const selectedPage = pages.find((p) => normalizePageName(p.name || "") === normalizedTarget);
         if (!selectedPage) {
           console.warn(`[social-publish] SKIP — page "${targetPageName}" not found among [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
-          pageErrors.push(`Page "${targetPageName}": not found in connected pages — skipped`);
+          markFailure(targetPageName, "not found in connected pages — skipped");
           continue;
         }
         const pageId = selectedPage.id;
@@ -321,7 +347,7 @@ Deno.serve((req) =>
           const preflightData = await preflightRes.json();
           if (preflightData.error) {
             console.error(`[social-publish] Facebook pre-flight failed for page "${targetPageName}":`, preflightData.error);
-            pageErrors.push(`Page "${targetPageName}": ${preflightData.error.message || "Permission check failed"}`);
+            markFailure(targetPageName, preflightData.error.message || "Permission check failed");
             if (post_id) {
               await supabaseAdmin.from("social_posts").update({ last_error: `Facebook permission error on page "${targetPageName}"` }).eq("id", post_id);
             }
@@ -335,7 +361,7 @@ Deno.serve((req) =>
             if (permData.data && Array.isArray(permData.data)) {
               const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
               if (!managePostsPerm || managePostsPerm.status !== "granted") {
-                pageErrors.push(`Page "${targetPageName}": Missing pages_manage_posts permission`);
+                markFailure(targetPageName, "Missing pages_manage_posts permission");
                 continue;
               }
             }
@@ -345,7 +371,7 @@ Deno.serve((req) =>
 
           if (publishedFbPageIds.has(pageId)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
-            pageSuccesses.push(targetPageName);
+            markSuccess(targetPageName);
             continue;
           }
           publishedFbPageIds.add(pageId);
@@ -370,19 +396,19 @@ Deno.serve((req) =>
           const igAccounts = (tokenData!.instagram_accounts as Array<{ id: string; username: string; pageId: string }>) || [];
           console.log(`[social-publish] IG accounts available: [${igAccounts.map(ig => `${ig.id}(page=${ig.pageId})`).join(", ")}]`);
           if (igAccounts.length === 0) {
-            pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
+            markFailure(targetPageName, "No Instagram Business Account found");
             continue;
           }
           const selectedIg = igAccounts.find((ig) => ig.pageId === pageId);
           if (!selectedIg) {
             console.warn(`[social-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
-            pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
+            markFailure(targetPageName, "no linked Instagram account — skipped");
             continue;
           }
           console.log(`[social-publish] Matched IG account: id=${selectedIg.id}, username=${selectedIg.username || "unknown"}, for page "${targetPageName}"`);
           if (publishedIgIds.has(selectedIg.id)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
-            pageSuccesses.push(targetPageName);
+            markSuccess(targetPageName);
             continue;
           }
           publishedIgIds.add(selectedIg.id);
@@ -393,10 +419,10 @@ Deno.serve((req) =>
 
         if (result.error) {
           console.error(`[social-publish] Failed on page "${targetPageName}": ${result.error}`);
-          pageErrors.push(`Page "${targetPageName}": ${result.error}`);
+          markFailure(targetPageName, result.error);
         } else {
           console.log(`[social-publish] Published to page "${targetPageName}" (id: ${result.id})`);
-          pageSuccesses.push(targetPageName);
+          markSuccess(targetPageName, result.id);
         }
       }
 
@@ -416,10 +442,10 @@ Deno.serve((req) =>
           const r = settled.status === "fulfilled" ? settled.value : { error: (settled.reason?.message || String(settled.reason)), targetPageName: "unknown" };
           if (r.error) {
             console.error(`[social-publish] IG parallel failed on "${r.targetPageName}": ${r.error}`);
-            pageErrors.push(`Page "${r.targetPageName}": ${r.error}`);
+            markFailure(r.targetPageName, r.error);
           } else {
             console.log(`[social-publish] IG parallel published to "${r.targetPageName}" (id: ${(r as any).id})`);
-            pageSuccesses.push(r.targetPageName);
+            markSuccess(r.targetPageName, (r as any).id);
           }
         }
       }
@@ -428,10 +454,11 @@ Deno.serve((req) =>
       const linkedInPages = individualPages.length > 0 ? individualPages : [null];
       for (const targetPage of linkedInPages) {
         const result = await publishToLinkedIn(supabaseAdmin, userId, message, image_url, targetPage || undefined);
+        const label = targetPage || "linkedin";
         if (result.error) {
-          pageErrors.push(`${targetPage || "linkedin"}: ${result.error}`);
+          markFailure(label, result.error);
         } else {
-          pageSuccesses.push(targetPage || "linkedin");
+          markSuccess(label, (result as any).id);
         }
       }
     } else if (platform === "twitter") {

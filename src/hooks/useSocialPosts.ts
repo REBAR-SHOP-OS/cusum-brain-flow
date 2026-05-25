@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 import { useToast } from "@/hooks/use-toast";
 
 export interface SocialPost {
@@ -32,6 +33,8 @@ export interface SocialPost {
   // Decline
   decline_reason: string | null;
   last_error: string | null;
+  // Per-page publish results (structured truth, preferred over last_error parsing)
+  page_results?: Json;
 }
 
 export type SocialPostInsert = Omit<SocialPost, "id" | "created_at" | "updated_at">;
