@@ -311,7 +311,7 @@ Deno.serve((req) =>
         const selectedPage = pages.find((p) => normalizePageName(p.name || "") === normalizedTarget);
         if (!selectedPage) {
           console.warn(`[social-publish] SKIP — page "${targetPageName}" not found among [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
-          pageErrors.push(`Page "${targetPageName}": not found in connected pages — skipped`);
+          markFailure(targetPageName, "not found in connected pages — skipped");
           continue;
         }
         const pageId = selectedPage.id;
