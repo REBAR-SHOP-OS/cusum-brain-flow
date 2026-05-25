@@ -466,17 +466,20 @@ Deno.serve((req) =>
             .eq("alert_type", alert.type);
         }
 
-        const ceoAddr = extractEmailAddress(config.ceo_email);
-        if (isInternalRecipient(ceoAddr, config.internal_domain)) {
-          const ceoOk = await sendAlertEmail(accessToken, ceoAddr, subj, html);
-          if (ceoOk) {
-            await svc.from("comms_alerts")
-              .update({ ceo_notified_at: new Date().toISOString() })
-              .eq("communication_id", alert.commId)
-              .eq("alert_type", alert.type);
+        // CEO fallback ONLY when there is no owner — owned comms go to owner only (no CEO copy)
+        if (!alert.owner) {
+          const ceoAddr = extractEmailAddress(config.ceo_email);
+          if (isInternalRecipient(ceoAddr, config.internal_domain)) {
+            const ceoOk = await sendAlertEmail(accessToken, ceoAddr, subj, html);
+            if (ceoOk) {
+              await svc.from("comms_alerts")
+                .update({ ceo_notified_at: new Date().toISOString() })
+                .eq("communication_id", alert.commId)
+                .eq("alert_type", alert.type);
+            }
+          } else {
+            console.warn(`[guard] dropped external CEO recipient: ${config.ceo_email}`);
           }
-        } else {
-          console.warn(`[guard] dropped external CEO recipient: ${config.ceo_email}`);
         }
 
 
