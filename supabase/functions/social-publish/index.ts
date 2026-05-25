@@ -1200,10 +1200,7 @@ async function publishToLinkedIn(
               };
             }
           } else {
-            return {
-              error:
-                "LinkedIn token expired and refresh failed. Please reconnect.",
-            };
+            return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
           }
         } else {
           return { error: "Failed to get LinkedIn identity" };
