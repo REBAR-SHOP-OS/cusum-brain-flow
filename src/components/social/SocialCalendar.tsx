@@ -202,21 +202,29 @@ function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: st
       <p className="text-xs font-medium truncate">Pages ({pages.length})</p>
       {pageStatuses && (
         <div className="mt-1 space-y-0.5">
-          {pageStatuses.map((ps) => (
-            <div key={ps.name} className="flex items-center gap-1 text-[10px]">
-              {ps.failed ? (
-                <XCircle className="w-3 h-3 text-destructive shrink-0" />
-              ) : (
-                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-              )}
-              <span
-                className={cn("truncate", ps.failed ? "text-destructive" : "text-green-500")}
-                title={ps.error || ps.name}
-              >
-                {ps.name}
-              </span>
-            </div>
-          ))}
+          {pageStatuses.map((ps) => {
+            const iconCls =
+              ps.state === "failed"
+                ? "text-destructive"
+                : ps.state === "success"
+                ? "text-green-500"
+                : "text-muted-foreground";
+            const textCls =
+              ps.state === "failed"
+                ? "text-destructive"
+                : ps.state === "success"
+                ? "text-green-500"
+                : "text-muted-foreground";
+            const Icon = ps.state === "failed" ? XCircle : ps.state === "success" ? CheckCircle2 : Circle;
+            return (
+              <div key={ps.name} className="flex items-center gap-1 text-[10px]">
+                <Icon className={cn("w-3 h-3 shrink-0", iconCls)} />
+                <span className={cn("truncate", textCls)} title={ps.error || ps.name}>
+                  {ps.name}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
