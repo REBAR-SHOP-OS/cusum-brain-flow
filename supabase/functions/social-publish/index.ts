@@ -643,6 +643,48 @@ async function refreshLinkedInToken(
   }
 }
 
+type LinkedInConnectionConfig = {
+  access_token?: string;
+  expires_at?: number;
+  organization_ids?: Record<string, string>;
+  refresh_token?: string | null;
+  scope?: string;
+  profile_name?: string;
+};
+
+function getLinkedInScopeSet(scope?: string): Set<string> {
+  return new Set((scope || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean));
+}
+
+function getLinkedInReconnectError(
+  config: LinkedInConnectionConfig | undefined,
+  opts?: { pageName?: string; status?: string },
+): string {
+  const reasons: string[] = [];
+  const personalName = config?.profile_name || "";
+  const requestedPages = (opts?.pageName || "").split(",").map((item) => item.trim()).filter(Boolean);
+  const isOrgPublish = requestedPages.some((item) => item && item !== personalName);
+  const scopeSet = getLinkedInScopeSet(config?.scope);
+  const orgIds = config?.organization_ids || {};
+
+  if (!config?.access_token) reasons.push("no access token is stored");
+  if ((config?.expires_at || 0) < Date.now() && !config?.refresh_token) {
+    reasons.push("the authorization is expired and cannot auto-refresh");
+  }
+  if (opts?.status === "error") reasons.push("the connection is already marked as unhealthy");
+  if (isOrgPublish) {
+    if (!scopeSet.has("w_organization_social") || !scopeSet.has("r_organization_social")) {
+      reasons.push("company page permissions are missing");
+    }
+    if (Object.keys(orgIds).length === 0) {
+      reasons.push("no LinkedIn company pages were discovered on this connection");
+    }
+  }
+
+  const detail = reasons.length > 0 ? ` (${Array.from(new Set(reasons)).join("; ")})` : "";
+  return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
+}
+
 async function publishToLinkedIn(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -662,12 +704,12 @@ async function publishToLinkedIn(
 
     let tokenOwnerUserId = userId;
 
-    // If the caller has no connection, OR their connection is unusable (error/expired and
-    // refresh impossible here), fall back to a teammate's healthy LinkedIn connection.
-    const ownerConfig = connection?.config as { expires_at?: number; refresh_token?: string } | undefined;
+    // If the caller has no connection, OR their connection is unusable (expired with no
+    // refresh path / missing token), fall back to a teammate's LinkedIn connection.
+    const ownerConfig = connection?.config as LinkedInConnectionConfig | undefined;
     const ownerUnusable = !connection
-      || connection.status === "error"
-      || (ownerConfig && ownerConfig.expires_at && ownerConfig.expires_at < Date.now() && !ownerConfig.refresh_token);
+      || !ownerConfig?.access_token
+      || ((ownerConfig.expires_at || 0) < Date.now() && !ownerConfig.refresh_token);
 
     if (ownerUnusable) {
       const { data: ownerProfile } = await supabase
@@ -719,18 +761,24 @@ async function publishToLinkedIn(
       }
 
       if (!connection) {
-        return { error: "LinkedIn not connected for any team member. Please reconnect from Settings → Integrations." };
+        return { error: getLinkedInReconnectError(ownerConfig, { pageName, status: "error" }) };
       }
     }
 
-    const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string>; refresh_token?: string };
+    let config = connection.config as LinkedInConnectionConfig;
+    if (!config?.access_token) {
+      return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+    }
 
     // Auto-refresh expired token — ALWAYS refresh against the actual owner (tokenOwnerUserId), never the caller.
     let accessToken = config.access_token;
-    if (config.expires_at < Date.now()) {
+    if ((config.expires_at || 0) < Date.now()) {
       console.log(`[social-publish] LinkedIn token expired for owner ${tokenOwnerUserId}, attempting refresh...`);
+      if (!config.refresh_token) {
+        return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+      }
       const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
-      if (!refreshed) return { error: "LinkedIn token expired and refresh failed. Please reconnect from Settings → Integrations." };
+      if (!refreshed) return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
       accessToken = refreshed;
     }
 
@@ -794,17 +842,38 @@ async function publishToLinkedIn(
             .eq("company_id", ownerProfile.company_id);
           for (const tm of teammates || []) {
             const { data: tmConn } = await supabase
-              .from("integration_connections").select("config")
+              .from("integration_connections").select("config, user_id, status")
               .eq("user_id", tm.user_id).eq("integration_id", "linkedin").maybeSingle();
-            const tmIds = (tmConn?.config as any)?.organization_ids || {};
+            const tmConfig = (tmConn?.config as LinkedInConnectionConfig | undefined);
+            const tmIds = tmConfig?.organization_ids || {};
             const m = findOrg(tmIds, pageNames);
-            if (m) { match = m; console.log(`[linkedin] Org ID for "${m.matchedPage}" found via teammate ${tm.user_id}`); break; }
+            if (!m || !tmConfig?.access_token) continue;
+
+            match = m;
+            connection = tmConn as typeof connection;
+            tokenOwnerUserId = tm.user_id as string;
+            config = tmConfig;
+            accessToken = tmConfig.access_token;
+
+            if ((tmConfig.expires_at || 0) < Date.now()) {
+              if (!tmConfig.refresh_token) {
+                return { error: getLinkedInReconnectError(tmConfig, { pageName, status: tmConn?.status }) };
+              }
+              const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, tmConfig as any);
+              if (!refreshed) {
+                return { error: getLinkedInReconnectError(tmConfig, { pageName, status: tmConn?.status }) };
+              }
+              accessToken = refreshed;
+            }
+
+            console.log(`[linkedin] Org ID for "${m.matchedPage}" found via teammate ${tm.user_id}; using teammate token owner ${tokenOwnerUserId}`);
+            break;
           }
         }
       }
 
       if (!match) {
-        return { error: `LinkedIn organization ID not configured for "${pageName}". Please reconnect LinkedIn to auto-discover organization pages.` };
+        return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
       }
       console.log(`[linkedin] Matched page "${match.matchedPage}" → org ${match.orgId}`);
       authorUrn = `urn:li:organization:${match.orgId}`;
