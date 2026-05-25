@@ -4,7 +4,7 @@ import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { hasAnyRole } from "../_shared/roleCheck.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
-import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
+import { acquirePublishLock, releasePublishLock, normalizePageName, initPageResults, recordPageResult } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
 import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
