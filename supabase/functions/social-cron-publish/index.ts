@@ -606,40 +606,47 @@ async function publishToInstagram(
     const containerId = containerData.id;
     console.log(`[cron-IG] Container created: ${containerId}`);
 
-    // Poll for ready — videos need much longer
-    const maxPolls = isVideo ? 30 : 20;
-    const pollInterval = isVideo ? 3000 : 2000;
-    let ready = false;
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      const statusRes = await fetch(
-        `${GRAPH_API}/${containerId}?fields=status_code`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const statusData = await statusRes.json();
-      console.log(`[cron-IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
-
-      if (statusData.error) {
-        const msg = statusData.error.message || "";
-        const code = statusData.error.code;
-        const type = statusData.error.type || "";
-        const isAuth = code === 190 || code === 200 || code === 102 || /OAuth|Authorization/i.test(type) || /Authorization Error/i.test(msg);
-        console.error(`[cron-IG] Poll error: ${msg} (code=${code}, type=${type})`);
-        if (isAuth) {
-          return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
-        }
-        return { error: `Instagram polling error: ${msg}` };
-      }
-
-      if (statusData.status_code === "FINISHED") {
-        ready = true;
-        break;
-      }
-      if (statusData.status_code === "ERROR") return { error: "Instagram media processing failed. Try a different image/video." };
-    }
-
+    // Skip polling for IMAGE containers — Meta's status_code endpoint currently returns
+    // a spurious "Authorization Error" (code 100, subcode 33) for images even with valid
+    // tokens, and image containers are ready immediately. Only poll for video/reels/stories.
+    let ready = !isVideo && !isStory;
     if (!ready) {
-      return { error: `Instagram media processing timed out after ${maxPolls * pollInterval / 1000}s. Try again.` };
+      const maxPolls = 30;
+      const pollInterval = 3000;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+        const statusRes = await fetch(
+          `${GRAPH_API}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
+        );
+        const statusData = await statusRes.json();
+        console.log(`[cron-IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
+
+        if (statusData.error) {
+          const msg = statusData.error.message || "";
+          const code = statusData.error.code;
+          const sub = statusData.error.error_subcode;
+          const type = statusData.error.type || "";
+          const isSpurious = code === 100 && sub === 33;
+          const isRealAuth = !isSpurious && (code === 190 || code === 102 || /OAuth/i.test(type));
+          console.error(`[cron-IG] Poll error: ${msg} (code=${code}, sub=${sub}, type=${type})`);
+          if (isRealAuth) {
+            return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
+          }
+          // Optimistic: let media_publish be the source of truth.
+          ready = true;
+          break;
+        }
+
+        if (statusData.status_code === "FINISHED") {
+          ready = true;
+          break;
+        }
+        if (statusData.status_code === "ERROR") return { error: "Instagram media processing failed. Try a different image/video." };
+      }
+
+      if (!ready) {
+        return { error: `Instagram media processing timed out. Try again.` };
+      }
     }
 
     const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {

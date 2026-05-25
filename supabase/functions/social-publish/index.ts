@@ -614,44 +614,52 @@ async function publishToInstagram(
     const containerId = containerData.id;
     console.log(`[social-publish] Container created: ${containerId}`);
 
-    // Poll for ready
-    const maxPolls = isVideo ? 30 : 20;
-    const pollInterval = isVideo ? 3000 : 2000;
-    let ready = false;
-    for (let i = 0; i < maxPolls; i++) {
-      await new Promise((r) => setTimeout(r, pollInterval));
-      // Use Authorization header (Meta's recommended method — query-string tokens
-      // are increasingly rejected on IG container status with "Authorization Error")
-      const statusRes = await fetch(
-        `${GRAPH_API}/${containerId}?fields=status_code`,
-        { headers: { Authorization: `Bearer ${accessToken}` } }
-      );
-      const statusData = await statusRes.json();
-      console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
-
-      if (statusData.error) {
-        const msg = statusData.error.message || "";
-        const code = statusData.error.code;
-        const type = statusData.error.type || "";
-        const isAuth = code === 190 || code === 200 || code === 102 || /OAuth|Authorization/i.test(type) || /Authorization Error/i.test(msg);
-        console.error(`[IG] Poll error: ${msg} (code=${code}, type=${type})`);
-        if (isAuth) {
-          return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
-        }
-        return { error: `Instagram polling error: ${msg}` };
-      }
-
-      if (statusData.status_code === "FINISHED") {
-        ready = true;
-        break;
-      }
-      if (statusData.status_code === "ERROR") {
-        return { error: "Instagram media processing failed. Try a different image/video." };
-      }
-    }
-
+    // Poll for ready.
+    // NOTE: Meta's GET /{container-id}?fields=status_code currently returns a spurious
+    // "Authorization Error" (code 100, subcode 33) for IMAGE containers even when the
+    // token and scopes are fully valid and the container is publishable. Image containers
+    // are also ready almost immediately per Meta docs, so we skip polling for images and
+    // only poll for video / reels / stories.
+    let ready = !isVideo && !isStory;
     if (!ready) {
-      return { error: `Instagram media processing timed out after ${maxPolls * pollInterval / 1000}s. Try again.` };
+      const maxPolls = 30;
+      const pollInterval = 3000;
+      for (let i = 0; i < maxPolls; i++) {
+        await new Promise((r) => setTimeout(r, pollInterval));
+        const statusRes = await fetch(
+          `${GRAPH_API}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
+        );
+        const statusData = await statusRes.json();
+        console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
+
+        if (statusData.error) {
+          const msg = statusData.error.message || "";
+          const code = statusData.error.code;
+          const sub = statusData.error.error_subcode;
+          const type = statusData.error.type || "";
+          const isSpurious = code === 100 && sub === 33;
+          const isRealAuth = !isSpurious && (code === 190 || code === 102 || /OAuth/i.test(type));
+          console.error(`[IG] Poll error: ${msg} (code=${code}, sub=${sub}, type=${type})`);
+          if (isRealAuth) {
+            return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
+          }
+          // Spurious/unknown poll error — try publishing optimistically; media_publish is source of truth.
+          ready = true;
+          break;
+        }
+
+        if (statusData.status_code === "FINISHED") {
+          ready = true;
+          break;
+        }
+        if (statusData.status_code === "ERROR") {
+          return { error: "Instagram media processing failed. Try a different image/video." };
+        }
+      }
+
+      if (!ready) {
+        return { error: `Instagram media processing timed out. Try again.` };
+      }
     }
 
     // Publish
