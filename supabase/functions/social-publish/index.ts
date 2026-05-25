@@ -245,6 +245,32 @@ Deno.serve((req) =>
       lockId = lockData?.publishing_lock_id;
     }
 
+    // Initialize per-page results so stale-lock recovery can preserve partial successes.
+    if (post_id && individualPages.length > 0) {
+      try { await initPageResults(supabaseAdmin, post_id, individualPages); } catch (e) {
+        console.warn(`[social-publish] initPageResults failed: ${(e as Error).message}`);
+      }
+    }
+
+    // Helpers that mirror push() into structured page_results (fire-and-forget; failures non-fatal).
+    const markSuccess = (name: string, platformPostId?: string) => {
+      pageSuccesses.push(name);
+      if (post_id) {
+        recordPageResult(supabaseAdmin, post_id, {
+          name, status: "success", platform_post_id: platformPostId,
+        }).catch((e) => console.warn(`[social-publish] recordPageResult success failed: ${e?.message}`));
+      }
+    };
+    const markFailure = (name: string, error: string) => {
+      pageErrors.push(`Page "${name}": ${error}`);
+      if (post_id) {
+        recordPageResult(supabaseAdmin, post_id, {
+          name, status: "failed", error,
+        }).catch((e) => console.warn(`[social-publish] recordPageResult failed failed: ${e?.message}`));
+      }
+    };
+
+
     if (platform === "facebook" || platform === "instagram") {
       const pages = (tokenData!.pages as Array<{ id: string; name: string }>) || [];
       if (pages.length === 0) {
