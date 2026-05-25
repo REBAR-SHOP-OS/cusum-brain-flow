@@ -32,7 +32,27 @@ function wait(ms: number) {
 
 function isAuthError(error: MetaError | undefined) {
   if (!error) return false;
-  return error.code === 190 || error.code === 102 || /OAuth/i.test(error.type || "");
+
+  if (isNotReadyError(error) || isContainerExpiredError(error) || isSpuriousStatusError(error)) {
+    return false;
+  }
+
+  const code = error.code;
+  const text = `${error.message || ""} ${error.error_user_msg || ""}`.toLowerCase();
+
+  if (code === 190 || code === 102 || code === 10 || code === 200 || code === 298) {
+    return true;
+  }
+
+  return (
+    text.includes("access token") ||
+    text.includes("session has expired") ||
+    text.includes("missing permission") ||
+    text.includes("permissions error") ||
+    text.includes("does not have permission") ||
+    text.includes("requires page publishing authorization") ||
+    text.includes("two-factor authentication")
+  );
 }
 
 function isNotReadyError(error: MetaError | undefined) {
