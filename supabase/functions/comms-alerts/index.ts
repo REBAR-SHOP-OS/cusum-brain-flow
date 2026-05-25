@@ -42,12 +42,15 @@ const SKIP_SUBJECT_PATTERNS: RegExp[] = [
   /% off/i, /\bdeal(s)?\b/i, /\bcheap\b/i, /\bdiscount\b/i,
   /unsubscribe/i, /\bopt.out\b/i,
   /\[CMS\]/i, /\[Task Update\]/i, /Daily Report/i, /Daily Brief/i,
-  /\bnewsletter\b/i, /\bwebinar\b/i,
+  /\bnewsletter\b/i, /\bwebinar\b/i, /\bdigest\b/i, /weekly recap/i,
   /pick up where you left off/i,
   /unread messages?$/i,
   /Your messages\. Your Gmail/i,
   /\bflight\b.*\bdeal/i,
   /\bSynology\b/i,
+  /birthday sale/i, /flash sale/i, /summer (course|sale)/i,
+  /^reminder:/i, /delivery status notification/i, /mail delivery/i, /undeliverable/i,
+  /\bInstagram\b/i, /kylie jenner/i,
 ];
 
 const BOT_RECIPIENTS = ["ai@rebar.shop"];
