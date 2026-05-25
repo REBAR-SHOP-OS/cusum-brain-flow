@@ -43,8 +43,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
+    // Self-heal stale/invalid JWTs (e.g. "invalid claim: missing sub claim" after
+    // a signing-key rotation). If the stored session can't be validated, purge
+    // local auth storage so the user can sign in cleanly instead of getting
+    // stuck on a 403 loop.
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+        const { error } = await supabase.auth.getUser();
+        if (error) {
+          console.warn("Stale session detected, clearing auth storage:", error.message);
+          await supabase.auth.signOut({ scope: "local" }).catch(() => {});
+          try {
+            for (let i = localStorage.length - 1; i >= 0; i--) {
+              const k = localStorage.key(i);
+              if (k && (k.startsWith("sb-") || k.includes("supabase.auth"))) {
+                localStorage.removeItem(k);
+              }
+            }
+          } catch {}
+          setSession(null);
+          setUser(null);
+          setLoading(false);
+        }
+      } catch (e) {
+        console.warn("Session validation failed:", e);
+      }
+    })();
+
     return () => subscription.unsubscribe();
   }, []);
+
 
   const signIn = async (email: string, password: string) => {
     if (!isEmailAllowed(email)) {
