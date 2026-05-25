@@ -392,34 +392,36 @@ Deno.serve((req) =>
         }
       }
 
-      // Helpers that mirror push() into structured page_results (fire-and-forget; failures non-fatal).
-      const markSuccess = (name: string, platformPostId?: string) => {
-        pageSuccesses.push(name);
-        if (post_id) {
-          recordPageResult(supabaseAdmin, post_id, {
-            name,
-            status: "success",
-            platform_post_id: platformPostId,
-          }).catch((e) =>
-            console.warn(
-              `[social-publish] recordPageResult success failed: ${e?.message}`,
+      // Serialize page_results writes to avoid read-modify-write races when
+      // multiple pages complete concurrently (e.g. parallel IG publish).
+      let pageResultsQueue: Promise<void> = Promise.resolve();
+      const enqueuePageResult = (
+        name: string,
+        status: "success" | "failed",
+        extra: { error?: string; platform_post_id?: string },
+      ) => {
+        if (!post_id) return;
+        pageResultsQueue = pageResultsQueue
+          .catch(() => {})
+          .then(() =>
+            recordPageResult(supabaseAdmin, post_id, {
+              name,
+              status,
+              ...extra,
+            }).catch((e) =>
+              console.warn(
+                `[social-publish] recordPageResult ${status} failed for "${name}": ${e?.message}`,
+              )
             )
           );
-        }
+      };
+      const markSuccess = (name: string, platformPostId?: string) => {
+        pageSuccesses.push(name);
+        enqueuePageResult(name, "success", { platform_post_id: platformPostId });
       };
       const markFailure = (name: string, error: string) => {
         pageErrors.push(`Page "${name}": ${error}`);
-        if (post_id) {
-          recordPageResult(supabaseAdmin, post_id, {
-            name,
-            status: "failed",
-            error,
-          }).catch((e) =>
-            console.warn(
-              `[social-publish] recordPageResult failed failed: ${e?.message}`,
-            )
-          );
-        }
+        enqueuePageResult(name, "failed", { error });
       };
 
       if (platform === "facebook" || platform === "instagram") {
@@ -771,6 +773,9 @@ Deno.serve((req) =>
           },
         );
       }
+
+      // Flush queued page_results writes so the final status reflects the real per-page truth.
+      await pageResultsQueue.catch(() => {});
 
       // Determine final result
       if (pageSuccesses.length > 0) {

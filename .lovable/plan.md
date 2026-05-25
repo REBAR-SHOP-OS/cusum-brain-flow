@@ -1,51 +1,52 @@
-## Goal
-Fix the actual LinkedIn publish failure end-to-end so LinkedIn cards stop going red for real reasons, not just display reasons.
+## هدف
+نمایش وضعیت هر page به‌صورت دقیق و بدون خطا: هر page که واقعاً publish شده باید سبز دیده شود و فقط pageهای واقعاً failed قرمز بمانند.
 
-## What I found
-- The current LinkedIn failure is not only a UI issue; the backend is returning real token-expiry errors.
-- Existing LinkedIn connections in the database are in `error` state with `Token expired, please reconnect`.
-- The LinkedIn OAuth flow currently requests:
-  - `openid profile email w_member_social w_organization_social r_organization_social`
-- The flow does not request `offline_access`, which is required for reliable long-lived refresh behavior.
-- In `social-publish`, LinkedIn team/company fallback can pick another teammate’s LinkedIn connection, but refresh attempts are still written against the original caller’s `user_id` instead of the actual token owner. That can make refresh fail or update the wrong row.
+## چیزی که پیدا شد
+دو علت ریشه‌ای مشخص شد:
 
-## Implementation plan
-1. **Fix LinkedIn token ownership in publish flow**
-   - Track which user actually owns the LinkedIn connection being used.
-   - Use that owner consistently for refresh and for any post-refresh DB updates.
-   - Apply this to both direct publish and teammate fallback paths.
+1. **از دست رفتن بخشی از `page_results` در backend**
+   - در `supabase/functions/social-publish/index.ts` ثبت نتیجه‌ی هر page با `recordPageResult(...)` به‌صورت non-awaited انجام می‌شود.
+   - خود `recordPageResult` در `supabase/functions/_shared/publishLock.ts` از الگوی read-modify-write استفاده می‌کند.
+   - وقتی چند page پشت‌سرهم publish می‌شوند، این callها با هم race می‌کنند و ممکن است نتیجه‌ی بعضی pageها روی هم overwrite شود.
+   - نتیجه: بعضی pageهای واقعاً published اصلاً در `page_results` باقی نمی‌مانند.
 
-2. **Fix LinkedIn OAuth scopes for durable refresh**
-   - Update the LinkedIn connect flow to request `offline_access`.
-   - Preserve current posting scopes for both personal and organization publishing.
-   - Ensure future reconnects store refresh-capable tokens.
+2. **منطق رنگ‌دهی UI بیش از حد بدبینانه است**
+   - در `src/components/social/SocialCalendar.tsx` اگر برای یک page در `page_results` entry پیدا نشود، در بعضی حالت‌ها قرمز نمایش داده می‌شود.
+   - برای postهای legacy که `page_results` خالی است ولی `status = published` دارند، parsing `last_error` هم همه‌ی الگوها را درست تفسیر نمی‌کند.
+   - نتیجه: حتی وقتی publish واقعی انجام شده، UI بعضی pageها را قرمز نشان می‌دهد.
 
-3. **Harden LinkedIn connection selection logic**
-   - Prefer a healthy connected row first.
-   - If the user’s row is expired/error but has refresh capability, refresh it before failing over.
-   - If fallback uses a teammate connection, keep that ownership all the way through userinfo, org lookup, media upload, and post publish.
+## فایل‌های درگیر
+- `supabase/functions/social-publish/index.ts`
+- `supabase/functions/_shared/publishLock.ts`
+- `src/components/social/SocialCalendar.tsx`
 
-4. **Improve error accuracy for LinkedIn failures**
-   - Return precise failure reasons from LinkedIn publish attempts instead of generic API errors where possible.
-   - Keep page-level results intact so personal/company LinkedIn targets show the exact failing account/page.
+## برنامه‌ی اجرا
+### 1) پایدار کردن ثبت نتیجه‌ی هر page در backend
+- ثبت `page_results` را در مسیر publish به حالت deterministic تغییر می‌دهم تا race condition حذف شود.
+- `markSuccess` و `markFailure` را طوری اصلاح می‌کنم که ثبت نتیجه‌ها به‌صورت قابل اتکا انجام شود و هیچ page موفقی گم نشود.
+- اگر لازم باشد، helper مربوط به `page_results` را هم بازنویسی می‌کنم تا merge نتایج امن باشد.
 
-5. **Repair existing broken LinkedIn connections path**
-   - After code changes, the app should guide affected users to reconnect LinkedIn with the corrected scope set.
-   - This is necessary because already-expired authorizations will not self-heal if they were granted without proper refresh capability.
+### 2) اصلاح منطق interpretation در UI
+- `parsePageStatuses` را طوری اصلاح می‌کنم که منبع اصلی truth را درست بخواند.
+- وقتی post در وضعیت `published` است، pageهای موفق هرگز به‌خاطر missing entry یا parsing ضعیف به رنگ قرمز نروند.
+- fallback برای داده‌های legacy را هم دقیق‌تر می‌کنم تا فقط pageهای واقعاً failed قرمز شوند.
 
-6. **Validate the full flow**
-   - Verify LinkedIn status check, reconnect, personal publish, and organization publish paths.
-   - Confirm the calendar/detail panel reflects the backend result correctly after a retry.
+### 3) سازگار کردن حالت‌های partial publish
+- اگر بعضی pageها success و بعضی fail شده باشند، UI دقیقاً همان ترکیب را نشان دهد.
+- اگر backend `last_error` جزئی داشته باشد ولی `page_results` ناقص باشد، نمایش بر اساس امن‌ترین و دقیق‌ترین interpretation انجام شود.
 
-## Technical details
-- Files likely to change:
-  - `supabase/functions/social-publish/index.ts`
-  - `supabase/functions/linkedin-oauth/index.ts`
-  - possibly the frontend integration/status UI if reconnect prompting needs tightening
-- No database migration is required for this fix unless I find missing persisted metadata during implementation.
+### 4) اعتبارسنجی نهایی
+- مسیر publish چند-page را دوباره بررسی می‌کنم.
+- چند نمونه‌ی اخیر LinkedIn/Facebook را با داده‌های ذخیره‌شده تطبیق می‌دهم.
+- مطمئن می‌شوم که کارت دیگر فقط به‌خاطر mismatch داخلی قرمز نمی‌شود.
 
-## Expected outcome
-- LinkedIn publish stops failing بسبب refresh/ownership bugs.
-- New LinkedIn connections are refresh-capable.
-- Existing affected LinkedIn accounts can be reconnected once, then publish normally.
-- Red LinkedIn cards remain only for real publish failures, with accurate reasons.
+## جزئیات فنی
+- مشکل اصلی یک **race condition روی `page_results`** است.
+- `page_results` باید برای هر page یک truth پایدار نگه دارد؛ الان این تضمین کامل وجود ندارد.
+- UI هم باید نسبت به داده‌های legacy و partial resilient باشد، نه اینکه در حالت‌های ambiguous به‌صورت پیش‌فرض قرمز کند.
+
+## خروجی مورد انتظار
+بعد از اعمال این plan:
+- هر page که واقعاً publish شده سبز نمایش داده می‌شود.
+- فقط pageهای واقعاً failed قرمز می‌مانند.
+- وضعیت کارت‌ها با واقعیت backend هم‌خوان می‌شود و mismatch تکرار نمی‌شود.
