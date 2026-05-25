@@ -6,6 +6,7 @@ import { hasAnyRole } from "../_shared/roleCheck.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
+import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
