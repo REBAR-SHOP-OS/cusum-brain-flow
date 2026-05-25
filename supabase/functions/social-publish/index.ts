@@ -7,6 +7,7 @@ import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
+import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -545,143 +546,15 @@ async function publishToInstagram(
   contentType: string = "post",
   coverImageUrl?: string
 ): Promise<{ id?: string; error?: string }> {
-  try {
-    if (!imageUrl) {
-      return { error: "Instagram requires an image to publish. Please add an image to your post." };
-    }
-
-    const isStory = contentType === "story";
-
-    // Detect video
-    let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
-    if (!isVideo) {
-      try {
-        const head = await fetch(imageUrl, { method: "HEAD" });
-        const ct = head.headers.get("content-type") || "";
-        isVideo = ct.startsWith("video/");
-      } catch { /* ignore HEAD failures */ }
-    }
-
-    const containerBody: Record<string, string> = {
-      access_token: accessToken,
-    };
-
-    if (isStory) {
-      containerBody.media_type = "STORIES";
-      if (isVideo) {
-        containerBody.video_url = imageUrl;
-      } else {
-        containerBody.image_url = imageUrl;
-      }
-      console.log(`[social-publish] Publishing Instagram Story (video=${isVideo})`);
-    } else if (isVideo) {
-      containerBody.media_type = "REELS";
-      containerBody.video_url = imageUrl;
-      containerBody.caption = caption;
-      if (coverImageUrl) {
-        containerBody.cover_url = coverImageUrl;
-        console.log(`[social-publish] Using cover image for reel: ${coverImageUrl.substring(0, 60)}…`);
-      }
-    } else {
-      containerBody.image_url = imageUrl;
-      containerBody.caption = caption;
-    }
-
-    console.log(`[social-publish] Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}`);
-
-    let containerData: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(containerBody),
-      });
-      containerData = await containerRes.json();
-
-      if (containerData.error?.is_transient && attempt < 2) {
-        console.warn(`[IG] Transient error on attempt ${attempt + 1}, retrying in 3s...`);
-        await new Promise((r) => setTimeout(r, 3000));
-        continue;
-      }
-      break;
-    }
-
-    if (containerData.error) {
-      console.error("Instagram container error:", containerData.error);
-      return { error: `Instagram: ${containerData.error.message}` };
-    }
-
-    const containerId = containerData.id;
-    console.log(`[social-publish] Container created: ${containerId}`);
-
-    // Poll for ready.
-    // NOTE: Meta's GET /{container-id}?fields=status_code currently returns a spurious
-    // "Authorization Error" (code 100, subcode 33) for IMAGE containers even when the
-    // token and scopes are fully valid and the container is publishable. Image containers
-    // are also ready almost immediately per Meta docs, so we skip polling for images and
-    // only poll for video / reels / stories.
-    let ready = !isVideo && !isStory;
-    if (!ready) {
-      const maxPolls = 30;
-      const pollInterval = 3000;
-      for (let i = 0; i < maxPolls; i++) {
-        await new Promise((r) => setTimeout(r, pollInterval));
-        const statusRes = await fetch(
-          `${GRAPH_API}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
-        );
-        const statusData = await statusRes.json();
-        console.log(`[IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
-
-        if (statusData.error) {
-          const msg = statusData.error.message || "";
-          const code = statusData.error.code;
-          const sub = statusData.error.error_subcode;
-          const type = statusData.error.type || "";
-          const isSpurious = code === 100 && sub === 33;
-          const isRealAuth = !isSpurious && (code === 190 || code === 102 || /OAuth/i.test(type));
-          console.error(`[IG] Poll error: ${msg} (code=${code}, sub=${sub}, type=${type})`);
-          if (isRealAuth) {
-            return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
-          }
-          // Spurious/unknown poll error — try publishing optimistically; media_publish is source of truth.
-          ready = true;
-          break;
-        }
-
-        if (statusData.status_code === "FINISHED") {
-          ready = true;
-          break;
-        }
-        if (statusData.status_code === "ERROR") {
-          return { error: "Instagram media processing failed. Try a different image/video." };
-        }
-      }
-
-      if (!ready) {
-        return { error: `Instagram media processing timed out. Try again.` };
-      }
-    }
-
-    // Publish
-    const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        creation_id: containerId,
-        access_token: accessToken,
-      }),
-    });
-
-    const publishData = await publishRes.json();
-    if (publishData.error) {
-      console.error("Instagram publish error:", publishData.error);
-      return { error: `Instagram: ${publishData.error.message}` };
-    }
-
-    return { id: publishData.id };
-  } catch (err) {
-    return { error: `Instagram publish failed: ${err instanceof Error ? err.message : "Unknown"}` };
-  }
+  return publishInstagramMedia({
+    igAccountId,
+    accessToken,
+    caption,
+    imageUrl,
+    contentType,
+    coverImageUrl,
+    logPrefix: "[social-publish][IG]",
+  });
 }
 
 /** Attempt to refresh a LinkedIn access token using the stored refresh_token */

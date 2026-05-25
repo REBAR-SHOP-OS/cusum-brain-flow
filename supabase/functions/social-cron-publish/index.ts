@@ -4,6 +4,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, recoverStaleLocks, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
+import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -540,126 +541,15 @@ async function publishToInstagram(
   igAccountId: string, accessToken: string, caption: string, imageUrl?: string | null,
   contentType: string = "post", coverImageUrl?: string | null
 ): Promise<{ id?: string; error?: string }> {
-  if (!imageUrl) return { error: "Instagram requires an image" };
-  try {
-    // Detect video content
-    let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
-    if (!isVideo) {
-      try {
-        const head = await fetch(imageUrl, { method: "HEAD" });
-        const ct = head.headers.get("content-type") || "";
-        isVideo = ct.startsWith("video/");
-      } catch { /* ignore HEAD failures */ }
-    }
-
-    const isStory = contentType === "story";
-
-    const containerBody: Record<string, string> = {
-      access_token: accessToken,
-    };
-
-    if (isStory) {
-      containerBody.media_type = "STORIES";
-      if (isVideo) {
-        containerBody.video_url = imageUrl;
-      } else {
-        containerBody.image_url = imageUrl;
-      }
-      console.log(`[cron-IG] Publishing Instagram Story (video=${isVideo})`);
-    } else if (isVideo) {
-      containerBody.media_type = "REELS";
-      containerBody.video_url = imageUrl;
-      containerBody.caption = caption;
-      if (coverImageUrl) {
-        containerBody.cover_url = coverImageUrl;
-        console.log(`[cron-IG] Using cover image for reel: ${coverImageUrl.substring(0, 60)}…`);
-      }
-    } else {
-      containerBody.image_url = imageUrl;
-      containerBody.caption = caption;
-    }
-
-    console.log(`[cron-IG] Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}`);
-
-    let containerData: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(containerBody),
-      });
-      containerData = await containerRes.json();
-
-      if (containerData.error?.is_transient && attempt < 2) {
-        console.warn(`[cron-IG] Transient error on attempt ${attempt + 1}, retrying in 3s...`);
-        await new Promise((r) => setTimeout(r, 3000));
-        continue;
-      }
-      break;
-    }
-
-    if (containerData.error) {
-      console.error("[cron-IG] container error:", containerData.error);
-      return { error: `Instagram: ${containerData.error.message}` };
-    }
-
-    const containerId = containerData.id;
-    console.log(`[cron-IG] Container created: ${containerId}`);
-
-    // Skip polling for IMAGE containers — Meta's status_code endpoint currently returns
-    // a spurious "Authorization Error" (code 100, subcode 33) for images even with valid
-    // tokens, and image containers are ready immediately. Only poll for video/reels/stories.
-    let ready = !isVideo && !isStory;
-    if (!ready) {
-      const maxPolls = 30;
-      const pollInterval = 3000;
-      for (let i = 0; i < maxPolls; i++) {
-        await new Promise((r) => setTimeout(r, pollInterval));
-        const statusRes = await fetch(
-          `${GRAPH_API}/${containerId}?fields=status_code&access_token=${encodeURIComponent(accessToken)}`,
-        );
-        const statusData = await statusRes.json();
-        console.log(`[cron-IG] Poll ${i + 1}/${maxPolls}: status=${statusData.status_code}, raw=${JSON.stringify(statusData)}`);
-
-        if (statusData.error) {
-          const msg = statusData.error.message || "";
-          const code = statusData.error.code;
-          const sub = statusData.error.error_subcode;
-          const type = statusData.error.type || "";
-          const isSpurious = code === 100 && sub === 33;
-          const isRealAuth = !isSpurious && (code === 190 || code === 102 || /OAuth/i.test(type));
-          console.error(`[cron-IG] Poll error: ${msg} (code=${code}, sub=${sub}, type=${type})`);
-          if (isRealAuth) {
-            return { error: "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations." };
-          }
-          // Optimistic: let media_publish be the source of truth.
-          ready = true;
-          break;
-        }
-
-        if (statusData.status_code === "FINISHED") {
-          ready = true;
-          break;
-        }
-        if (statusData.status_code === "ERROR") return { error: "Instagram media processing failed. Try a different image/video." };
-      }
-
-      if (!ready) {
-        return { error: `Instagram media processing timed out. Try again.` };
-      }
-    }
-
-    const publishRes = await fetch(`${GRAPH_API}/${igAccountId}/media_publish`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ creation_id: containerId, access_token: accessToken }),
-    });
-    const publishData = await publishRes.json();
-    if (publishData.error) return { error: `Instagram: ${publishData.error.message}` };
-    return { id: publishData.id };
-  } catch (err) {
-    return { error: `Instagram: ${err instanceof Error ? err.message : "Unknown"}` };
-  }
+  return publishInstagramMedia({
+    igAccountId,
+    accessToken,
+    caption,
+    imageUrl,
+    contentType,
+    coverImageUrl,
+    logPrefix: "[social-cron-publish][IG]",
+  });
 }
 
 async function publishToLinkedIn(
