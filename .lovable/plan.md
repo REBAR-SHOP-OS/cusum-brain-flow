@@ -1,44 +1,58 @@
+# Plan
+
 ## Goal
-Make Facebook/Instagram publishing stay reliable after reconnect, so the app no longer shows connected status while Instagram publish still fails with token/permission errors.
+Fix the Instagram publish failure on `/social-media-manager` where Meta returns `Media ID is not available` during publish.
 
 ## What I found
-- The current status check can show Meta as connected, but the publish path still fails later during Instagram media polling.
-- There is a concrete backend bug in `facebook-oauth/index.ts` under `refresh-accounts`: it overwrites the main `facebook` / `instagram` token rows with the first page token.
-- A page token is not a safe replacement for the long-lived user token. That can make the connection look healthy enough for page discovery while failing during Instagram container polling/publishing.
-- `social-publish` and `social-cron-publish` are also slightly inconsistent in how they poll Instagram media status, so the manual and cron publish paths can behave differently.
+- The current failure is **not primarily a reconnect/token problem**.
+- Recent backend logs show Meta returning:
+  - `code: 9007`
+  - `error_subcode: 2207027`
+  - `error_user_msg: The media is not ready for publishing, please wait for a moment`
+- The affected posts are being created as **`REELS` containers**.
+- Our current backend creates the container and then reaches `media_publish` **too early**.
+- The current status polling path is also unreliable because Meta is returning a spurious `Authorization Error (100/33)` on the container status check, so the code falls through and tries publishing optimistically.
 
-## Plan
-1. Fix the Meta token source bug in `facebook-oauth`
-- Update `refresh-accounts` so it never promotes a page token into the main `facebook` / `instagram` token rows.
-- Preserve the real long-lived user token as the main Meta token.
-- Restrict `refresh-accounts` to only refresh discovered pages / Instagram account mappings, not replace the primary auth token.
+## Implementation
+1. **Harden Instagram container readiness logic**
+   - Update `publishToInstagram()` in both:
+     - `supabase/functions/social-publish/index.ts`
+     - `supabase/functions/social-cron-publish/index.ts`
+   - Treat `9007 / 2207027` from `media_publish` as a **not-ready-yet** condition, not a final failure.
+   - Add bounded retry/backoff around `media_publish` for reels/videos/stories.
 
-2. Harden Meta token resolution for publish
-- Keep using the existing shared resolver, but make sure publish only uses:
-  - main long-lived user token for discovery/refresh
-  - page token only where Meta actually requires a page token
-- Ensure Instagram publish uses the correct token consistently for container create, status polling, and publish.
+2. **Use safer wait strategy for video/reel publishing**
+   - Stop assuming a container is ready after the first ambiguous status response.
+   - Keep status polling for video/reel media, but treat `100/33` as **inconclusive**, not “ready”.
+   - Add a timed readiness window aligned with Meta guidance so publish only happens after enough processing time has passed.
 
-3. Unify the Instagram publish path
-- Make `social-cron-publish` follow the same safer Instagram polling/auth pattern already partially present in `social-publish`.
-- Standardize error handling so token/permission failures are classified the same way in both paths.
+3. **Unify manual and cron behavior**
+   - Make both publish paths use the exact same retry and readiness behavior so manual publish and scheduled publish do not diverge.
+   - Keep token resolution as-is unless logs show a true auth error.
 
-4. Add defensive logging only where needed
-- Add concise logs that reveal whether the function is using a main Meta token or page token, without exposing secrets.
-- This will make future failures clearly distinguish code-path bugs from real expired permissions.
+4. **Reduce false multi-page failures**
+   - Improve per-page error handling so one page that is still processing doesn’t instantly mark the whole Instagram batch as failed.
+   - Keep per-page retries independent and report the real reason when the container never becomes ready.
 
-5. Validate end-to-end
-- Re-check the Meta reconnect/status flow.
-- Verify that reconnect no longer degrades back into a broken publish state because of `refresh-accounts`.
-- Verify manual publish and cron publish use the same stable Instagram token behavior.
+5. **Add diagnostic logs and validate**
+   - Add concise logs for:
+     - container creation
+     - readiness wait attempts
+     - `media_publish` retry attempts
+     - final Meta error codes/subcodes
+   - Deploy the updated backend functions and verify from logs that reels now wait long enough before publish.
 
-## Files to change
-- `supabase/functions/facebook-oauth/index.ts`
-- `supabase/functions/social-publish/index.ts`
-- `supabase/functions/social-cron-publish/index.ts`
+## Technical details
+- **Files to change:**
+  - `supabase/functions/social-publish/index.ts`
+  - `supabase/functions/social-cron-publish/index.ts`
+- **No database migration needed**
+- **No frontend changes planned**
+- Likely fix pattern:
+  - create IG container
+  - wait/poll conservatively for reels/videos
+  - if `media_publish` returns `9007/2207027`, retry after backoff
+  - only surface reconnect guidance for real auth errors such as token/permission failures
 
-## Technical notes
-- This is not just an operations issue.
-- The screenshot error message is real, but there is also a backend state bug causing valid reconnects to become unstable again.
-- The main risky line is the `refresh-accounts` flow that currently sets the main Meta token from `pageTokenRows[0].access_token`.
-- I will keep tenant isolation and the existing approval/publish locks unchanged.
+## Expected result
+Publishing Instagram reels should stop failing with `Media ID is not available`, and the system should only ask for reconnect when there is a real permission/token issue.
