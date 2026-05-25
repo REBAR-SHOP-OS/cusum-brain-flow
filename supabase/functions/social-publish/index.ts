@@ -371,7 +371,7 @@ Deno.serve((req) =>
 
           if (publishedFbPageIds.has(pageId)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
-            pageSuccesses.push(targetPageName);
+            markSuccess(targetPageName);
             continue;
           }
           publishedFbPageIds.add(pageId);
