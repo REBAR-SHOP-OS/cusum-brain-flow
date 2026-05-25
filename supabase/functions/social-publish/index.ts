@@ -442,10 +442,10 @@ Deno.serve((req) =>
           const r = settled.status === "fulfilled" ? settled.value : { error: (settled.reason?.message || String(settled.reason)), targetPageName: "unknown" };
           if (r.error) {
             console.error(`[social-publish] IG parallel failed on "${r.targetPageName}": ${r.error}`);
-            pageErrors.push(`Page "${r.targetPageName}": ${r.error}`);
+            markFailure(r.targetPageName, r.error);
           } else {
             console.log(`[social-publish] IG parallel published to "${r.targetPageName}" (id: ${(r as any).id})`);
-            pageSuccesses.push(r.targetPageName);
+            markSuccess(r.targetPageName, (r as any).id);
           }
         }
       }
