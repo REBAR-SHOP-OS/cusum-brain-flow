@@ -7,6 +7,27 @@ import { resolveMetaToken, validateMetaTokenRemote } from "../_shared/metaTokenR
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+const META_COMBINED_SCOPES = [...new Set([...SCOPES.facebook, ...SCOPES.instagram])];
+
+function requiredScopesForIntegration(integration: "facebook" | "instagram") {
+  return integration === "instagram"
+    ? ["pages_show_list", "pages_read_engagement", "instagram_basic", "instagram_content_publish"]
+    : ["pages_show_list", "pages_read_engagement", "pages_manage_posts"];
+}
+
+async function fetchGrantedScopes(accessToken: string): Promise<string[]> {
+  try {
+    const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${accessToken}`);
+    if (!permRes.ok) return [];
+    const permData = await permRes.json();
+    return (permData.data || [])
+      .filter((p: any) => p.status === "granted")
+      .map((p: any) => p.permission);
+  } catch {
+    return [];
+  }
+}
+
 const SCOPES: Record<string, string[]> = {
   facebook: [
     "pages_show_list",
@@ -48,10 +69,7 @@ Deno.serve((req) =>
       const { appId } = getMetaCredentials();
       if (!appId) throw new Error("Facebook App ID not configured");
 
-      const scopes = SCOPES[integration] || SCOPES.facebook;
-      const allScopes = integration === "instagram"
-        ? [...new Set([...SCOPES.facebook, ...SCOPES.instagram])]
-        : scopes;
+      const allScopes = META_COMBINED_SCOPES;
 
       const authUrl = new URL("https://www.facebook.com/v21.0/dialog/oauth");
       authUrl.searchParams.set("client_id", appId);
@@ -125,7 +143,7 @@ Deno.serve((req) =>
 
       // Step 5: If Instagram, get Instagram Business Account IDs
       let instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
-      if (integration === "instagram" && pages.length > 0) {
+      if (pages.length > 0) {
         for (const page of pages) {
           try {
             const igRes = await fetch(
@@ -160,7 +178,7 @@ Deno.serve((req) =>
           grantedScopes = (permData.data || [])
             .filter((p: any) => p.status === "granted")
             .map((p: any) => p.permission);
-          const requiredForPublish = ["pages_read_engagement", "pages_manage_posts"];
+          const requiredForPublish = META_COMBINED_SCOPES;
           missingScopes = requiredForPublish.filter(s => !grantedScopes.includes(s));
           publishReady = missingScopes.length === 0;
           console.log(`[facebook-oauth] Granted scopes: ${grantedScopes.join(", ")}`);
