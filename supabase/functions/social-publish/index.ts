@@ -651,16 +651,25 @@ async function publishToLinkedIn(
   pageName?: string
 ): Promise<{ id?: string; error?: string }> {
   try {
-    // OWNER-FIRST with team fallback
+    // OWNER-FIRST with team fallback. Track the actual owner of the chosen connection
+    // so refresh and DB updates always target the correct row.
     let { data: connection } = await supabase
       .from("integration_connections")
-      .select("config")
+      .select("config, user_id, status")
       .eq("user_id", userId)
       .eq("integration_id", "linkedin")
       .maybeSingle();
 
-    if (!connection) {
-      // Team fallback: find any teammate with a valid LinkedIn connection
+    let tokenOwnerUserId = userId;
+
+    // If the caller has no connection, OR their connection is unusable (error/expired and
+    // refresh impossible here), fall back to a teammate's healthy LinkedIn connection.
+    const ownerConfig = connection?.config as { expires_at?: number; refresh_token?: string } | undefined;
+    const ownerUnusable = !connection
+      || connection.status === "error"
+      || (ownerConfig && ownerConfig.expires_at && ownerConfig.expires_at < Date.now() && !ownerConfig.refresh_token);
+
+    if (ownerUnusable) {
       const { data: ownerProfile } = await supabase
         .from("profiles")
         .select("company_id")
@@ -677,47 +686,50 @@ async function publishToLinkedIn(
         for (const tm of teammates || []) {
           const { data: tmConn } = await supabase
             .from("integration_connections")
-            .select("config")
+            .select("config, user_id, status")
             .eq("user_id", tm.user_id)
             .eq("integration_id", "linkedin")
             .maybeSingle();
-          if (tmConn) {
-            const tmConfig = tmConn.config as { expires_at: number; refresh_token?: string };
-            if (tmConfig.expires_at > Date.now()) {
-              connection = tmConn;
-              console.log(`[social-publish] LinkedIn team fallback: using token from user ${tm.user_id}`);
-              break;
-            }
-            // Try refresh for teammate token too
-            if (tmConfig.refresh_token) {
-              const newToken = await refreshLinkedInToken(supabase, tm.user_id, tmConfig as any);
-              if (newToken) {
-                const { data: refreshedConn } = await supabase
-                  .from("integration_connections")
-                  .select("config")
-                  .eq("user_id", tm.user_id)
-                  .eq("integration_id", "linkedin")
-                  .maybeSingle();
-                if (refreshedConn) {
-                  connection = refreshedConn;
-                  console.log(`[social-publish] LinkedIn team fallback: refreshed token for user ${tm.user_id}`);
-                  break;
-                }
+          if (!tmConn) continue;
+          const tmConfig = tmConn.config as { expires_at: number; refresh_token?: string };
+          if (tmConfig.expires_at > Date.now()) {
+            connection = tmConn;
+            tokenOwnerUserId = tm.user_id as string;
+            console.log(`[social-publish] LinkedIn team fallback: using token from user ${tokenOwnerUserId}`);
+            break;
+          }
+          if (tmConfig.refresh_token) {
+            const newToken = await refreshLinkedInToken(supabase, tm.user_id as string, tmConfig as any);
+            if (newToken) {
+              const { data: refreshedConn } = await supabase
+                .from("integration_connections")
+                .select("config, user_id, status")
+                .eq("user_id", tm.user_id)
+                .eq("integration_id", "linkedin")
+                .maybeSingle();
+              if (refreshedConn) {
+                connection = refreshedConn;
+                tokenOwnerUserId = tm.user_id as string;
+                console.log(`[social-publish] LinkedIn team fallback: refreshed token for user ${tokenOwnerUserId}`);
+                break;
               }
             }
           }
         }
       }
 
-      if (!connection) return { error: "LinkedIn not connected for any team member. Please connect from Settings → Integrations." };
+      if (!connection) {
+        return { error: "LinkedIn not connected for any team member. Please reconnect from Settings → Integrations." };
+      }
     }
+
     const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string>; refresh_token?: string };
 
-    // Auto-refresh expired token
+    // Auto-refresh expired token — ALWAYS refresh against the actual owner (tokenOwnerUserId), never the caller.
     let accessToken = config.access_token;
     if (config.expires_at < Date.now()) {
-      console.log("[social-publish] LinkedIn token expired, attempting refresh...");
-      const refreshed = await refreshLinkedInToken(supabase, userId, config as any);
+      console.log(`[social-publish] LinkedIn token expired for owner ${tokenOwnerUserId}, attempting refresh...`);
+      const refreshed = await refreshLinkedInToken(supabase, tokenOwnerUserId, config as any);
       if (!refreshed) return { error: "LinkedIn token expired and refresh failed. Please reconnect from Settings → Integrations." };
       accessToken = refreshed;
     }
