@@ -1,63 +1,91 @@
-# Plan: Add Meta Platforms Developer Docs skill
+# Root-cause fix: per-page publish results
 
-Create a new draft skill at `.agents/skills/meta-platforms-docs/SKILL.md` (following the same shape as the existing `google-search-docs` skill) and apply it via `skills--apply_draft`.
+## مشکل واقعی (تأیید شده با کوئری DB)
 
-## Skill scope (Full Meta platforms overview)
+برای پست‌های Mon May 25:
 
-Single SKILL.md file with curated links — no copied content (docs change frequently; use `code--fetch_website` on demand).
+| Platform | status (DB) | last_error |
+|---|---|---|
+| Facebook | `published` | — |
+| Instagram | **`failed`** | `Publishing timed out — recovered from stale lock` |
+| LinkedIn | **`failed`** | `… LinkedIn token expired and refresh failed …` |
 
-Sections:
+پس UI درست رنگ می‌زنه — Instagram و LinkedIn واقعاً `failed` هستن. اما **چرا**:
 
-1. **Graph API** — overview, versioning, access tokens, debug tool, rate limits
-   - https://developers.facebook.com/docs/graph-api/overview
-   - https://developers.facebook.com/docs/graph-api/guides/versioning
-   - https://developers.facebook.com/docs/facebook-login/guides/access-tokens
+- **LinkedIn**: legit failure (token expired روی هر ۳ صفحه). نیاز به reconnect در Integrations.
+- **Instagram**: `recoverStaleLocks` در `social-cron-publish` قفل بیش از ۱۰ دقیقه‌ای رو دیده، **کل پست رو به `failed` تبدیل کرده بدون اینکه بدونه کدوم صفحه‌ها واقعاً پابلیش شدن**. این ریشه‌ی مشکله.
 
-2. **Facebook Pages / Publishing** (relevant to Social Manager in this project)
-   - https://developers.facebook.com/docs/pages-api
-   - https://developers.facebook.com/docs/pages-api/posts
-   - Page access tokens, required permissions (`pages_manage_posts`, `pages_read_engagement`, `pages_show_list`)
+## ریشه‌ی معماری
 
-3. **Instagram Graph API** (Business/Creator account publishing)
-   - https://developers.facebook.com/docs/instagram-platform
-   - https://developers.facebook.com/docs/instagram-platform/instagram-graph-api/reference/ig-user/media
-   - Container → publish two-step flow, image/video/reels/carousel
+`social-publish/index.ts` نتایج per-page (`pageSuccesses[]`, `pageErrors[]`) رو فقط در پایان run داخل متن `last_error` خلاصه می‌کنه. هیچ ستون structured برای per-page result نداریم. وقتی stale-lock recovery می‌زنه:
 
-4. **Marketing API** (ads)
-   - https://developers.facebook.com/docs/marketing-apis
+1. اطلاعات per-page از دست می‌ره.
+2. اگر مثلاً ۴ از ۶ صفحه IG موفق شده باشه، همه قرمز می‌شن.
+3. UI نمی‌تونه truth واقعی رو نمایش بده.
 
-5. **Messenger Platform**
-   - https://developers.facebook.com/docs/messenger-platform
+علاوه بر این، parsing از روی `last_error` (regex روی متن آزاد) شکننده‌ست.
 
-6. **Webhooks**
-   - https://developers.facebook.com/docs/graph-api/webhooks
-   - Verification handshake, X-Hub-Signature-256 HMAC verification
+## راه‌حل
 
-7. **Login / Permissions / App Review**
-   - https://developers.facebook.com/docs/facebook-login
-   - https://developers.facebook.com/docs/permissions
-   - https://developers.facebook.com/docs/app-review
+### 1. ستون structured per-page results
 
-8. **Usage rules** specific to this project:
-   - Always use latest stable Graph API version pinned in code (don't rely on default)
-   - Page tokens for Pages, IG User tokens (via linked Page) for Instagram
-   - Verify webhook signatures with HMAC-SHA256 (matches project's webhook security memory)
-   - Respect Neel approval gate before publishing (HARD rule)
-   - Per-platform text sanitization already in `socialConstants.ts`
-   - Fetch live doc pages with `code--fetch_website` when quoting — Meta updates often
+Migration: اضافه کردن `page_results jsonb` به `social_posts`:
 
-## Trigger description (frontmatter)
+```jsonc
+[
+  { "name": "Rebar.shop",        "status": "success", "platform_post_id": "12345_67890", "completed_at": "..." },
+  { "name": "Ontario Steels",    "status": "failed",  "error": "Image too large", "completed_at": "..." },
+  { "name": "Ontario Logistics", "status": "pending" }
+]
+```
 
-> Reference for Facebook/Meta developer platforms — Graph API, Pages publishing, Instagram Graph API, Marketing API, Messenger, Webhooks, Login, and App Review. Use when working on Social Manager, Facebook/Instagram integrations, ads, messenger flows, or webhook handlers from Meta.
+### 2. `social-publish/index.ts` — write-as-you-go
 
-## Files to create
+- در ابتدای run، `page_results` رو با تمام صفحات به‌صورت `pending` initialize کن.
+- بعد از publish هر صفحه (FB/IG/LinkedIn/Twitter)، **بلافاصله** ردیف اون صفحه رو در `page_results` آپدیت کن (نه فقط در پایان).
+- این طوری اگر edge function timeout یا crash بشه، partial successes حفظ می‌شن.
 
-- `.agents/skills/meta-platforms-docs/SKILL.md` (single file, ~150 lines)
+### 3. `_shared/publishLock.ts` — recovery هوشمند
 
-## Apply
+`recoverStaleLocks` به‌جای flat `status='failed'`:
 
-Call `skills--apply_draft` with `.agents/skills/meta-platforms-docs`.
+- بخون `page_results` پست.
+- هر `pending` رو به `failed` با error `"Publishing timed out for this page"` تبدیل کن.
+- اگر **همه** `success` → `status='published'`، `last_error=null`.
+- اگر **حداقل یکی** `success` → `status='published'`، `last_error="Partial: <failed pages summary>"`.
+- اگر **هیچ‌کدوم** `success` → `status='failed'` (رفتار فعلی).
 
-## Naming
+### 4. `SocialCalendar.tsx` — منبع حقیقت structured
 
-Using `meta-platforms-docs` (covers FB + IG + Messenger + Marketing under the Meta umbrella). If you'd prefer `facebook-graph-api` (narrower) or another name, tell me before I implement.
+در `parsePageStatuses`:
+
+- اگر `post.page_results` موجود و non-empty → از همون استفاده کن (per-page status مستقیم).
+- در غیر این صورت fallback به منطق فعلی parse از `last_error` (برای پست‌های قدیمی قبل از migration).
+
+### 5. LinkedIn token expiry (مشکل ثانویه‌ی همین کارت)
+
+این فیکس فقط display رو درست می‌کنه. خود LinkedIn هنوز fail می‌شه چون token expire شده. کاربر باید از Integrations → LinkedIn، reconnect کنه. این خارج از scope این فیکس کده.
+
+## فایل‌های تغییر یافته
+
+- **Migration جدید**: `add page_results jsonb to social_posts`
+- `supabase/functions/social-publish/index.ts` (initialize + per-page write + final write)
+- `supabase/functions/_shared/publishLock.ts` (`recoverStaleLocks` smart recovery)
+- `src/components/social/SocialCalendar.tsx` (`parsePageStatuses` prefer `page_results`)
+- `src/hooks/useSocialPosts.ts` (اضافه کردن `page_results` به type/select اگر لازم)
+
+## تست
+
+پس از اعمال:
+
+1. یک پست IG با ۳ صفحه publish کن.
+2. اگر همه موفق → همه سبز، `status=published`.
+3. شبیه‌سازی timeout (مثلاً یکی fail بشه) → اون یکی قرمز با error دقیق، بقیه سبز، status=`published` partial.
+4. شبیه‌سازی stale lock (status `publishing` بمونه >10 دقیقه با ۲ صفحهٔ موفق ثبت‌شده در `page_results`) → cron باید به `published` partial بازیابی کنه نه `failed` کامل.
+
+## بدون scope creep
+
+- بدون refactor wide-ranging.
+- additive: ستون جدید، logic موجود حفظ می‌شه (fallback).
+- migration safe — default `'[]'::jsonb`.
+- بدون تغییر در policies یا RLS.

@@ -13847,6 +13847,7 @@ export type Database = {
           likes: number | null
           neel_approved: boolean
           page_name: string | null
+          page_results: Json
           platform: string
           publishing_lock_id: string | null
           publishing_started_at: string | null
@@ -13877,6 +13878,7 @@ export type Database = {
           likes?: number | null
           neel_approved?: boolean
           page_name?: string | null
+          page_results?: Json
           platform: string
           publishing_lock_id?: string | null
           publishing_started_at?: string | null
@@ -13907,6 +13909,7 @@ export type Database = {
           likes?: number | null
           neel_approved?: boolean
           page_name?: string | null
+          page_results?: Json
           platform?: string
           publishing_lock_id?: string | null
           publishing_started_at?: string | null
