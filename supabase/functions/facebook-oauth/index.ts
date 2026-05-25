@@ -1,6 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { resolveMetaToken, validateMetaTokenRemote } from "../_shared/metaTokenResolver.ts";
+
+
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -169,58 +172,68 @@ Deno.serve((req) =>
         console.error("[facebook-oauth] Permission check failed:", permErr);
       }
 
-      // Step 7: Store tokens securely (per-user)
-      const { error: upsertError } = await supabaseAdmin
-        .from("user_meta_tokens")
-        .upsert({
-          user_id: userId,
-          platform: integration,
-          access_token: longLivedToken,
-          token_type: "long_lived",
-          meta_user_id: profileName,
-          meta_user_name: profileName,
-          pages: pages.map(p => ({ id: p.id, name: p.name })),
-          instagram_accounts: instagramAccounts,
-          expires_at: new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString(),
-        }, { onConflict: "user_id,platform" });
+      // Step 7: Store tokens securely (per-user) — mirror to BOTH platform rows so
+      // Facebook and Instagram stay in sync from a single reconnect.
+      const expiresAtIso = new Date(Date.now() + 60 * 24 * 60 * 60 * 1000).toISOString();
+      const pagesPayload = pages.map(p => ({ id: p.id, name: p.name }));
+      const mainPlatforms: Array<"facebook" | "instagram"> = ["facebook", "instagram"];
 
-      if (upsertError) {
-        console.error("Failed to save Meta token:", upsertError);
-        throw new Error("Failed to save credentials");
-      }
-
-      // Store page tokens separately
-      for (const page of pages) {
-        await supabaseAdmin
+      for (const plat of mainPlatforms) {
+        const { error: upsertError } = await supabaseAdmin
           .from("user_meta_tokens")
           .upsert({
             user_id: userId,
-            platform: `${integration}_page_${page.id}`,
-            access_token: page.access_token,
-            meta_user_name: page.name,
-            pages: [{ id: page.id, name: page.name }],
+            platform: plat,
+            access_token: longLivedToken,
+            token_type: "long_lived",
+            meta_user_id: profileName,
+            meta_user_name: profileName,
+            pages: pagesPayload,
+            instagram_accounts: instagramAccounts,
+            expires_at: expiresAtIso,
           }, { onConflict: "user_id,platform" });
+        if (upsertError) {
+          console.error(`Failed to save Meta token for ${plat}:`, upsertError);
+          throw new Error("Failed to save credentials");
+        }
       }
 
-      // Update per-user integration status with publish_ready flag
-      await supabaseAdmin
-        .from("integration_connections")
-        .upsert({
-          user_id: userId,
-          integration_id: integration,
-          status: "connected",
-          last_checked_at: new Date().toISOString(),
-          last_sync_at: new Date().toISOString(),
-          error_message: publishReady ? null : `Missing permissions: ${missingScopes.join(", ")}`,
-          config: {
-            profileName,
-            pagesCount: pages.length,
-            instagramAccounts: instagramAccounts.length,
-            publish_ready: publishReady,
-            granted_scopes: grantedScopes,
-            missing_scopes: missingScopes,
-          },
-        }, { onConflict: "user_id,integration_id" });
+      // Store page tokens separately under BOTH facebook_page_* and instagram_page_* prefixes
+      for (const page of pages) {
+        for (const plat of mainPlatforms) {
+          await supabaseAdmin
+            .from("user_meta_tokens")
+            .upsert({
+              user_id: userId,
+              platform: `${plat}_page_${page.id}`,
+              access_token: page.access_token,
+              meta_user_name: page.name,
+              pages: [{ id: page.id, name: page.name }],
+            }, { onConflict: "user_id,platform" });
+        }
+      }
+
+      // Update BOTH integration_connections rows together so the UI shows a consistent state.
+      for (const plat of mainPlatforms) {
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: plat,
+            status: "connected",
+            last_checked_at: new Date().toISOString(),
+            last_sync_at: new Date().toISOString(),
+            error_message: publishReady ? null : `Missing permissions: ${missingScopes.join(", ")}`,
+            config: {
+              profileName,
+              pagesCount: pages.length,
+              instagramAccounts: instagramAccounts.length,
+              publish_ready: publishReady,
+              granted_scopes: grantedScopes,
+              missing_scopes: missingScopes,
+            },
+          }, { onConflict: "user_id,integration_id" });
+      }
 
       const igInfo = instagramAccounts.length > 0
         ? ` + ${instagramAccounts.length} Instagram account(s)`
@@ -237,7 +250,7 @@ Deno.serve((req) =>
           instagramAccounts: instagramAccounts.length,
           publish_ready: publishReady,
           missing_scopes: missingScopes,
-          message: `${integration === "instagram" ? "Instagram" : "Facebook"} connected as ${profileName}! ${pages.length} page(s)${igInfo}${permWarning}`,
+          message: `Facebook + Instagram connected as ${profileName}! ${pages.length} page(s)${igInfo}${permWarning}`,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
@@ -245,39 +258,71 @@ Deno.serve((req) =>
 
     // ─── Check connection status ───────────────────────────────────
     if (action === "check-status") {
-      const integration = body.integration as string;
+      const integration = (body.integration as string) === "facebook" ? "facebook" : "instagram";
 
-      const { data: tokenData } = await supabaseAdmin
-        .from("user_meta_tokens")
-        .select("meta_user_name, expires_at, pages, instagram_accounts")
-        .eq("user_id", userId)
-        .eq("platform", integration)
-        .maybeSingle();
+      // Use unified resolver: self → same-company teammate fallback
+      const resolved = await resolveMetaToken(supabaseAdmin, userId, integration);
 
-      if (!tokenData) {
+      if (!resolved) {
+        // Sync DB row to "available" so the UI matches truth
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: integration,
+            status: "error",
+            last_checked_at: new Date().toISOString(),
+            error_message: "Not connected. Please connect Facebook/Instagram in Integrations.",
+          }, { onConflict: "user_id,integration_id" });
+
         return new Response(
           JSON.stringify({ status: "available" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const isExpired = tokenData.expires_at && new Date(tokenData.expires_at) < new Date();
-      if (isExpired) {
+      // Remote-validate against Meta to catch revoked tokens
+      const valid = await validateMetaTokenRemote(resolved.accessToken);
+      if (!valid) {
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: integration,
+            status: "error",
+            last_checked_at: new Date().toISOString(),
+            error_message: "Token rejected by Meta. Please reconnect Facebook/Instagram.",
+          }, { onConflict: "user_id,integration_id" });
+
         return new Response(
           JSON.stringify({ status: "error", error: "Token expired. Please reconnect." }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
+      // Healthy — sync DB row to connected
+      await supabaseAdmin
+        .from("integration_connections")
+        .upsert({
+          user_id: userId,
+          integration_id: integration,
+          status: "connected",
+          last_checked_at: new Date().toISOString(),
+          last_sync_at: new Date().toISOString(),
+          error_message: null,
+        }, { onConflict: "user_id,integration_id" });
+
       return new Response(
         JSON.stringify({
           status: "connected",
-          profileName: tokenData.meta_user_name,
-          pagesCount: (tokenData.pages as unknown[])?.length || 0,
+          profileName: resolved.ownedByCurrentUser ? undefined : `(team-shared)`,
+          pagesCount: resolved.pages.length,
+          source: resolved.source,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
 
     // ─── Refresh / rediscover IG accounts from existing page tokens ─
     if (action === "refresh-accounts") {

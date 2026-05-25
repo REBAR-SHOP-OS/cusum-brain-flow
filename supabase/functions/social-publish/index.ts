@@ -6,6 +6,7 @@ import { hasAnyRole } from "../_shared/roleCheck.ts";
 import { SUPER_ADMIN_EMAILS } from "../_shared/accessPolicies.ts";
 import { acquirePublishLock, releasePublishLock, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
+import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -190,52 +191,28 @@ Deno.serve((req) =>
       console.log(`[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`);
     }
 
-    // Get user token — OWNER-FIRST, team fallback if owner lacks token
+    // Get user token via unified resolver — self → same-company teammate, both health-checked.
     const tokenPlatform = platform === "instagram" ? "instagram" : "facebook";
-    let tokenData = (await supabaseAdmin
-      .from("user_meta_tokens")
-      .select("access_token, pages, instagram_accounts, user_id")
-      .eq("user_id", userId)
-      .eq("platform", tokenPlatform)
-      .maybeSingle()).data;
-
+    let tokenData: { access_token: string; pages: any; instagram_accounts: any; user_id: string } | null = null;
     let tokenOwnerUserId = userId;
 
-    if (!tokenData && (platform === "facebook" || platform === "instagram")) {
-      // Team fallback: find a teammate in the same company with a valid token
-      const { data: ownerProfile } = await supabaseAdmin
-        .from("profiles")
-        .select("company_id")
-        .eq("user_id", userId)
-        .maybeSingle();
-
-      if (ownerProfile?.company_id) {
-        const { data: teammates } = await supabaseAdmin
-          .from("profiles")
-          .select("user_id")
-          .eq("company_id", ownerProfile.company_id)
-          .neq("user_id", userId);
-
-        if (teammates && teammates.length > 0) {
-          for (const tm of teammates) {
-            const { data: tmToken } = await supabaseAdmin
-              .from("user_meta_tokens")
-              .select("access_token, pages, instagram_accounts, user_id")
-              .eq("user_id", tm.user_id)
-              .eq("platform", tokenPlatform)
-              .maybeSingle();
-            if (tmToken && tmToken.access_token) {
-              tokenData = tmToken;
-              tokenOwnerUserId = tm.user_id;
-              console.log(`[social-publish] Team fallback: using ${tokenPlatform} token from user ${tm.user_id}`);
-              break;
-            }
-          }
+    if (platform === "facebook" || platform === "instagram") {
+      const resolved = await resolveMetaToken(supabaseAdmin, userId, tokenPlatform as "facebook" | "instagram");
+      if (resolved) {
+        tokenData = {
+          access_token: resolved.accessToken,
+          pages: resolved.pages,
+          instagram_accounts: resolved.instagramAccounts,
+          user_id: resolved.tokenOwnerUserId,
+        };
+        tokenOwnerUserId = resolved.tokenOwnerUserId;
+        if (resolved.source === "team") {
+          console.log(`[social-publish] Using team-shared ${tokenPlatform} token from user ${tokenOwnerUserId}`);
         }
       }
 
       if (!tokenData) {
-        const errMsg = `${platform} not connected for your account or any teammate. Please connect it from Integrations.`;
+        const errMsg = `${platform} not connected (no healthy token for you or any teammate). Please reconnect from Integrations.`;
         if (post_id) {
           const lockId = (await supabaseAdmin.from("social_posts").select("publishing_lock_id").eq("id", post_id).maybeSingle()).data?.publishing_lock_id;
           if (lockId) await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", { last_error: errMsg });
@@ -246,6 +223,7 @@ Deno.serve((req) =>
         );
       }
     }
+
 
     // ── Multi-Page Publishing Loop ────────────────────────────────
     // CRITICAL: For manual publish (force_publish=true), the request's page_name
