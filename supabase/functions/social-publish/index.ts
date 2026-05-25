@@ -396,19 +396,19 @@ Deno.serve((req) =>
           const igAccounts = (tokenData!.instagram_accounts as Array<{ id: string; username: string; pageId: string }>) || [];
           console.log(`[social-publish] IG accounts available: [${igAccounts.map(ig => `${ig.id}(page=${ig.pageId})`).join(", ")}]`);
           if (igAccounts.length === 0) {
-            pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
+            markFailure(targetPageName, "No Instagram Business Account found");
             continue;
           }
           const selectedIg = igAccounts.find((ig) => ig.pageId === pageId);
           if (!selectedIg) {
             console.warn(`[social-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
-            pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
+            markFailure(targetPageName, "no linked Instagram account — skipped");
             continue;
           }
           console.log(`[social-publish] Matched IG account: id=${selectedIg.id}, username=${selectedIg.username || "unknown"}, for page "${targetPageName}"`);
           if (publishedIgIds.has(selectedIg.id)) {
             console.log(`[social-publish] Skipping page "${targetPageName}" — IG account ${selectedIg.id} already published`);
-            pageSuccesses.push(targetPageName);
+            markSuccess(targetPageName);
             continue;
           }
           publishedIgIds.add(selectedIg.id);
