@@ -34,7 +34,7 @@ export interface SocialPost {
   decline_reason: string | null;
   last_error: string | null;
   // Per-page publish results (structured truth, preferred over last_error parsing)
-  page_results?: unknown;
+  page_results?: Json;
 }
 
 export type SocialPostInsert = Omit<SocialPost, "id" | "created_at" | "updated_at">;
