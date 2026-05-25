@@ -1200,7 +1200,12 @@ async function publishToLinkedIn(
               };
             }
           } else {
-            return { error: getLinkedInReconnectError(config, { pageName, status: connection.status }) };
+            return {
+              error: getLinkedInReconnectError(config, {
+                pageName,
+                status: connection.status,
+              }),
+            };
           }
         } else {
           return { error: "Failed to get LinkedIn identity" };
