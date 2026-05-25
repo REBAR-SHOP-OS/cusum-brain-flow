@@ -7,6 +7,25 @@ import { resolveMetaToken, validateMetaTokenRemote } from "../_shared/metaTokenR
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+const SCOPES: Record<string, string[]> = {
+  facebook: [
+    "pages_show_list",
+    "pages_read_engagement",
+    "pages_manage_posts",
+    "business_management",
+    "public_profile",
+  ],
+  instagram: [
+    "pages_show_list",
+    "pages_read_engagement",
+    "instagram_basic",
+    "instagram_content_publish",
+    "instagram_manage_messages",
+    "business_management",
+    "public_profile",
+  ],
+};
+
 const META_COMBINED_SCOPES = [...new Set([...SCOPES.facebook, ...SCOPES.instagram])];
 
 function requiredScopesForIntegration(integration: "facebook" | "instagram") {
@@ -27,25 +46,6 @@ async function fetchGrantedScopes(accessToken: string): Promise<string[]> {
     return [];
   }
 }
-
-const SCOPES: Record<string, string[]> = {
-  facebook: [
-    "pages_show_list",
-    "pages_read_engagement",
-    "pages_manage_posts",
-    "business_management",
-    "public_profile",
-  ],
-  instagram: [
-    "pages_show_list",
-    "pages_read_engagement",
-    "instagram_basic",
-    "instagram_content_publish",
-    "instagram_manage_messages",
-    "business_management",
-    "public_profile",
-  ],
-};
 
 function getMetaCredentials() {
   const appId = Deno.env.get("FACEBOOK_APP_ID");
@@ -452,55 +452,44 @@ Deno.serve((req) =>
       const missingScopes = requiredScopes.filter((scope) => !grantedScopes.includes(scope));
 
       // Refresh discovered pages/accounts without overwriting the main long-lived user token.
-      const { error: upsertError } = await supabaseAdmin
-        .from("user_meta_tokens")
-        .upsert({
-          user_id: userId,
-          platform: integration,
-          access_token: primaryTokenRow.access_token,
-          token_type: "long_lived",
-          meta_user_name: primaryTokenRow.meta_user_name || allPagesDeduped[0]?.name || "",
-          pages: allPagesDeduped,
-          instagram_accounts: instagramAccountsDeduped,
-          expires_at: primaryTokenRow.expires_at,
-        }, { onConflict: "user_id,platform" });
+      for (const plat of ["facebook", "instagram"] as const) {
+        const { error: upsertError } = await supabaseAdmin
+          .from("user_meta_tokens")
+          .upsert({
+            user_id: userId,
+            platform: plat,
+            access_token: primaryTokenRow.access_token,
+            token_type: "long_lived",
+            meta_user_name: primaryTokenRow.meta_user_name || allPagesDeduped[0]?.name || "",
+            pages: allPagesDeduped,
+            instagram_accounts: instagramAccountsDeduped,
+            expires_at: primaryTokenRow.expires_at,
+          }, { onConflict: "user_id,platform" });
 
-      if (upsertError) {
-        console.error("Failed to upsert main token:", upsertError);
-        throw new Error("Failed to save refreshed accounts");
+        if (upsertError) {
+          console.error(`Failed to upsert main token for ${plat}:`, upsertError);
+          throw new Error("Failed to save refreshed accounts");
+        }
+
+        const platMissingScopes = requiredScopesForIntegration(plat).filter((scope) => !grantedScopes.includes(scope));
+        await supabaseAdmin
+          .from("integration_connections")
+          .upsert({
+            user_id: userId,
+            integration_id: plat,
+            status: platMissingScopes.length === 0 ? "connected" : "error",
+            last_checked_at: new Date().toISOString(),
+            last_sync_at: new Date().toISOString(),
+            error_message: platMissingScopes.length === 0 ? null : `Missing Meta permissions: ${platMissingScopes.join(", ")}`,
+            config: {
+              pagesCount: allPagesDeduped.length,
+              instagramAccounts: instagramAccountsDeduped.length,
+              publish_ready: platMissingScopes.length === 0,
+              granted_scopes: grantedScopes,
+              missing_scopes: platMissingScopes,
+            },
+          }, { onConflict: "user_id,integration_id" });
       }
-
-      // Also ensure facebook platform row exists
-      await supabaseAdmin
-        .from("user_meta_tokens")
-        .upsert({
-          user_id: userId,
-          platform: "facebook",
-          access_token: primaryTokenRow.access_token,
-          token_type: "long_lived",
-          meta_user_name: primaryTokenRow.meta_user_name || allPagesDeduped[0]?.name || "",
-          pages: allPagesDeduped,
-          instagram_accounts: instagramAccountsDeduped,
-          expires_at: primaryTokenRow.expires_at,
-        }, { onConflict: "user_id,platform" });
-
-      await supabaseAdmin
-        .from("integration_connections")
-        .upsert({
-          user_id: userId,
-          integration_id: integration,
-          status: missingScopes.length === 0 ? "connected" : "error",
-          last_checked_at: new Date().toISOString(),
-          last_sync_at: new Date().toISOString(),
-          error_message: missingScopes.length === 0 ? null : `Missing Meta permissions: ${missingScopes.join(", ")}`,
-          config: {
-            pagesCount: allPagesDeduped.length,
-            instagramAccounts: instagramAccountsDeduped.length,
-            publish_ready: missingScopes.length === 0,
-            granted_scopes: grantedScopes,
-            missing_scopes: missingScopes,
-          },
-        }, { onConflict: "user_id,integration_id" });
 
       return new Response(
         JSON.stringify({
