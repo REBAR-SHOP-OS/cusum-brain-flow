@@ -1,6 +1,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { resolveMetaToken, validateMetaTokenRemote } from "../_shared/metaTokenResolver.ts";
+
+
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
