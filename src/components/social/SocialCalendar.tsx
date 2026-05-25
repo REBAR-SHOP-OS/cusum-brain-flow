@@ -5,8 +5,10 @@ import { Video, CheckCircle2, XCircle, Circle } from "lucide-react";
 
 import type { SocialPost } from "@/hooks/useSocialPosts";
 
-/** Parse last_error to determine which pages failed */
-function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; error?: string }[] | null {
+/** Parse per-page publish state.
+ *  state: 'success' (green) | 'failed' (red) | 'pending' (neutral — not yet attempted) */
+type PageState = "success" | "failed" | "pending";
+function parsePageStatuses(post: SocialPost): { name: string; state: PageState; error?: string }[] | null {
   if (!post.page_name) return null;
   const pages = post.page_name.split(", ").filter(Boolean);
   if (pages.length === 0) return null;
@@ -14,8 +16,11 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
   const status = post.status;
   const lastError = post.last_error || "";
   const isPartial = lastError.toLowerCase().startsWith("partial");
+  // Pre-attempt statuses → pages render neutral unless a structured per-page
+  // result explicitly overrides.
+  const isPreAttempt =
+    status === "scheduled" || status === "draft" || status === "pending_approval" || status === "publishing";
 
-  // Helper: extract per-page error from a "Partial: Page "X": err; Page "Y": err" string.
   const extractError = (name: string): string | undefined => {
     if (!lastError) return undefined;
     const regex = new RegExp(`Page "${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}":\\s*([^;]+)`, "i");
@@ -23,7 +28,6 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
     return match?.[1]?.trim();
   };
 
-  // Prefer structured page_results (source of truth) when available.
   const pr = post.page_results as Array<{ name: string; status: string; error?: string }> | null | undefined;
   const hasStructured = Array.isArray(pr) && pr.length > 0;
 
@@ -31,37 +35,33 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
     return pages.map((name) => {
       const match = pr!.find((p) => p?.name === name);
       if (match) {
-        if (match.status === "success") return { name, failed: false };
-        if (match.status === "failed") return { name, failed: true, error: match.error };
-        // pending: if post is overall published, treat as success; otherwise pending → not failed yet
-        if (status === "published") return { name, failed: false };
-        return { name, failed: false };
+        if (match.status === "success") return { name, state: "success" };
+        if (match.status === "failed") return { name, state: "failed", error: match.error };
+        if (status === "published") return { name, state: "success" };
+        return { name, state: "pending" };
       }
-      // No structured entry for this page.
-      // If overall post is published and last_error does not mention this page → success.
+      if (isPreAttempt) return { name, state: "pending" };
       if (status === "published") {
         const err = extractError(name);
-        if (err) return { name, failed: true, error: err };
-        return { name, failed: false };
+        if (err) return { name, state: "failed", error: err };
+        return { name, state: "success" };
       }
       if (status === "failed") {
-        return { name, failed: true, error: extractError(name) || lastError || undefined };
+        return { name, state: "failed", error: extractError(name) || lastError || undefined };
       }
-      // scheduled / draft / publishing / pending_approval → not failed, just not-yet-published
-      return { name, failed: false };
+      return { name, state: "pending" };
     });
   }
 
-  // Fallback: legacy posts without page_results — interpret status + last_error.
+  // Fallback: legacy posts without page_results.
   return pages.map((name) => {
-    // Published with NO errors → green
-    if (status === "published" && !lastError) return { name, failed: false };
+    if (isPreAttempt) return { name, state: "pending" };
 
-    // Published: only pages explicitly named in last_error are red
+    if (status === "published" && !lastError) return { name, state: "success" };
+
     if (status === "published") {
       const err = extractError(name);
-      if (err) return { name, failed: true, error: err };
-      // Some legacy errors use "(failed on: PageName: ...)" format
+      if (err) return { name, state: "failed", error: err };
       const legacyFailedMatch = /failed on:\s*([^)]+)/i.exec(lastError);
       if (legacyFailedMatch) {
         const failedSegment = legacyFailedMatch[1];
@@ -69,25 +69,22 @@ function parsePageStatuses(post: SocialPost): { name: string; failed: boolean; e
         if (isMentioned) {
           const segRegex = new RegExp(`${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*:\\s*([^;)]+)`, "i");
           const m = failedSegment.match(segRegex);
-          return { name, failed: true, error: m?.[1]?.trim() };
+          return { name, state: "failed", error: m?.[1]?.trim() };
         }
       }
-      return { name, failed: false };
+      return { name, state: "success" };
     }
 
-    // Fully failed (no Partial prefix) → all red
     if (status === "failed" && !isPartial) {
-      return { name, failed: true, error: extractError(name) || lastError || undefined };
+      return { name, state: "failed", error: extractError(name) || lastError || undefined };
     }
 
-    // Partial failure on a non-published row → only mentioned pages red
     if (isPartial) {
       const err = extractError(name);
-      return { name, failed: !!err, error: err };
+      return { name, state: err ? "failed" : "pending", error: err };
     }
 
-    // draft / scheduled / pending_approval / publishing → not failed (no red)
-    return { name, failed: false };
+    return { name, state: "pending" };
   });
 }
 
@@ -205,21 +202,29 @@ function PageStatusDropdown({ post, platform }: { post: SocialPost; platform: st
       <p className="text-xs font-medium truncate">Pages ({pages.length})</p>
       {pageStatuses && (
         <div className="mt-1 space-y-0.5">
-          {pageStatuses.map((ps) => (
-            <div key={ps.name} className="flex items-center gap-1 text-[10px]">
-              {ps.failed ? (
-                <XCircle className="w-3 h-3 text-destructive shrink-0" />
-              ) : (
-                <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-              )}
-              <span
-                className={cn("truncate", ps.failed ? "text-destructive" : "text-green-500")}
-                title={ps.error || ps.name}
-              >
-                {ps.name}
-              </span>
-            </div>
-          ))}
+          {pageStatuses.map((ps) => {
+            const iconCls =
+              ps.state === "failed"
+                ? "text-destructive"
+                : ps.state === "success"
+                ? "text-green-500"
+                : "text-muted-foreground";
+            const textCls =
+              ps.state === "failed"
+                ? "text-destructive"
+                : ps.state === "success"
+                ? "text-green-500"
+                : "text-muted-foreground";
+            const Icon = ps.state === "failed" ? XCircle : ps.state === "success" ? CheckCircle2 : Circle;
+            return (
+              <div key={ps.name} className="flex items-center gap-1 text-[10px]">
+                <Icon className={cn("w-3 h-3 shrink-0", iconCls)} />
+                <span className={cn("truncate", textCls)} title={ps.error || ps.name}>
+                  {ps.name}
+                </span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
