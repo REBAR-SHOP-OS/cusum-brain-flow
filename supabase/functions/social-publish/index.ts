@@ -419,10 +419,10 @@ Deno.serve((req) =>
 
         if (result.error) {
           console.error(`[social-publish] Failed on page "${targetPageName}": ${result.error}`);
-          pageErrors.push(`Page "${targetPageName}": ${result.error}`);
+          markFailure(targetPageName, result.error);
         } else {
           console.log(`[social-publish] Published to page "${targetPageName}" (id: ${result.id})`);
-          pageSuccesses.push(targetPageName);
+          markSuccess(targetPageName, result.id);
         }
       }
 
