@@ -15,6 +15,26 @@ function jsonRes(data: unknown, status = 200) {
   });
 }
 
+function getScopeSet(scope?: string): Set<string> {
+  return new Set((scope || "").split(/[\s,]+/).map((item) => item.trim()).filter(Boolean));
+}
+
+function getLinkedInStatusError(config: { access_token?: string; expires_at?: number; refresh_token?: string | null; scope?: string; organization_ids?: Record<string, string> }) {
+  const reasons: string[] = [];
+  const scopeSet = getScopeSet(config.scope);
+
+  if (!config.access_token) reasons.push("no access token is stored");
+  if ((config.expires_at || 0) < Date.now() && !config.refresh_token) {
+    reasons.push("the authorization is expired and cannot auto-refresh");
+  }
+  if (scopeSet.size > 0 && (!scopeSet.has("offline_access") || !scopeSet.has("w_organization_social") || !scopeSet.has("r_organization_social"))) {
+    reasons.push("the connection was created with older LinkedIn permissions");
+  }
+
+  const detail = reasons.length > 0 ? ` (${Array.from(new Set(reasons)).join("; ")})` : "";
+  return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
+}
+
 // ─── Main Handler ──────────────────────────────────────────────────
 
 Deno.serve((req) =>
@@ -225,6 +245,27 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
 
   const config = connection.config as { access_token: string; expires_at: number; profile_name: string; refresh_token?: string };
 
+  const reconnectError = getLinkedInStatusError(connection.config as {
+    access_token?: string;
+    expires_at?: number;
+    refresh_token?: string | null;
+    scope?: string;
+    organization_ids?: Record<string, string>;
+  });
+
+  const scopeSet = getScopeSet((connection.config as { scope?: string })?.scope);
+  const missingModernScopes = !scopeSet.has("offline_access") || !scopeSet.has("w_organization_social") || !scopeSet.has("r_organization_social");
+
+  if (!config.access_token || missingModernScopes) {
+    await supabase
+      .from("integration_connections")
+      .update({ status: "error", error_message: reconnectError })
+      .eq("user_id", userId)
+      .eq("integration_id", "linkedin");
+
+    return jsonRes({ status: "error", error: reconnectError });
+  }
+
   if (config.expires_at < Date.now()) {
     // Attempt auto-refresh before marking as error
     if (config.refresh_token) {
@@ -274,11 +315,11 @@ async function handleCheckStatus(supabase: ReturnType<typeof createClient>, user
     // Refresh failed or no refresh token — mark as error
     await supabase
       .from("integration_connections")
-      .update({ status: "error", error_message: "Token expired, please reconnect" })
+      .update({ status: "error", error_message: reconnectError })
       .eq("user_id", userId)
       .eq("integration_id", "linkedin");
 
-    return jsonRes({ status: "error", error: "Token expired, please reconnect" });
+    return jsonRes({ status: "error", error: reconnectError });
   }
 
   return jsonRes({ status: "connected", profileName: config.profile_name });
