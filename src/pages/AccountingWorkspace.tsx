@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback, lazy, Suspense, useMemo } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { ACCESS_POLICIES } from "@/lib/accessPolicies";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -21,65 +21,55 @@ import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
 import accountingHelper from "@/assets/helpers/accounting-helper.png";
 import { PayrollAuditView } from "@/components/office/PayrollAuditView";
 
-/* ── Lazy-loaded tab components ── */
-const AccountingDashboard = lazy(() => import("@/components/accounting/AccountingDashboard").then(m => ({ default: m.AccountingDashboard })));
-const AccountingInvoices = lazy(() => import("@/components/accounting/AccountingInvoices").then(m => ({ default: m.AccountingInvoices })));
-const AccountingBills = lazy(() => import("@/components/accounting/AccountingBills").then(m => ({ default: m.AccountingBills })));
-const AccountingPayments = lazy(() => import("@/components/accounting/AccountingPayments").then(m => ({ default: m.AccountingPayments })));
-const AccountingCustomers = lazy(() => import("@/components/accounting/AccountingCustomers").then(m => ({ default: m.AccountingCustomers })));
-const AccountingVendors = lazy(() => import("@/components/accounting/AccountingVendors").then(m => ({ default: m.AccountingVendors })));
-const AccountingAccounts = lazy(() => import("@/components/accounting/AccountingAccounts").then(m => ({ default: m.AccountingAccounts })));
-const AccountingAudit = lazy(() => import("@/components/accounting/AccountingAudit").then(m => ({ default: m.AccountingAudit })));
-const AccountingPayroll = lazy(() => import("@/components/accounting/AccountingPayroll").then(m => ({ default: m.AccountingPayroll })));
-const AccountingDocuments = lazy(() => import("@/components/accounting/AccountingDocuments").then(m => ({ default: m.AccountingDocuments })));
-const AccountingReport = lazy(() => import("@/components/accounting/AccountingReport").then(m => ({ default: m.AccountingReport })));
-const AccountingAgedReceivables = lazy(() => import("@/components/accounting/AccountingAgedReceivables").then(m => ({ default: m.AccountingAgedReceivables })));
-const AccountingAgedPayables = lazy(() => import("@/components/accounting/AccountingAgedPayables").then(m => ({ default: m.AccountingAgedPayables })));
-const AccountingQBReport = lazy(() => import("@/components/accounting/AccountingQBReport").then(m => ({ default: m.AccountingQBReport })));
-const AccountingAgent = lazy(() => import("@/components/accounting/AccountingAgent").then(m => ({ default: m.AccountingAgent })));
-
-const AccountingOrders = lazy(() => import("@/components/accounting/AccountingOrders").then(m => ({ default: m.AccountingOrders })));
-const AccountingActionQueue = lazy(() => import("@/components/accounting/AccountingActionQueue").then(m => ({ default: m.AccountingActionQueue })));
-const AccountingVendorPayments = lazy(() => import("@/components/accounting/AccountingVendorPayments").then(m => ({ default: m.AccountingVendorPayments })));
-const BudgetManagement = lazy(() => import("@/components/accounting/BudgetManagement").then(m => ({ default: m.BudgetManagement })));
-const QuoteTemplateManager = lazy(() => import("@/components/accounting/QuoteTemplateManager").then(m => ({ default: m.QuoteTemplateManager })));
-const ExpenseClaimsManager = lazy(() => import("@/components/accounting/ExpenseClaimsManager").then(m => ({ default: m.ExpenseClaimsManager })));
-const ThreeWayMatchingManager = lazy(() => import("@/components/accounting/ThreeWayMatchingManager").then(m => ({ default: m.ThreeWayMatchingManager })));
-const EmployeeContractsManager = lazy(() => import("@/components/accounting/EmployeeContractsManager").then(m => ({ default: m.EmployeeContractsManager })));
-const RecruitmentPipeline = lazy(() => import("@/components/accounting/RecruitmentPipeline").then(m => ({ default: m.RecruitmentPipeline })));
-const ProjectManagement = lazy(() => import("@/components/accounting/ProjectManagement").then(m => ({ default: m.ProjectManagement })));
-const AccountingSalesReceipts = lazy(() => import("@/components/accounting/AccountingSalesReceipts").then(m => ({ default: m.AccountingSalesReceipts })));
-const AccountingRefundReceipts = lazy(() => import("@/components/accounting/AccountingRefundReceipts").then(m => ({ default: m.AccountingRefundReceipts })));
-const AccountingDeposits = lazy(() => import("@/components/accounting/AccountingDeposits").then(m => ({ default: m.AccountingDeposits })));
-const AccountingTransfers = lazy(() => import("@/components/accounting/AccountingTransfers").then(m => ({ default: m.AccountingTransfers })));
-const AccountingJournalEntries = lazy(() => import("@/components/accounting/AccountingJournalEntries").then(m => ({ default: m.AccountingJournalEntries })));
-const AccountingRecurring = lazy(() => import("@/components/accounting/AccountingRecurring").then(m => ({ default: m.AccountingRecurring })));
-const AccountingBatchActions = lazy(() => import("@/components/accounting/AccountingBatchActions").then(m => ({ default: m.AccountingBatchActions })));
-const AccountingStatements = lazy(() => import("@/components/accounting/AccountingStatements").then(m => ({ default: m.AccountingStatements })));
-const AccountingExpenses = lazy(() => import("@/components/accounting/AccountingExpenses").then(m => ({ default: m.AccountingExpenses })));
-const AccountingAttachments = lazy(() => import("@/components/accounting/AccountingAttachments").then(m => ({ default: m.AccountingAttachments })));
-const AccountingReconciliation = lazy(() => import("@/components/accounting/AccountingReconciliation").then(m => ({ default: m.AccountingReconciliation })));
-const AccountingScheduledReports = lazy(() => import("@/components/accounting/AccountingScheduledReports").then(m => ({ default: m.AccountingScheduledReports })));
-const AccountingRecurringTxns = lazy(() => import("@/components/accounting/AccountingRecurringTxns").then(m => ({ default: m.AccountingRecurringTxns })));
-const TaxPlanning = lazy(() => import("@/components/accounting/TaxPlanning").then(m => ({ default: m.TaxPlanning })));
-const BudgetVsActuals = lazy(() => import("@/components/accounting/BudgetVsActuals").then(m => ({ default: m.BudgetVsActuals })));
-const AccountingCashFlow = lazy(() => import("@/components/accounting/AccountingCashFlow").then(m => ({ default: m.AccountingCashFlow })));
-const TaxFilingSummary = lazy(() => import("@/components/accounting/TaxFilingSummary").then(m => ({ default: m.TaxFilingSummary })));
-const AccountingEstimates = lazy(() => import("@/components/accounting/AccountingEstimates").then(m => ({ default: m.AccountingEstimates })));
-const AccountingCreditMemos = lazy(() => import("@/components/accounting/AccountingCreditMemos").then(m => ({ default: m.AccountingCreditMemos })));
+/* ── Tab components (direct imports — React.lazy forbidden in tab pages) ── */
+import { AccountingDashboard } from "@/components/accounting/AccountingDashboard";
+import { AccountingInvoices } from "@/components/accounting/AccountingInvoices";
+import { AccountingBills } from "@/components/accounting/AccountingBills";
+import { AccountingPayments } from "@/components/accounting/AccountingPayments";
+import { AccountingCustomers } from "@/components/accounting/AccountingCustomers";
+import { AccountingVendors } from "@/components/accounting/AccountingVendors";
+import { AccountingAccounts } from "@/components/accounting/AccountingAccounts";
+import { AccountingAudit } from "@/components/accounting/AccountingAudit";
+import { AccountingPayroll } from "@/components/accounting/AccountingPayroll";
+import { AccountingDocuments } from "@/components/accounting/AccountingDocuments";
+import { AccountingReport } from "@/components/accounting/AccountingReport";
+import { AccountingAgedReceivables } from "@/components/accounting/AccountingAgedReceivables";
+import { AccountingAgedPayables } from "@/components/accounting/AccountingAgedPayables";
+import { AccountingQBReport } from "@/components/accounting/AccountingQBReport";
+import { AccountingAgent } from "@/components/accounting/AccountingAgent";
+import { AccountingOrders } from "@/components/accounting/AccountingOrders";
+import { AccountingActionQueue } from "@/components/accounting/AccountingActionQueue";
+import { AccountingVendorPayments } from "@/components/accounting/AccountingVendorPayments";
+import { BudgetManagement } from "@/components/accounting/BudgetManagement";
+import { QuoteTemplateManager } from "@/components/accounting/QuoteTemplateManager";
+import { ExpenseClaimsManager } from "@/components/accounting/ExpenseClaimsManager";
+import { ThreeWayMatchingManager } from "@/components/accounting/ThreeWayMatchingManager";
+import { EmployeeContractsManager } from "@/components/accounting/EmployeeContractsManager";
+import { RecruitmentPipeline } from "@/components/accounting/RecruitmentPipeline";
+import { ProjectManagement } from "@/components/accounting/ProjectManagement";
+import { AccountingSalesReceipts } from "@/components/accounting/AccountingSalesReceipts";
+import { AccountingRefundReceipts } from "@/components/accounting/AccountingRefundReceipts";
+import { AccountingDeposits } from "@/components/accounting/AccountingDeposits";
+import { AccountingTransfers } from "@/components/accounting/AccountingTransfers";
+import { AccountingJournalEntries } from "@/components/accounting/AccountingJournalEntries";
+import { AccountingRecurring } from "@/components/accounting/AccountingRecurring";
+import { AccountingBatchActions } from "@/components/accounting/AccountingBatchActions";
+import { AccountingStatements } from "@/components/accounting/AccountingStatements";
+import { AccountingExpenses } from "@/components/accounting/AccountingExpenses";
+import { AccountingAttachments } from "@/components/accounting/AccountingAttachments";
+import { AccountingReconciliation } from "@/components/accounting/AccountingReconciliation";
+import { AccountingScheduledReports } from "@/components/accounting/AccountingScheduledReports";
+import { AccountingRecurringTxns } from "@/components/accounting/AccountingRecurringTxns";
+import { TaxPlanning } from "@/components/accounting/TaxPlanning";
+import { BudgetVsActuals } from "@/components/accounting/BudgetVsActuals";
+import { AccountingCashFlow } from "@/components/accounting/AccountingCashFlow";
+import { TaxFilingSummary } from "@/components/accounting/TaxFilingSummary";
+import { AccountingEstimates } from "@/components/accounting/AccountingEstimates";
+import { AccountingCreditMemos } from "@/components/accounting/AccountingCreditMemos";
 
 /* ── Constants ── */
 const QB_LAST_LOAD_KEY = "qb-last-load-date";
 const QB_LAST_LOAD_TIME_KEY = "qb-last-load-time";
-
-/* ── Tab loading spinner ── */
-function TabLoader() {
-  return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 className="w-8 h-8 animate-spin text-primary" />
-    </div>
-  );
-}
 
 /* ── Draggable Penny FAB ── */
 const PENNY_STORAGE_KEY = "penny-btn-pos";
