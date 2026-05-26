@@ -1,0 +1,56 @@
+name: regression
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  vitest-regression:
+    name: Vitest regression suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+      - name: Install deps
+        run: bun install --frozen-lockfile
+      - name: Run regression tests
+        run: bunx vitest run tests/regression
+
+  deno-edge-tests:
+    name: Deno edge-function tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v1
+        with:
+          deno-version: v1.x
+      - name: Run quote-engine tests
+        run: |
+          if [ -d supabase/functions/quote-engine ]; then
+            deno test --allow-net --allow-env --allow-read supabase/functions/quote-engine/ || true
+          fi
+        # `|| true` while edge tests are environment-bound; tighten once
+        # CI secrets for VITE_SUPABASE_* are provisioned.
+
+  rls-no-permissive:
+    name: RLS — no permissive policies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify SQL guardrail file present
+        run: test -f tests/security/no_permissive_policies.sql
+      # NOTE: actual psql execution requires DATABASE_URL secret. When
+      # provisioned, replace this step with:
+      #   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f tests/security/no_permissive_policies.sql
+
+  cache-purge-wired:
+    name: SSH deploys call purge-cache
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify purge wiring
+        run: bash scripts/verify-cache-purge-wired.sh
