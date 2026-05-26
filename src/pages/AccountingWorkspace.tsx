@@ -426,7 +426,7 @@ export default function AccountingWorkspace() {
                   {activeTab === "general-ledger" && <AccountingQBReport data={qb} report="general-ledger" />}
                   {activeTab === "trial-balance" && <AccountingQBReport data={qb} report="trial-balance" />}
                   {activeTab === "transaction-list" && <AccountingQBReport data={qb} report="transaction-list" />}
-                </Suspense>
+                </>
               </div>
             )}
 
