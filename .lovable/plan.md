@@ -1,25 +1,18 @@
-## Goal
-Scheduled / draft / pending-approval / publishing کارت‌ها نباید پیج‌هاشون سبز یا قرمز نشون داده بشه. فقط زمانی رنگی بشن که واقعاً تلاش publish انجام شده باشه (published / failed).
+# Add "Rebar Lovable State Guardian" Skill
 
-## Change (UI only)
-فایل: `src/components/social/SocialCalendar.tsx`
+Install the uploaded skill into the workspace so it can be retrieved when working on Lovable state/cache/stale-index issues.
 
-1. در `parsePageStatuses` یک حالت سوم `pending` اضافه می‌کنیم (به جای فقط `failed: true/false`). برای پست‌هایی که status شون `scheduled`، `draft`، `pending_approval` یا `publishing` هست و هیچ entry موفق/ناموفقی در `page_results` ندارن، خروجی pending برمی‌گردونیم.
+## Steps
 
-2. در `PageStatusDropdown` رندر سه‌حالته:
-   - `failed` → آیکن `XCircle` قرمز + متن `text-destructive` (مثل الان)
-   - `success` → آیکن `CheckCircle2` سبز + متن سبز (مثل الان)
-   - `pending` → آیکن `Circle` خنثی + متن `text-muted-foreground` (بی‌رنگ)
+1. Copy the extracted skill files from the upload into `.agents/skills/rebar-lovable-state-guardian/`:
+   - `SKILL.md` (frontmatter: name + description already valid)
+   - `references/state-validation-checklist.md`
+   - `agents/openai.yaml` (interface metadata)
+2. Call `skills--apply_draft` with `.agents/skills/rebar-lovable-state-guardian` to activate it.
 
-3. منطق structured `page_results`: اگر برای یک پیج entry `success`/`failed` ثبت شده باشه (حتی روی پست scheduled) همون رنگ نشون داده میشه — یعنی فقط پیج‌هایی که هنوز attempt نشدن خنثی می‌مونن.
+## Notes
 
-هیچ تغییری در backend, hooks, یا types نمی‌دیم.
+- No code or DB changes. Skill content used as-is from the zip (no edits needed — frontmatter, name, and description are compliant).
+- Trigger: editing/debugging/deploying Lovable apps where stale state, cache, or stale index is suspected.
 
-## Files
-- `src/components/social/SocialCalendar.tsx` (فقط)
-
-## Validation
-- کارت scheduled بدون page_results → همه‌ی پیج‌ها خاکستری/خنثی
-- کارت published → پیج‌های موفق سبز، پیج‌های ناموفق قرمز (بدون تغییر)
-- کارت failed → پیج‌های ناموفق قرمز، بقیه طبق page_results
-- کارت partial publish → mix درست
+Switch to build mode to apply.
