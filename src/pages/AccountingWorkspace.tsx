@@ -376,7 +376,8 @@ export default function AccountingWorkspace() {
           <div className="flex-1 flex overflow-hidden">
             {!(showAgent && agentMode === "fullscreen") && (
               <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                <Suspense fallback={<TabLoader />}>
+                <>
+
                   {activeTab === "dashboard" && <AccountingDashboard data={qb} onNavigate={setActiveTab} />}
                   {activeTab === "invoices" && <AccountingInvoices data={qb} initialSearch={urlSearch} />}
                   {activeTab === "bills" && <AccountingBills data={qb} />}
