@@ -12,6 +12,7 @@ Companion to the HARD rule in `mem://rules/bugfix-definition-of-done`. Every bug
 - [ ] **Cache purged** (if WordPress / SSH deploy touched) — `scripts/purge-cache.sh` ran and logged.
 - [ ] **`mem://` updated** if the bug is class-level (e.g. "always do X, never Y").
 - [ ] **Preview re-verified post-fix** — same repro path no longer fails.
+- [ ] **Verification signal used** — name the exact check (file re-read, `curl`, `read_query`, `vitest`, browser screenshot, edge logs). See `mem://rules/post-change-verification`.
 
 ## Why these specific items
 
