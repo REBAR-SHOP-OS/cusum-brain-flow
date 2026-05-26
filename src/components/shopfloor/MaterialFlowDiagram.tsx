@@ -53,15 +53,15 @@ export function MaterialFlowDiagram() {
       }
 
       // Split `complete` by fulfillment_channel
-      const channels: Array<{ key: string; channel: string | null }> = [
-        { key: "complete", channel: null },
-        { key: "loading", channel: "loading" },
-        { key: "pickup", channel: "pickup" },
-        { key: "delivery", channel: "delivery" },
+      const channels = [
+        { key: "complete", channel: null as null },
+        { key: "loading", channel: "loading" as const },
+        { key: "pickup", channel: "pickup" as const },
+        { key: "delivery", channel: "delivery" as const },
       ];
       for (const c of channels) {
-        let q = supabase.from("cut_plan_items").select("*", { count: "exact", head: true }).eq("phase", "complete");
-        q = c.channel === null ? q.is("fulfillment_channel", null) : q.eq("fulfillment_channel", c.channel);
+        const base = supabase.from("cut_plan_items").select("*", { count: "exact", head: true }).eq("phase", "complete");
+        const q = c.channel === null ? base.is("fulfillment_channel", null) : base.eq("fulfillment_channel", c.channel);
         const { count, error } = await q;
         counts.push({ phase: c.key, count: error ? 0 : (count || 0) });
       }
