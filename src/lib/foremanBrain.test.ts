@@ -21,6 +21,7 @@ function makeItem(over: Partial<StationItem> = {}): StationItem {
     bend_completed_pieces: 0,
     needs_fix: false,
     bend_dimensions: null,
+    source_dims_json: null,
     source_total_length_text: null,
     unit_system: "metric",
     work_order_id: null,
