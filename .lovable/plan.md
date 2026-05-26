@@ -1,57 +1,75 @@
-## Goal
+# Plan: Batch A + Batch B
 
-Run a read-only full audit of the repo. Produce one report at `docs/engineering/full-audit-2026-05-26.md` listing bugs, dead code, and HARD-rule violations. No code changes in this pass — user picks fix batches afterward.
+Executed sequentially. Each batch is verified before moving to the next. No unrelated edits.
 
-## Audit steps (all read-only)
+---
 
-### A. Bugs / regressions
-1. `bunx tsc --noEmit` — TypeScript errors, bucketed by file.
-2. `bunx eslint . --quiet` — lint errors only.
-3. `bunx vitest run` — full test suite, list failures.
-4. `supabase--linter` — RLS / search_path / security_definer findings.
-5. `supabase--analytics_query` — last 24h `function_edge_logs` where `status_code >= 500`, grouped by function.
-6. `supabase--analytics_query` — last 24h `postgres_logs` where `error_severity in ('ERROR','FATAL','PANIC')`.
+## Batch A — Fix horizontal-overflow wrap in `applyArchitectureLayout`
 
-### B. Dead code
-1. `bunx knip` — unused files, exports, dependencies (config already present at `knip.json`).
-2. `rg "console\.(log|warn|debug)" src/ supabase/functions/` — debug debris counts.
-3. `rg "TODO|FIXME|XXX|HACK" -n` — open todos.
-4. Orphan edge functions — list `supabase/functions/*/`, grep frontend for `invoke('<name>')`, report any with zero references.
+**Failing test:** `src/lib/architectureFlow.test.ts` → "wraps overflow into additional sub-columns with increasing X" (15 nodes, expects `ai-14.x > ai-0.x`).
 
-### C. HARD-rule violations
-1. `rg "USING \(true\)|WITH CHECK \(true\)|auth\.uid\(\) IS NOT NULL|auth\.role\(\) = 'authenticated'" supabase/migrations/` — RLS predicate violations.
-2. `rg "React\.lazy|lazy\(" src/` cross-referenced with files containing `<Tabs` — React.lazy in tab files.
-3. `rg "supabase\.auth\.getUser\(\)" src/` — manual getUser() calls (should use onAuthStateChange).
-4. `rg "\.delete\(\)" src/ -A 2 | rg -v "select"` — deletes missing `.select("id")`.
+**Root cause:** `ARCHITECTURE_LAYOUT.maxPerColumn = 50` → 15 nodes fit in one column → same X → test fails. The wrap logic itself is correct; the threshold makes it unreachable in the test.
 
-## Deliverable
+**Fix (surgical):**
+- Lower `maxPerColumn` from `50` to `12` in `src/lib/architectureFlow.ts`. This:
+  - Makes the documented wrap behavior actually trigger at realistic densities.
+  - Keeps the architecture canvas readable (no 50-tall columns).
+  - Passes the existing test without modifying the test.
+- No other change to layout math.
 
-`docs/engineering/full-audit-2026-05-26.md`:
+**Verify:**
+- `bunx vitest run src/lib/architectureFlow.test.ts` → all 4 cases green.
+- Re-read `src/lib/architectureFlow.ts` — confirm only the constant changed.
+- Visual: `/home` route already renders the graph; spot-check no regression.
 
-```text
-1. Summary table — counts per category
-2. P0 bugs — production-breaking, file:line + suggested fix scope
-3. P1 bugs — regression / lint / failing tests
-4. Dead code — by category (knip files, debug logs, orphan functions, todos)
-5. HARD-rule violations — explicit, grouped by rule
-6. Recommended fix batches — small enough each fits one approval turn
-```
+**Dead code sweep:** none introduced (single constant change). Confirm via `rg "maxPerColumn"` → only the definition + the two usages already in this file.
 
-Plus a 10-line summary printed to chat.
+**Regression test:** the existing test in `architectureFlow.test.ts` IS the regression test (already covers the wrap case). Mark DoD item satisfied — no new test needed.
 
-## What I will NOT do
+---
 
-- Fix anything. Audit only.
-- Delete files. Only flag candidates.
-- Touch `client.ts`, `types.ts`, `.env`.
-- Run any migration, deploy, or destructive command.
+## Batch B — Remove `React.lazy` from tab pages (HARD rule: `mem://rules/frontend-development-standards`)
+
+**Files:**
+- `src/pages/AccountingWorkspace.tsx` — 44 `lazy()` calls, tab-routed.
+- `src/pages/PipelineIntelligence.tsx` — 15 `lazy()` calls, 32 `<Tabs*>` refs.
+
+**Why HARD:** lazy tab children dispatch-crash on re-mount under React 18 concurrent rendering; rule forbids `React.lazy` in tab files.
+
+**Fix (surgical, per file):**
+1. Replace every `const X = lazy(() => import("…/X"))` with a top-level `import X from "…/X"` (or named import matching the module's export shape — verified per file before edit).
+2. Delete the surrounding `<Suspense fallback=…>` wrappers that exist solely to gate the lazy children. Keep any `<Suspense>` that wraps non-lazy async (none expected; will confirm).
+3. Remove `lazy` and `Suspense` from the React import line if no longer used.
+4. Do NOT touch routing, tab keys, props, state, data fetching, or styling.
+
+**Verify per file:**
+- `bunx tsc --noEmit` → 0 new errors.
+- `rg "lazy\(" src/pages/AccountingWorkspace.tsx src/pages/PipelineIntelligence.tsx` → 0 hits.
+- `rg "Suspense" src/pages/AccountingWorkspace.tsx src/pages/PipelineIntelligence.tsx` → 0 hits (or justified remainder).
+- Preview: open `/accounting` and `/pipeline-intelligence` (or whatever the actual routes are — confirmed during build), click through every tab, no blank screens, no console errors.
+
+**Dead code sweep:**
+- Drop unused `lazy`, `Suspense` imports.
+- Drop any `LoadingFallback` / skeleton component that was only referenced inside the deleted `<Suspense fallback>` (verify via `rg`).
+- Re-read both files end-to-end before declaring done.
+
+**Regression test:** add `tests/regression/frontend/no-lazy-in-tab-pages.test.ts` — scans `src/pages/*.tsx` containing `<Tabs` and asserts no `lazy(` or `React.lazy`. Prevents reintroduction in any tab page, not just these two.
+
+---
+
+## HARD-rule compliance checklist (applied to both batches)
+
+- Surgical Execution — only the listed files touched.
+- Post-Change Verification — `vitest` + `tsc` + preview click-through.
+- Dead Code Removal — unused imports/fallbacks/duplicates deleted same change; verified via `rg` + re-read.
+- Bugfix DoD — repro test green, regression test added (Batch B), old code path removed (no lazy twin left behind).
+- No touching `client.ts`, `types.ts`, `.env`, RLS migrations, edge functions.
 
 ## Risks
 
-- `tsc`/`eslint`/`vitest`/`knip` may each take 60-180s. Will run in parallel where safe.
-- Reports may be large; report summarizes + buckets rather than pasting every line.
-- Cloud must be `ACTIVE_HEALTHY` for log pulls — will check first.
+- Batch B increases initial bundle for `/accounting` and `/pipeline-intelligence`. Acceptable per HARD rule (correctness > bundle size for tab pages). If chunk size becomes a concern later, address via route-level code splitting in `App.tsx`, not per-tab lazy.
+- If a tab child module has side-effects on import (unlikely), unmasking them could surface latent bugs. Will catch during preview click-through.
 
-## After the audit
+## Out of scope (deferred to later batches)
 
-User picks fix batches by priority. Each batch follows the HARD rules (Surgical, Bugfix DoD, Post-Change Verification, Dead Code Removal).
+- C (unused exports), D (`getUser` → hook), E (RLS predicates), F (linter warnings), G (debug logs).

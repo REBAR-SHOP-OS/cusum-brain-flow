@@ -1,29 +1,27 @@
-import { useState, useMemo, lazy, Suspense } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Activity, Bell, BarChart3, TrendingUp, Shield, Users, Zap, FileSpreadsheet, XCircle, Sparkles, Webhook, UserCheck, CalendarClock, Clock, AlertCircle } from "lucide-react";
 import { usePipelineRealtime } from "@/hooks/usePipelineRealtime";
 import { PipelineErrorBoundary } from "@/components/pipeline/intelligence/PipelineErrorBoundary";
-import { TabLoadingSkeleton } from "@/components/pipeline/intelligence/TabLoadingSkeleton";
 import type { Tables } from "@/integrations/supabase/types";
 
-// Lazy-loaded tab components
-const SyncHealthDashboard = lazy(() => import("@/components/pipeline/intelligence/SyncHealthDashboard").then(m => ({ default: m.SyncHealthDashboard })));
-const PipelineAlerts = lazy(() => import("@/components/pipeline/intelligence/PipelineAlerts").then(m => ({ default: m.PipelineAlerts })));
-const PipelineAnalyticsDashboard = lazy(() => import("@/components/pipeline/intelligence/PipelineAnalyticsDashboard").then(m => ({ default: m.PipelineAnalyticsDashboard })));
-const PipelineForecast = lazy(() => import("@/components/pipeline/intelligence/PipelineForecast").then(m => ({ default: m.PipelineForecast })));
-const SLAEnforcementDashboard = lazy(() => import("@/components/pipeline/intelligence/SLAEnforcementDashboard").then(m => ({ default: m.SLAEnforcementDashboard })));
-const ClientPerformanceDashboard = lazy(() => import("@/components/pipeline/intelligence/ClientPerformanceDashboard").then(m => ({ default: m.ClientPerformanceDashboard })));
-const PipelineAutomationRules = lazy(() => import("@/components/pipeline/intelligence/PipelineAutomationRules").then(m => ({ default: m.PipelineAutomationRules })));
-const PipelineReporting = lazy(() => import("@/components/pipeline/intelligence/PipelineReporting").then(m => ({ default: m.PipelineReporting })));
-const LossPatternAnalysis = lazy(() => import("@/components/pipeline/intelligence/LossPatternAnalysis").then(m => ({ default: m.LossPatternAnalysis })));
-const AICoachingDashboard = lazy(() => import("@/components/pipeline/intelligence/AICoachingDashboard").then(m => ({ default: m.AICoachingDashboard })));
-const PipelineWebhooks = lazy(() => import("@/components/pipeline/intelligence/PipelineWebhooks").then(m => ({ default: m.PipelineWebhooks })));
-const RepPerformanceDashboard = lazy(() => import("@/components/pipeline/intelligence/RepPerformanceDashboard").then(m => ({ default: m.RepPerformanceDashboard })));
-const ScheduledReportsManager = lazy(() => import("@/components/pipeline/intelligence/ScheduledReportsManager").then(m => ({ default: m.ScheduledReportsManager })));
-const StalePipelineDashboardComp = lazy(() => import("@/components/pipeline/intelligence/StalePipelineDashboard").then(m => ({ default: m.StalePipelineDashboard })));
-const UnattendedLeadsDashboard = lazy(() => import("@/components/pipeline/intelligence/UnattendedLeadsDashboard").then(m => ({ default: m.UnattendedLeadsDashboard })));
+import { SyncHealthDashboard } from "@/components/pipeline/intelligence/SyncHealthDashboard";
+import { PipelineAlerts } from "@/components/pipeline/intelligence/PipelineAlerts";
+import { PipelineAnalyticsDashboard } from "@/components/pipeline/intelligence/PipelineAnalyticsDashboard";
+import { PipelineForecast } from "@/components/pipeline/intelligence/PipelineForecast";
+import { SLAEnforcementDashboard } from "@/components/pipeline/intelligence/SLAEnforcementDashboard";
+import { ClientPerformanceDashboard } from "@/components/pipeline/intelligence/ClientPerformanceDashboard";
+import { PipelineAutomationRules } from "@/components/pipeline/intelligence/PipelineAutomationRules";
+import { PipelineReporting } from "@/components/pipeline/intelligence/PipelineReporting";
+import { LossPatternAnalysis } from "@/components/pipeline/intelligence/LossPatternAnalysis";
+import { AICoachingDashboard } from "@/components/pipeline/intelligence/AICoachingDashboard";
+import { PipelineWebhooks } from "@/components/pipeline/intelligence/PipelineWebhooks";
+import { RepPerformanceDashboard } from "@/components/pipeline/intelligence/RepPerformanceDashboard";
+import { ScheduledReportsManager } from "@/components/pipeline/intelligence/ScheduledReportsManager";
+import { StalePipelineDashboard as StalePipelineDashboardComp } from "@/components/pipeline/intelligence/StalePipelineDashboard";
+import { UnattendedLeadsDashboard } from "@/components/pipeline/intelligence/UnattendedLeadsDashboard";
 
 type Lead = Tables<"leads">;
 type LeadWithCustomer = Lead & { customers: { name: string; company_name: string | null } | null };
@@ -88,9 +86,7 @@ export default function PipelineIntelligence() {
 
   const wrapTab = (children: React.ReactNode, label?: string) => (
     <PipelineErrorBoundary fallbackLabel={label}>
-      <Suspense fallback={<TabLoadingSkeleton />}>
-        {children}
-      </Suspense>
+      {children}
     </PipelineErrorBoundary>
   );
 
