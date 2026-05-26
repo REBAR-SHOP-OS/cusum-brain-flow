@@ -1,6 +1,5 @@
 export type MachineType = "cutter" | "bender" | "loader" | "other";
 export type MachineStatus = "idle" | "running" | "blocked" | "down";
-export type CapabilityProcess = "cut" | "bend" | "load" | "other";
 
 export interface Machine {
   id: string;
@@ -49,27 +48,4 @@ export interface QueuedRun {
   input_qty: number | null;
   notes: string | null;
   created_at: string;
-}
-
-/** Canonical RSIC Canada rebar size reference */
-export interface RebarSize {
-  bar_code: string;       // '10M', '15M', ... '55M'
-  diameter_mm: number;
-  area_mm2: number;
-  mass_kg_per_m: number;
-  standard: string;       // 'RSIC-Canada-2017'
-}
-
-/** What a machine can process — keyed on bar_code, NOT mm */
-export interface MachineCapability {
-  id: string;
-  machine_id: string;
-  bar_code: string;       // FK → rebar_sizes.bar_code
-  bar_mm: number | null;  // legacy/debug only — auto-populated from rebar_sizes
-  process: CapabilityProcess;
-  max_bars: number;
-  max_length_mm: number | null;
-  notes: string | null;
-  created_at: string;
-  updated_at: string;
 }

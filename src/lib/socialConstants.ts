@@ -34,4 +34,4 @@ export const PLATFORM_PAGES: Record<string, SelectionOption[]> = {
   ],
 };
 
-export const PIXEL_APPROVE_PLATFORMS = ["facebook", "instagram"] as const;
+

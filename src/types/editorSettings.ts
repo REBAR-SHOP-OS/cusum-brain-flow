@@ -14,15 +14,6 @@ export interface LogoSettings {
   zoom: number;
 }
 
-export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
-  overlayPreset: "None",
-  transitionPreset: "None",
-  subtitlePreset: "Standard",
-  stickerPreset: "None",
-  textPreset: "Minimal",
-  sfxVolume: 80,
-  mediaVolume: 100,
-};
 
 export const DEFAULT_LOGO_SETTINGS: LogoSettings = {
   posX: 90,

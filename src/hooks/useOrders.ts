@@ -86,10 +86,6 @@ export const ALLOWED_TRANSITIONS: Record<string, string[]> = {
   confirmed:          ["in_production", "approved", "cancelled"],
 };
 
-export const ORDER_KIND_LABELS: Record<string, string> = {
-  extract: "Extract",
-  commercial: "Commercial",
-};
 
 export const PRIORITY_OPTIONS = ["low", "medium", "high"] as const;
 export const DELIVERY_METHOD_OPTIONS = ["pickup", "delivery"] as const;
