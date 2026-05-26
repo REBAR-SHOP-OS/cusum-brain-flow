@@ -22,7 +22,6 @@ export interface StationItem {
   bend_completed_pieces: number;
   needs_fix: boolean;
   bend_dimensions: Record<string, number> | null;
-  source_dims_json: Record<string, string> | null;
   source_total_length_text: string | null;
   unit_system: string | null;
   work_order_id: string | null;
@@ -79,7 +78,6 @@ export function useStationData(machineId: string | null, machineType?: string, p
             bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
             phase: (item.phase as string) || "queued",
             bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-            source_dims_json: item.source_dims_json as Record<string, string> | null,
             source_total_length_text: (item as any).source_total_length_text || null,
             unit_system: (item as any).unit_system ?? null,
             plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
@@ -125,7 +123,6 @@ export function useStationData(machineId: string | null, machineType?: string, p
           bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
           phase: (item.phase as string) || "queued",
           bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-          source_dims_json: item.source_dims_json as Record<string, string> | null,
           source_total_length_text: (item as any).source_total_length_text || null,
           unit_system: (item as any).unit_system ?? null,
           plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
