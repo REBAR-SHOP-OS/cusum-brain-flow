@@ -340,7 +340,11 @@ export function BenderStationView({ machine, items, canWrite, initialIndex = 0, 
         </div>
 
         {/* Bending schematic */}
-        <BendingSchematic dimensions={currentItem.bend_dimensions} unitSystem={currentItem.unit_system} />
+        <BendingSchematic
+          dimensions={currentItem.bend_dimensions}
+          sourceDimensions={currentItem.source_dims_json}
+          unitSystem={currentItem.unit_system}
+        />
 
         {/* ── BEND BATCHES PANEL (Phase 4) ── */}
         {bendBatches.length > 0 && (

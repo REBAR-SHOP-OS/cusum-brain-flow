@@ -4,10 +4,11 @@ import { isImperial } from "@/lib/cutMath";
 
 interface BendingSchematicProps {
   dimensions: Record<string, number> | null;
+  sourceDimensions?: Record<string, string> | null;
   unitSystem?: string | null;
 }
 
-export function BendingSchematic({ dimensions, unitSystem: itemUnitSystem }: BendingSchematicProps) {
+export function BendingSchematic({ dimensions, sourceDimensions, unitSystem: itemUnitSystem }: BendingSchematicProps) {
   const workspaceUnitSystem = useUnitSystem();
   const unitLabel = itemUnitSystem != null
     ? (isImperial(itemUnitSystem) ? '"' : 'mm')
@@ -34,20 +35,27 @@ export function BendingSchematic({ dimensions, unitSystem: itemUnitSystem }: Ben
       
       <Card className="bg-card border border-border">
         <CardContent className="p-4 space-y-3">
-          {entries.map(([key, value]) => (
-            <div 
-              key={key} 
-              className="flex items-center justify-between py-2 border-b border-border last:border-b-0"
-            >
-              <span className={`text-xl font-bold ${getColorForDimension(key)}`}>
-                {key}
-              </span>
-              <span className="text-3xl font-black font-mono text-foreground">
-                {value}
-                <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
-              </span>
-            </div>
-          ))}
+          {entries.map(([key, value]) => {
+            const sourceValue = sourceDimensions?.[key]?.trim();
+            const hasSourceUnit = sourceValue ? /['"a-zA-Z]/.test(sourceValue) : false;
+
+            return (
+              <div 
+                key={key} 
+                className="flex items-center justify-between py-2 border-b border-border last:border-b-0"
+              >
+                <span className={`text-xl font-bold ${getColorForDimension(key)}`}>
+                  {key}
+                </span>
+                <span className="text-3xl font-black font-mono text-foreground">
+                  {sourceValue || value}
+                  {!hasSourceUnit && (
+                    <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>
