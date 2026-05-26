@@ -6,8 +6,6 @@
  */
 
 export const DEFAULT_TIMEZONE = "America/Toronto";
-export const DEFAULT_DATE_FORMAT = "MM/dd/yyyy";
-export const DEFAULT_TIME_FORMAT = "12h";
 export type TimeOfDay = "morning" | "afternoon" | "evening";
 
 /** Common North American timezones for the settings dropdown */

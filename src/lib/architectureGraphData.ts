@@ -400,17 +400,3 @@ export const ARCH_EDGES: ArchEdge[] = [
   { id: "em42", source: "role-guard",   target: "sales",         edgeStyle: "solid" },
 ];
 
-/* ───── Helpers ───── */
-export function nodesInLayer(layer: ArchLayer): ArchNode[] {
-  return ARCH_NODES.filter((n) => n.layer === layer);
-}
-
-export const LAYER_LABELS: Record<ArchLayer, string> = {
-  entry: "Entry Points",
-  auth: "Access Control",
-  items: "System Items",
-  ai: "AI / Automation",
-  backend: "Integrations",
-  external: "External Services",
-  platform: "Data + Platform",
-};

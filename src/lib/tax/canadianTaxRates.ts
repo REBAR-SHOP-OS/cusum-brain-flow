@@ -24,10 +24,6 @@ export const FEDERAL_SBD_RATE = 0.09;
 export const ONTARIO_SBD_RATE = 0.032;
 export const COMBINED_CORP_RATE = FEDERAL_SBD_RATE + ONTARIO_SBD_RATE; // ~12.2%
 
-// Eligible dividends (from large corps or LRIP)
-export const ELIGIBLE_GROSS_UP = 0.38;
-export const ELIGIBLE_FED_CREDIT_RATE = 0.150198;
-export const ELIGIBLE_ON_CREDIT_RATE = 0.10;
 
 // Non-eligible dividends (from SBD income)
 export const NON_ELIGIBLE_GROSS_UP = 0.15;
