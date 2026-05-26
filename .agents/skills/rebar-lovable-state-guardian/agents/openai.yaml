@@ -1,0 +1,5 @@
+interface:
+  display_name: "Rebar Lovable State Guardian"
+  short_description: "Prevents stale-state mistakes in Lovable app editing."
+  icon: "ShieldCheck"
+  accent_color: "#111827"
