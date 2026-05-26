@@ -1,13 +1,18 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { useUnitSystem, lengthUnit } from "@/lib/unitSystem";
+import { isImperial } from "@/lib/cutMath";
 
 interface BendingSchematicProps {
   dimensions: Record<string, number> | null;
+  unitSystem?: string | null;
 }
 
-export function BendingSchematic({ dimensions }: BendingSchematicProps) {
-  const unitSystem = useUnitSystem();
-  const unitLabel = lengthUnit(unitSystem);
+export function BendingSchematic({ dimensions, unitSystem: itemUnitSystem }: BendingSchematicProps) {
+  const workspaceUnitSystem = useUnitSystem();
+  const unitLabel = itemUnitSystem != null
+    ? (isImperial(itemUnitSystem) ? '"' : 'mm')
+    : lengthUnit(workspaceUnitSystem);
+
 
   if (!dimensions || Object.keys(dimensions).length === 0) {
     return (
