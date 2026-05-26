@@ -86,9 +86,7 @@ export default function PipelineIntelligence() {
 
   const wrapTab = (children: React.ReactNode, label?: string) => (
     <PipelineErrorBoundary fallbackLabel={label}>
-      <Suspense fallback={<TabLoadingSkeleton />}>
-        {children}
-      </Suspense>
+      {children}
     </PipelineErrorBoundary>
   );
 
