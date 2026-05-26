@@ -8,11 +8,12 @@ Companion to the HARD rule in `mem://rules/bugfix-definition-of-done`. Every bug
 - [ ] **Root cause identified** — not the symptom, the underlying helper / hook / edge-function / cache / data shape.
 - [ ] **Single code path after fix** — duplicate components / hooks / helpers deleted in the same change.
 - [ ] **Regression test added** under `tests/regression/<area>/<name>.test.ts`. Test fails on un-fixed code, passes after.
-- [ ] **Dead code swept** — failed-attempt branches, unused imports, debug `console.log`, mock data removed.
+- [ ] **Dead code swept** — failed-attempt branches, unused imports, debug `console.log`, mock data, duplicate components/hooks/edge functions removed. Verify via `rg "<oldSymbol>"` returning zero unintended hits + re-read of every touched file. See `mem://rules/dead-code-removal`.
 - [ ] **Cache purged** (if WordPress / SSH deploy touched) — `scripts/purge-cache.sh` ran and logged.
 - [ ] **`mem://` updated** if the bug is class-level (e.g. "always do X, never Y").
 - [ ] **Preview re-verified post-fix** — same repro path no longer fails.
 - [ ] **Verification signal used** — name the exact check (file re-read, `curl`, `read_query`, `vitest`, browser screenshot, edge logs). See `mem://rules/post-change-verification`.
+- [ ] **Old code deleted (paths)** — list every file/symbol removed so the closing report proves the broken twin is gone.
 
 ## Why these specific items
 

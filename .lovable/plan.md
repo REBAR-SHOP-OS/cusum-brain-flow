@@ -1,39 +1,37 @@
 ## Goal
 
-After every code change, verify the change is actually applied and working — never declare "done" based on the edit alone.
+Make "remove old/unused code after every fix" a HARD project rule so a fix is permanent — the old behavior cannot reappear because the old code no longer exists.
+
+## Why now
+
+The user memory already captures this for cross-session behavior. Project memory + the bugfix checklist also need to enforce it so CI and future agents/devs can't ship a "fix" that leaves the broken twin alive.
 
 ## Deliverables
 
-### 1. New Core memory rule — Post-Change Verification (HARD)
-`mem://rules/post-change-verification` + Core entry in `mem://index.md`:
+### 1. New Core memory rule — Dead Code Removal (HARD)
+`mem://rules/dead-code-removal` + Core entry in `mem://index.md`:
 
-> **Post-Change Verification (HARD):** After every change, before reporting "done", verify with the fastest relevant signal:
-> - **Frontend edit** → re-read the file to confirm the patch landed, then check the preview (browser tool / screenshot / console logs) for the actual rendered behavior.
-> - **Edge function** → deploy via `supabase--deploy_edge_functions`, then hit it with `supabase--curl_edge_functions` or `supabase--edge_function_logs`.
-> - **DB migration** → run a `supabase--read_query` against the new column/table/policy to confirm it exists and behaves.
-> - **Test/regression** → run `bunx vitest run <path>` and confirm pass count.
-> - **SSH/WordPress deploy** → run `scripts/purge-cache.sh` and confirm purge log entry.
->
-> If the verification signal is unavailable, say so explicitly — never assume success.
+> **Dead Code Removal (HARD):** After every fix or refactor, delete the replaced/old/unused code in the SAME change: dead branches, unused imports, abandoned helpers, commented-out experiments, duplicate components/hooks/edge functions, stale feature flags, mock data, debug `console.log`. Re-read every touched file to confirm no debris remains. A fix is not done while the old code path still exists — it will be re-imported and the bug will come back.
 
 ### 2. Update `docs/engineering/bugfix-checklist.md`
-Add a "Verification signal used" line to the closing-report template so every fix names *how* it was confirmed (file re-read, curl, query, vitest, browser screenshot).
+The "Dead code swept" line already exists (item 5). Strengthen it to require an explicit `rg` (ripgrep) search for the removed symbol and a re-read confirmation, and add a "Old code deleted (paths)" line to the closing report.
 
-### 3. Wire into GitHub Actions
-Already covered — `.github/workflows/regression.yml` runs Vitest + Deno + RLS scan + cache-purge wiring check on every push. No change needed; this rule makes sure the agent doesn't ship without also doing a *local* verification first.
+### 3. Reference from `skill/clean-integration-fix`
+That skill already mandates a cleanup pass for plugin/integration work. No change to the skill itself — just cross-link the new memory rule so the same discipline applies project-wide, not only to integrations.
 
 ## Order of execution
 
-1. Write `mem://rules/post-change-verification`
-2. Update `mem://index.md` Core block
-3. Append "Verification signal used" line to `docs/engineering/bugfix-checklist.md`
+1. Write `mem://rules/dead-code-removal`
+2. Add Core entry + Memories link in `mem://index.md`
+3. Strengthen checklist item 5 + add "Old code deleted (paths)" closing-report line in `docs/engineering/bugfix-checklist.md`
+4. Verify: re-read all three files
 
 ## What I will NOT touch
 
-- Existing tests, business logic, RLS, edge functions
-- `.github/workflows/regression.yml` (already enforces CI side)
+- Existing business logic, tests, RLS, edge functions
 - `client.ts`, `types.ts`, `.env`
+- The skill files (only referenced, not edited)
 
 ## Risks
 
-- None — pure rule + doc change.
+None — pure rule + doc change.
