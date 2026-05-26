@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: useUserAccessOverrides must exist as the single source of
  * truth for per-user navigation grants. New components must NOT roll their

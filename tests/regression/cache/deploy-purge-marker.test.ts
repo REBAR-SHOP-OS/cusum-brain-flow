@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: Every SSH deploy must call `scripts/purge-cache.sh`, which
  * writes `.deploy/purge-log.json` with timestamp + commit SHA.

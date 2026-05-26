@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: Canadian imports routinely mix ft-in, inches, and mm in the
  * same sheet. `normalizeDimension` must detect each unit per row, preserve

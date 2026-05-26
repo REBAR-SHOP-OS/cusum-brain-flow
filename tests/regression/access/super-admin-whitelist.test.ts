@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: Super-admin access is whitelist-only. Any new module that
  * checks super-admin status must go through `useSuperAdmin` (which reads

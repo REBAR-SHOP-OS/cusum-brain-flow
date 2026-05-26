@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: The `validate` action must return `missing_inputs_questions`
  * when the estimate request is incomplete, instead of silently producing a

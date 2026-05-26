@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: Quote engine must reject quotes that resolve to $0 grand_total
  * despite having line items. The guard block in `quote-engine/index.ts`

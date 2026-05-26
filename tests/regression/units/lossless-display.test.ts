@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * REGRESSION: The lossless display contract says the rendered string must
  * be byte-identical to the source string when mode is "auto". Any future
