@@ -469,16 +469,14 @@ export default function AccountingWorkspace() {
                 <X className="w-4 h-4" />
               </button>
             )}
-            <Suspense fallback={<TabLoader />}>
-              <AccountingAgent
-                viewMode={agentMode}
-                onViewModeChange={(m) => setAgentMode(m)}
-                qbSummary={stableQbSummary}
-                autoGreet
-                webPhoneState={webPhoneState}
-                webPhoneActions={webPhoneActions}
-              />
-            </Suspense>
+            <AccountingAgent
+              viewMode={agentMode}
+              onViewModeChange={(m) => setAgentMode(m)}
+              qbSummary={stableQbSummary}
+              autoGreet
+              webPhoneState={webPhoneState}
+              webPhoneActions={webPhoneActions}
+            />
           </div>
         )}
 
