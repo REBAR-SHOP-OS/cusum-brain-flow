@@ -11,6 +11,9 @@ import {
   PackageCheck,
   ArrowRight,
   Flame,
+  Forklift,
+  Hand,
+  Truck,
 } from "lucide-react";
 
 interface PhaseCount {
@@ -19,12 +22,15 @@ interface PhaseCount {
 }
 
 const FLOW_STAGES = [
-  { phase: "queued", label: "POOL", sublabel: "Awaiting Cutter", icon: Layers, color: "text-muted-foreground", border: "border-border", bg: "bg-muted/50" },
-  { phase: "cutting", label: "CUTTER", sublabel: "Active Cutting", icon: Scissors, color: "text-blue-500", border: "border-blue-500/30", bg: "bg-blue-500/10" },
-  { phase: "cut_done", label: "POOL", sublabel: "Awaiting Bender", icon: Flame, color: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10" },
-  { phase: "bending", label: "BENDER", sublabel: "Active Bending", icon: RotateCcw, color: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10" },
-  { phase: "clearance", label: "QC", sublabel: "Clearance", icon: ShieldCheck, color: "text-primary", border: "border-primary/30", bg: "bg-primary/10" },
-  { phase: "complete", label: "DISPATCH", sublabel: "Ready", icon: PackageCheck, color: "text-success", border: "border-success/30", bg: "bg-success/10" },
+  { phase: "queued", label: "POOL", sublabel: "Awaiting Cutter", icon: Layers, color: "text-muted-foreground", border: "border-border", bg: "bg-muted/50", nav: "/shopfloor/pool?phase=queued" },
+  { phase: "cutting", label: "CUTTER", sublabel: "Active Cutting", icon: Scissors, color: "text-blue-500", border: "border-blue-500/30", bg: "bg-blue-500/10", nav: "/shopfloor/pool?phase=cutting" },
+  { phase: "cut_done", label: "POOL", sublabel: "Awaiting Bender", icon: Flame, color: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10", nav: "/shopfloor/pool?phase=cut_done" },
+  { phase: "bending", label: "BENDER", sublabel: "Active Bending", icon: RotateCcw, color: "text-orange-500", border: "border-orange-500/30", bg: "bg-orange-500/10", nav: "/shopfloor/pool?phase=bending" },
+  { phase: "clearance", label: "QC", sublabel: "Clearance", icon: ShieldCheck, color: "text-primary", border: "border-primary/30", bg: "bg-primary/10", nav: "/shopfloor/clearance" },
+  { phase: "complete", label: "READY", sublabel: "Unassigned", icon: PackageCheck, color: "text-success", border: "border-success/30", bg: "bg-success/10", nav: "/shopfloor/pool?phase=complete" },
+  { phase: "loading", label: "LOADING", sublabel: "Staging", icon: Forklift, color: "text-amber-500", border: "border-amber-500/30", bg: "bg-amber-500/10", nav: "/shopfloor/delivery-ops" },
+  { phase: "pickup", label: "PICKUP", sublabel: "Customer", icon: Hand, color: "text-purple-500", border: "border-purple-500/30", bg: "bg-purple-500/10", nav: "/shopfloor/delivery-ops" },
+  { phase: "delivery", label: "DELIVERY", sublabel: "Dispatched", icon: Truck, color: "text-emerald-500", border: "border-emerald-500/30", bg: "bg-emerald-500/10", nav: "/shopfloor/delivery-ops" },
 ];
 
 export function MaterialFlowDiagram() {
@@ -36,7 +42,7 @@ export function MaterialFlowDiagram() {
     enabled: !!user,
     refetchInterval: 15000,
     queryFn: async () => {
-      const phases = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
+      const phases = ["queued", "cutting", "cut_done", "bending", "clearance"];
       const counts: PhaseCount[] = [];
       for (const phase of phases) {
         const { count, error } = await supabase
@@ -44,6 +50,20 @@ export function MaterialFlowDiagram() {
           .select("*", { count: "exact", head: true })
           .eq("phase", phase);
         counts.push({ phase, count: error ? 0 : (count || 0) });
+      }
+
+      // Split `complete` by fulfillment_channel
+      const channels = [
+        { key: "complete", channel: null as null },
+        { key: "loading", channel: "loading" as const },
+        { key: "pickup", channel: "pickup" as const },
+        { key: "delivery", channel: "delivery" as const },
+      ];
+      for (const c of channels) {
+        const base = supabase.from("cut_plan_items").select("*", { count: "exact", head: true }).eq("phase", "complete");
+        const q = c.channel === null ? base.is("fulfillment_channel", null) : base.eq("fulfillment_channel", c.channel);
+        const { count, error } = await q;
+        counts.push({ phase: c.key, count: error ? 0 : (count || 0) });
       }
       return counts;
     },
@@ -79,7 +99,7 @@ export function MaterialFlowDiagram() {
           return (
             <div key={stage.phase} className="flex items-center gap-1 shrink-0">
               <button
-                onClick={() => navigate(`/shopfloor/pool?phase=${stage.phase}`)}
+                onClick={() => navigate(stage.nav)}
                 className={`flex flex-col items-center gap-1 px-3 py-3 rounded-lg border-2 transition-all min-w-[72px] ${
                   isActive
                     ? `${stage.border} ${stage.bg} shadow-sm`
