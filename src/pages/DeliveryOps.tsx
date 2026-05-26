@@ -250,7 +250,7 @@ export default function DeliveryOps() {
   };
 
   return (
-    <div className="relative flex flex-col min-h-screen bg-background overflow-hidden">
+    <div className="relative flex flex-col min-h-screen bg-background overflow-x-hidden overflow-y-auto">
       <div className="absolute inset-0 pointer-events-none z-0">
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] rounded-full bg-destructive/10 blur-[160px]" />
       </div>
