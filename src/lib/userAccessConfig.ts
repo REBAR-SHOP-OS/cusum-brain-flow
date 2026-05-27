@@ -201,18 +201,6 @@ export function getVisibleAgents(email?: string | null): string[] {
   return cfg.agents;
 }
 
-/** Check if user can see a specific menu item. */
-export function hasMenuAccess(email: string | null | undefined, menuKey: string): boolean {
-  const visible = getVisibleMenus(email);
-  return visible.includes(menuKey);
-}
-
-/** Check if user can access a specific agent. */
-export function hasAgentAccess(email: string | null | undefined, agentKey: string): boolean {
-  const visible = getVisibleAgents(email);
-  return visible.includes(agentKey);
-}
-
 /** Get user's primary agent key. */
 export function getUserPrimaryAgentKeyFromConfig(email?: string | null): string | null {
   const cfg = resolveConfig(email);
@@ -231,7 +219,3 @@ export function getUserQuickActions(email?: string | null): QuickAction[] {
   return cfg?.quickActions ?? [];
 }
 
-/** Get the full user config (for userAgentMap compatibility). */
-export function getUserConfig(email?: string | null): UserConfig | null {
-  return resolveConfig(email);
-}

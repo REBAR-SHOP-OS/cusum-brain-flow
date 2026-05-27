@@ -20,15 +20,6 @@ export async function getChatFileSignedUrl(storagePath: string): Promise<string>
   return data.signedUrl;
 }
 
-/**
- * Backwards-compatible synchronous helper. The team-chat-files bucket is private,
- * so this can no longer return a working public URL — callers should migrate to
- * `getChatFileSignedUrl`. Kept to avoid breaking imports; returns empty string.
- * @deprecated use getChatFileSignedUrl
- */
-export function getPublicFileUrl(_storagePath: string): string {
-  return "";
-}
 
 /**
  * Extract the storage path from a legacy public/signed team-chat-files URL.
@@ -53,16 +44,6 @@ export function fixChatFileUrl(url: string): string {
   return url;
 }
 
-/**
- * Resolve any chat-file URL to a fresh signed URL (async).
- * If it's an external URL, returns as-is. If unparseable, returns original.
- */
-export async function resolveChatFileUrl(url: string): Promise<string> {
-  const path = extractChatFilePath(url);
-  if (!path) return url;
-  const fresh = await getChatFileSignedUrl(path);
-  return fresh || url;
-}
 
 /**
  * Check if a MIME type or filename represents an image.

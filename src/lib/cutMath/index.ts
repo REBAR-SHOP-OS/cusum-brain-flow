@@ -35,12 +35,6 @@ export function formatLength(value: number, unit: UnitTag): string {
   return isImperial(unit) ? I.formatLengthImperial(value) : M.formatLengthMetric(value);
 }
 
-export function weightKg(length: number, kgPerMetre: number, unit: UnitTag): number {
-  return isImperial(unit)
-    ? I.weightKgImperial(length, kgPerMetre)
-    : M.weightKgMetric(length, kgPerMetre);
-}
-
 export interface RunPlanCommon {
   piecesPerBar: number;
   totalBarsNeeded: number;

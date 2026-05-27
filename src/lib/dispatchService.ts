@@ -1,4 +1,9 @@
-import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+/**
+ * Type definitions for production-queue dispatch.
+ * The smart-dispatch wrapper was removed (unused); the edge function is still
+ * called directly from server-side flows. `QueueItemWithTask` is consumed by
+ * `useProductionQueues` and other UI hooks.
+ */
 
 export type DispatchAction = "dispatch" | "start-task" | "move-task" | "get-queues";
 
@@ -40,11 +45,3 @@ export interface QueueItemWithTask {
   } | null;
 }
 
-/**
- * Calls the smart-dispatch edge function.
- */
-export async function smartDispatch(
-  params: DispatchParams
-): Promise<{ success: boolean; action: string; queueItems?: QueueItemWithTask[] }> {
-  return invokeEdgeFunction("smart-dispatch", params as any);
-}

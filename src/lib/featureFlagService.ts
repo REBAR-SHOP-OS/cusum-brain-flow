@@ -4,7 +4,6 @@
  * Purely additive — no existing code depends on this.
  */
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
 
 interface FeatureFlag {
   flag_key: string;
@@ -79,23 +78,6 @@ export async function isFeatureEnabled(
   return false;
 }
 
-/**
- * React hook to check a feature flag.
- * Returns { enabled, isLoading }.
- */
-export function useFeatureFlag(
-  flagKey: string,
-  context?: { role?: string; userId?: string; email?: string },
-) {
-  const { data: enabled = false, isLoading } = useQuery({
-    queryKey: ["feature_flag", flagKey, context?.role, context?.userId],
-    queryFn: () => isFeatureEnabled(flagKey, context),
-    staleTime: CACHE_TTL_MS,
-    refetchOnWindowFocus: false,
-  });
-
-  return { enabled, isLoading };
-}
 
 /** Invalidate the in-memory cache (e.g. after admin updates a flag). */
 export function invalidateFlagCache() {

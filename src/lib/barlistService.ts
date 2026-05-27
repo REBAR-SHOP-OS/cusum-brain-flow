@@ -1,5 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
-import { getCompanyId } from "@/hooks/useCompanyId";
+
 
 // ── Types ────────────────────────────────────────────────────
 
@@ -144,26 +144,3 @@ export async function fetchBarlistItems(barlistId: string): Promise<BarlistItem[
   return (data || []) as unknown as BarlistItem[];
 }
 
-// ── Events ───────────────────────────────────────────────────
-
-export async function logBarlistEvent(
-  barlistId: string,
-  eventType: string,
-  actorId: string,
-  description?: string,
-  metadata?: Record<string, unknown>
-) {
-  const companyId = await getCompanyId();
-  await supabase.from("activity_events").insert({
-    entity_type: "barlist",
-    entity_id: barlistId,
-    event_type: eventType,
-    actor_id: actorId,
-    actor_type: "user",
-    description: description || eventType,
-    company_id: companyId!,
-    metadata: metadata || {},
-    source: "system",
-    dedupe_key: `barlist:${barlistId}:${eventType}`,
-  } as any);
-}

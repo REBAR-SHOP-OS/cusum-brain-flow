@@ -23,25 +23,10 @@ export const BAR_SIZE_MAP: Record<string, string> = {
   "55M": "#18",
 };
 
-const IMPERIAL_TO_METRIC: Record<string, string> = Object.fromEntries(
-  Object.entries(BAR_SIZE_MAP).map(([m, i]) => [i, m])
-);
-
 /** Convert a metric bar code to the display label for the active unit system */
 export function barSizeLabel(metricCode: string, system: UnitSystem): string {
   if (system === "imperial") return BAR_SIZE_MAP[metricCode] || metricCode;
   return metricCode;
-}
-
-/** Convert an imperial bar code (e.g. "#6") back to metric ("20M") */
-export function imperialToMetric(imperialCode: string): string | null {
-  return IMPERIAL_TO_METRIC[imperialCode] || null;
-}
-
-/** Get all valid bar sizes for a unit system */
-export function validBarSizes(system: UnitSystem): string[] {
-  if (system === "imperial") return Object.values(BAR_SIZE_MAP);
-  return Object.keys(BAR_SIZE_MAP);
 }
 
 // ─── Length Formatting ──────────────────────────────────────
@@ -90,38 +75,6 @@ export function formatLengthShort(mm: number, system: UnitSystem): string {
   const feet = Math.floor(totalInches / 12);
   const inches = Math.round(totalInches % 12);
   return `${feet}'-${inches}"`;
-}
-
-/** Parse a user-entered length string back to mm */
-export function parseLength(input: string, system: UnitSystem): number | null {
-  if (system === "metric") {
-    const n = parseFloat(input.replace(/[^0-9.-]/g, ""));
-    return isNaN(n) ? null : n;
-  }
-
-  // Imperial: try "X'-Y"" or "X' Y"" or just inches
-  const ftIn = input.match(/(\d+)\s*['']\s*-?\s*(\d+(?:\.\d+)?)\s*[""]/);
-  if (ftIn) {
-    return Math.round(parseFloat(ftIn[1]) * MM_PER_FOOT + parseFloat(ftIn[2]) * MM_PER_INCH);
-  }
-
-  // Just feet: "6'"
-  const ftOnly = input.match(/^(\d+(?:\.\d+)?)\s*['']\s*$/);
-  if (ftOnly) {
-    return Math.round(parseFloat(ftOnly[1]) * MM_PER_FOOT);
-  }
-
-  // Just inches: '72"'
-  const inOnly = input.match(/^(\d+(?:\.\d+)?)\s*[""]\s*$/);
-  if (inOnly) {
-    return Math.round(parseFloat(inOnly[1]) * MM_PER_INCH);
-  }
-
-  // Plain number → treat as inches in imperial
-  const plain = parseFloat(input);
-  if (!isNaN(plain)) return Math.round(plain * MM_PER_INCH);
-
-  return null;
 }
 
 /** Get the length unit label */
