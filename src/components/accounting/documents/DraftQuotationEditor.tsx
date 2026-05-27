@@ -10,6 +10,7 @@ import { Printer, X, Plus, Trash2, Save, Loader2, Search, ChevronDown, UserPlus,
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { toast } from "@/components/ui/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -451,7 +452,7 @@ export function DraftQuotationEditor({ quoteId, onClose }: Props) {
             return;
           }
           try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getCurrentUser();
             const { error } = await supabase.from("sales_lead_activities").insert({
               sales_lead_id: leadId,
               company_id: companyId,

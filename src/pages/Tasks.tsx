@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { cn } from "@/lib/utils";
 import { ScheduledActivities } from "@/components/pipeline/ScheduledActivities";
@@ -337,10 +338,10 @@ export default function Tasks() {
 
   // Fetch current user ID once
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      const uid = data.user?.id ?? null;
+    getCurrentUser().then(async (user) => {
+      const uid = user?.id ?? null;
       setCurrentUserId(uid);
-      setCurrentUserEmail(data.user?.email ?? null);
+      setCurrentUserEmail(user?.email ?? null);
       if (uid) {
         const { data: profile } = await supabase
           .from("profiles")
@@ -552,7 +553,7 @@ export default function Tasks() {
     if (!selectedTask || !currentProfileId) return;
     setSubmittingComment(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
       let content = newComment.trim();
 
@@ -634,7 +635,7 @@ export default function Tasks() {
 
   // ─── Mutations ────────────────────────────────────────
   const writeAudit = async (taskId: string, action: string, field: string | null, oldVal: string | null, newVal: string | null) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     await supabase.from("task_audit_log").insert({
       task_id: taskId,
       action,
@@ -865,7 +866,7 @@ export default function Tasks() {
   const reopenWithIssue = async (task: TaskRow, reason: string) => {
     if (!reason.trim()) { toast.error("Please describe the issue"); return; }
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
       const companyId = companyRes.data?.company_id;
 
@@ -976,7 +977,7 @@ export default function Tasks() {
     if (newDueDate && newDueDate < new Date().toISOString().split("T")[0]) { toast.error("Due date cannot be in the past"); return; }
     setCreating(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const companyRes = await supabase.from("profiles").select("company_id").eq("user_id", user?.id || "").single();
 
       const { data, error } = await supabase.from("tasks").insert({

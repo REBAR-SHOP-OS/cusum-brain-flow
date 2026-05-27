@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Undo2, Trash2, Send, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 import { triggerFeedbackAnalysis } from "@/lib/triggerFeedbackAnalysis";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -205,9 +206,7 @@ export function AnnotationOverlay({ open, onClose, screenshotDataUrl, initialDes
         .getPublicUrl(path);
       const publicUrl = urlData.publicUrl;
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const userId = user?.id;
 
       // Domain restriction: only @rebar.shop users

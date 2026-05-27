@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { Mic, MicOff, Save, Trash2 } from "lucide-react";
 import { useRealtimeTranscribe } from "@/hooks/useRealtimeTranscribe";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 
 export function WatchMode() {
@@ -36,7 +37,7 @@ export function WatchMode() {
     }
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data: profile } = await (supabase as any)

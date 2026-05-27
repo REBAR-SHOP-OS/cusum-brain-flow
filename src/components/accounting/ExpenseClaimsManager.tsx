@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useExpenseClaims, useExpenseClaimItems, type ExpenseClaim } from "@/hooks/useExpenseClaims";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +38,9 @@ function ClaimEditor({ claim, onBack }: { claim: ExpenseClaim; onBack: () => voi
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        supabase.from("profiles").select("id").eq("user_id", data.user.id).single()
+    getCurrentUser().then((user) => {
+      if (user) {
+        supabase.from("profiles").select("id").eq("user_id", user.id).single()
           .then(({ data: p }) => setMyProfileId(p?.id ?? null));
       }
     });

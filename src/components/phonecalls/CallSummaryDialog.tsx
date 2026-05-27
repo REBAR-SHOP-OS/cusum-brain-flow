@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
 interface SuggestedTask {
@@ -46,7 +47,7 @@ export function CallSummaryDialog({
   const handleSaveToBrain = async () => {
     if (!summary) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle();
       const { error } = await supabase.from("knowledge").insert({
         title: `Call Summary: ${fromNumber || "Unknown"} → ${toNumber || "Unknown"}`,
@@ -99,7 +100,7 @@ export function CallSummaryDialog({
 
     setCreatingTasks((prev) => new Set(prev).add(index));
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { data: profile } = await supabase.from("profiles").select("company_id").eq("user_id", user!.id).maybeSingle();
       const { error } = await supabase.from("tasks").insert({
         title: task.title,

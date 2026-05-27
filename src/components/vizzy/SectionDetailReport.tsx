@@ -17,6 +17,7 @@ import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { formatDateInTimezone } from "@/lib/dateConfig";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import type { ActivityEvent } from "@/hooks/useUserActivityLog";
 import type { TeamMemberActivity } from "@/hooks/useTeamDailyActivity";
 
@@ -437,7 +438,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
     const reportText = buildFullReport();
     if (!reportText) return;
     const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    getCurrentUser().then((user) => {
       if (!user) return;
       supabase
         .from("vizzy_memory")
@@ -699,7 +700,7 @@ function TeamFullReport({ profiles, teamData, date, timezone }: {
   useEffect(() => {
     const saveToMemory = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) return;
         const { data: profile } = await supabase
           .from("profiles")

@@ -19,6 +19,7 @@ const VISUAL_THEMES: { id: string; label: string; icon: LucideIcon; promptTag: s
   { id: "logo", label: "Logo", icon: Stamp, promptTag: "with company branding" },
 ];
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useBrandKit } from "@/hooks/useBrandKit";
 import { useSeoSuggestions } from "@/hooks/useSeoSuggestions";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -64,7 +65,7 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
   const handleLogoUpload = async (file: File) => {
     setUploadingLogo(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       const ext = file.name.split(".").pop() || "png";
       const fileName = `${user.id}/logo-${crypto.randomUUID()}.${ext}`;

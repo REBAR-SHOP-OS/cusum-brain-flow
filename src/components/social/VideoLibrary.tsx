@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 interface SavedVideo {
   id: string;
   name: string;
@@ -72,7 +73,7 @@ export function VideoLibrary({ onSelectVideo }: VideoLibraryProps) {
 
     setUploading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const fileName = `${user.id}/${crypto.randomUUID()}.mp4`;

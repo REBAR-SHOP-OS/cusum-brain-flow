@@ -2,6 +2,7 @@ import { useState, useCallback } from "react";
 import { MentionMenu } from "@/components/chat/MentionMenu";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -86,7 +87,7 @@ export function ProjectTimeline({ projectId }: ProjectTimelineProps) {
       const { data: profile } = await supabase
         .from("profiles")
         .select("full_name")
-        .eq("user_id", (await supabase.auth.getUser()).data.user?.id ?? "")
+        .eq("user_id", (await getCurrentUser())?.id ?? "")
         .single();
       const { error } = await supabase.from("project_events").insert({
         company_id: companyId,

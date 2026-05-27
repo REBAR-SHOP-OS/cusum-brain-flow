@@ -5,6 +5,7 @@ import { FiberglassIcon, StirrupIcon, CageIcon, HookIcon, DowelIcon, WireMeshIco
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { useToast } from "@/hooks/use-toast";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
@@ -226,7 +227,7 @@ export const ChatInput = React.forwardRef<HTMLDivElement, ChatInputProps>(functi
 
     setIsUploading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         toast({ title: "Authentication required", description: "Please log in to upload files", variant: "destructive" });
         return;

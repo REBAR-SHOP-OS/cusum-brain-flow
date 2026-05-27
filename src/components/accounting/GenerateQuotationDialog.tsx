@@ -12,6 +12,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Sparkles, Loader2, Upload, X, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "@/hooks/use-toast";
@@ -282,7 +283,7 @@ export function GenerateQuotationDialog({ open, onOpenChange, leadId, leadCustom
       const targetLeadId = selectedLeadId || leadId;
       if (targetLeadId) {
         // Add activity to existing lead
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         await supabase.from("sales_lead_activities").insert({
           sales_lead_id: targetLeadId,
           company_id: companyId,

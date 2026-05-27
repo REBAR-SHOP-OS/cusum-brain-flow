@@ -19,6 +19,7 @@ import { useToast } from "@/hooks/use-toast";
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { VideoLibrary } from "./VideoLibrary";
 import { VideoInsightsPanel, type VideoAnalysisResults } from "./VideoInsightsPanel";
 import { useBrandKit } from "@/hooks/useBrandKit";
@@ -403,7 +404,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         setProgressLabel("Uploading reference image...");
         const resp = await fetch(referenceImage);
         const blob = await resp.blob();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         const fileName = `ref-images/${user?.id}/${crypto.randomUUID()}.${blob.type.includes("png") ? "png" : "jpg"}`;
         const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, blob, { contentType: blob.type, upsert: false });
         if (upErr) throw upErr;
@@ -421,7 +422,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
     if (customAudioFile && effectiveVideoProvider === "wan") {
       try {
         setProgressLabel("Uploading audio file...");
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         const ext = customAudioFile.name.split(".").pop() || "mp3";
         const fileName = `audio-sync/${user?.id}/${crypto.randomUUID()}.${ext}`;
         const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, customAudioFile, { contentType: customAudioFile.type, upsert: false });
@@ -486,7 +487,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
         setProgressLabel("Uploading first frame as reference...");
         const resp = await fetch(firstFrameImage);
         const blob = await resp.blob();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         const fileName = `ref-images/${user?.id}/${crypto.randomUUID()}.${blob.type.includes("png") ? "png" : "jpg"}`;
         const { error: upErr } = await supabase.storage.from("social-media-assets").upload(fileName, blob, { contentType: blob.type, upsert: false });
         if (upErr) throw upErr;
@@ -618,7 +619,7 @@ export function VideoStudioContent({ fullPage = false, onVideoReady }: VideoStud
   const handleSaveToLibrary = async () => {
     if (!videoUrl || savedToLibrary) return;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
       const resp = await fetch(videoUrl);
       const blob = await resp.blob();

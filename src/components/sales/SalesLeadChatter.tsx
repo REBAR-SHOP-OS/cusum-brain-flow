@@ -13,6 +13,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSalesLeadActivities, type SalesLeadActivity } from "@/hooks/useSalesLeadActivities";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { MentionMenu } from "@/components/chat/MentionMenu";
@@ -90,12 +91,11 @@ export function SalesLeadChatter({ salesLeadId, companyId, isExternalEstimator, 
   const [resolvedUser, setResolvedUser] = useState<{ id: string; name: string } | null>(null);
   useEffect(() => {
     if (propUserId && propUserName) return;
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        const email = data.user.email || "";
-        // Find matching assignee or profile name
-        const match = assignees.find((a) => a.profile_id === data.user!.id);
-        setResolvedUser({ id: data.user.id, name: match?.full_name || email.split("@")[0] });
+    getCurrentUser().then((user) => {
+      if (user) {
+        const email = user.email || "";
+        const match = assignees.find((a) => a.profile_id === user.id);
+        setResolvedUser({ id: user.id, name: match?.full_name || email.split("@")[0] });
       }
     });
   }, [propUserId, propUserName, assignees]);
