@@ -313,13 +313,17 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
   }
 
   if (assigned === 0) {
-    return {
-      ok: false,
-      assigned: 0,
-      total: taskRows.length,
-      reason: "No idle machines available",
-    };
+    const wantedTypes = new Set(
+      taskRows.map((t) => machineTypeForTask(t.task_type)).filter((x): x is string => !!x),
+    );
+    const reason =
+      wantedTypes.size === 1
+        ? `No idle ${[...wantedTypes][0]} machines available`
+        : "No idle machines available";
+    console.debug("[startWorkOrder]", { workOrderId, blockedReason: reason });
+    return { ok: false, assigned: 0, total: taskRows.length, reason };
   }
+
 
   return { ok: true, assigned, total: taskRows.length };
 }
