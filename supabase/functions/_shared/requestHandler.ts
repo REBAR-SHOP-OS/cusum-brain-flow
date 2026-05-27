@@ -266,3 +266,41 @@ export async function handleRequest(
     );
   }
 }
+
+/**
+ * Detect a Postgres / RPC workflow-gate error raised by trigger functions
+ * (`validate_*_transition`) or the `workflow_override_transition` RPC.
+ *
+ * The DB layer raises errors whose message begins with `WORKFLOW_GATE_…` or
+ * `WORKFLOW_OVERRIDE_…` and uses Postgres SQLSTATE codes P0001 / 42501 /
+ * 22023 / 28000 / 02000. We accept either signal so callers don't need to
+ * know which one Supabase surfaced.
+ *
+ * Returns `{ code, error }` when matched, `null` otherwise. Exported for
+ * unit testing and for direct use by handlers that swallow errors locally.
+ */
+export function mapWorkflowGateError(
+  err: unknown,
+): { code: string; error: string } | null {
+  if (!err) return null;
+  const e = err as { message?: unknown; code?: unknown };
+  const message = typeof e.message === "string" ? e.message : String(err ?? "");
+  const sqlState = typeof e.code === "string" ? e.code : "";
+
+  const match = message.match(/(WORKFLOW_(?:GATE|OVERRIDE)_[A-Z0-9_]+)/);
+  if (match) {
+    return { code: match[1], error: message };
+  }
+
+  // Sometimes Supabase nests the trigger message inside a generic "database
+  // error" wrapper. Fall back to SQLSTATE matching only when the message also
+  // mentions "workflow" to avoid false positives on unrelated P0001 raises.
+  if (
+    ["P0001", "42501", "22023", "28000", "02000"].includes(sqlState) &&
+    /workflow/i.test(message)
+  ) {
+    return { code: `WORKFLOW_GATE_${sqlState}`, error: message };
+  }
+
+  return null;
+}
