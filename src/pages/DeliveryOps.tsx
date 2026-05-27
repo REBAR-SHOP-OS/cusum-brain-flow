@@ -209,16 +209,27 @@ export default function DeliveryOps() {
     setSaving(false);
   };
 
+  const cascadeDeleteDelivery = async (id: string): Promise<string | null> => {
+    // .select('id') makes RLS-blocked deletes detectable instead of silent no-ops.
+    await supabase.from("packing_slips").delete().eq("delivery_id", id).select("id");
+    await supabase.from("delivery_stops").delete().eq("delivery_id", id).select("id");
+    await supabase.from("deliveries").update({ status: "pending" }).eq("id", id);
+    const { data, error } = await supabase
+      .from("deliveries")
+      .delete()
+      .eq("id", id)
+      .select("id");
+    if (error) return error.message;
+    if (!data || data.length === 0) return "Delete blocked by access policy";
+    return null;
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
-    const id = deleteTarget.id;
-    await supabase.from("packing_slips").delete().eq("delivery_id", id);
-    await supabase.from("delivery_stops").delete().eq("delivery_id", id);
-    await supabase.from("deliveries").update({ status: "pending" }).eq("id", id);
-    const { error } = await supabase.from("deliveries").delete().eq("id", id);
-    if (error) {
-      toast.error(error.message);
+    const err = await cascadeDeleteDelivery(deleteTarget.id);
+    if (err) {
+      toast.error(err);
     } else {
       toast.success("Delivery deleted");
       fetchData();
@@ -232,11 +243,8 @@ export default function DeliveryOps() {
     const ids = Array.from(selectedIds);
     let failed = 0;
     for (const id of ids) {
-      await supabase.from("packing_slips").delete().eq("delivery_id", id);
-      await supabase.from("delivery_stops").delete().eq("delivery_id", id);
-      await supabase.from("deliveries").update({ status: "pending" }).eq("id", id);
-      const { error } = await supabase.from("deliveries").delete().eq("id", id);
-      if (error) failed++;
+      const err = await cascadeDeleteDelivery(id);
+      if (err) failed++;
     }
     if (failed > 0) {
       toast.error(`Failed to delete ${failed} delivery(ies)`);
