@@ -145,6 +145,7 @@ export function AutoClearanceMode({
       {/* CAMERA */}
       <div className="absolute inset-0">
         <AutoCameraStream
+          mode={stage}
           onCapture={onCapture}
           ringColor={ringColor as any}
           overlayLabel={overlayLabel}
