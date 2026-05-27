@@ -458,7 +458,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           onOpenChange={setOverrideOpen}
           entityType="cut_plan_item"
           entityId={item.id}
-          fromState={item.phase ?? null}
+          fromState="clearance"
           toState="cleared"
           onSuccess={() => {
             setGateError(null);
