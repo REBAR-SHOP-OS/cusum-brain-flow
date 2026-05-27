@@ -5,6 +5,14 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: supabase, userId } = ctx;
 
+    // Master alert kill-switch (admin UI toggle).
+    const { isAlertSendingDisabled } = await import("../_shared/alertKillSwitch.ts");
+    const ks = await isAlertSendingDisabled(supabase);
+    if (ks.disabled) {
+      console.log(`[check-sla-breaches] skipped: ${ks.reason}`);
+      return { success: true, skipped: true, reason: ks.reason };
+    }
+
     // If authenticated but not admin, reject
     if (userId) {
       const { data: isAdmin } = await supabase.rpc("has_role", {
