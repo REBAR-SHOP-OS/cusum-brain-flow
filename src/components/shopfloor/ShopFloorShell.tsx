@@ -1,9 +1,7 @@
 import { ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  IndustrialFrame,
-  IndustrialTabs,
-} from "@/components/industrial/IndustrialShell";
+import { IndustrialTabs } from "@/components/industrial/IndustrialShell";
+
 
 type RouteItem = { id: string; label: string; path: string };
 
