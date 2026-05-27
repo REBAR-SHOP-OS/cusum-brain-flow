@@ -28,7 +28,7 @@ import { useReadyToShip } from "@/hooks/useReadyToShip";
 export default function StationDashboard() {
   const { timezone } = useWorkspaceSettings();
   const { machines, isLoading, error, isSeededMachines } = useLiveMonitorData();
-  const { data: workOrders, loading: woLoading, updateStatus } = useSupabaseWorkOrders();
+  const { data: workOrders, loading: woLoading, updateStatus, startWorkOrder, pauseWorkOrder } = useSupabaseWorkOrders();
   const { projectLanes } = useProductionQueues();
   const { plans: cutPlans, loading: plansLoading } = useCutPlans();
   const activePlans = useMemo(() => cutPlans.filter(p => ["running", "queued"].includes(p.status)), [cutPlans]);
