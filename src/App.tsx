@@ -24,6 +24,8 @@ import Prospecting from "./pages/Prospecting";
 import LeadScoring from "./pages/LeadScoring";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
+import { ShopFloorShell } from "./components/shopfloor/ShopFloorShell";
+
 import LoadingStation from "./pages/LoadingStation";
 import DeliveryOps from "./pages/DeliveryOps";
 import DeliveryTerminal from "./pages/DeliveryTerminal";
@@ -209,18 +211,19 @@ const App = () => (
 
                     {/* Operations */}
                     <Route path="/shop-floor" element={<P><ShopFloor /></P>} />
-                    <Route path="/shopfloor/cutter" element={<P><CutterPlanning /></P>} />
-                    <Route path="/shopfloor/station" element={<P><StationDashboard /></P>} />
+                    <Route path="/shopfloor/cutter" element={<P><ShopFloorShell><CutterPlanning /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/station" element={<P><ShopFloorShell><StationDashboard /></ShopFloorShell></P>} />
                     <Route path="/shopfloor/station/:machineId" element={<P><StationView /></P>} />
-                    <Route path="/shopfloor/pool" element={<P><PoolView /></P>} />
-                    <Route path="/shopfloor/loading" element={<P><LoadingStation /></P>} />
-                    <Route path="/shopfloor/pickup" element={<P><PickupStation /></P>} />
-                    <Route path="/shopfloor/clearance" element={<P><ClearanceStation /></P>} />
-                    <Route path="/shopfloor/inventory" element={<P><InventoryCountPage /></P>} />
-                    <Route path="/shopfloor/delivery-ops" element={<P><DeliveryOps /></P>} />
-                    <Route path="/shopfloor/camera-intelligence" element={<P><CameraIntelligence /></P>} />
+                    <Route path="/shopfloor/pool" element={<P><ShopFloorShell><PoolView /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/loading" element={<P><ShopFloorShell><LoadingStation /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/pickup" element={<P><ShopFloorShell><PickupStation /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/clearance" element={<P><ShopFloorShell><ClearanceStation /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/inventory" element={<P><ShopFloorShell><InventoryCountPage /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/delivery-ops" element={<P><ShopFloorShell><DeliveryOps /></ShopFloorShell></P>} />
+                    <Route path="/shopfloor/camera-intelligence" element={<P><ShopFloorShell><CameraIntelligence /></ShopFloorShell></P>} />
                     <Route path="/shopfloor/delivery/:stopId" element={<P><DeliveryTerminal /></P>} />
                     <Route path="/shopfloor/delivery-pipeline" element={<P><DeliveryPipeline /></P>} />
+
                     
                     <Route path="/timeclock" element={<P><TimeClock /></P>} />
                     <Route path="/glasses" element={<P><GlassesCapture /></P>} />
