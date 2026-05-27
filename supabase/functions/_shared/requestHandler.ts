@@ -219,6 +219,19 @@ export async function handleRequest(
       return err;
     }
 
+    // Workflow-gate / override pass-through: when a DB trigger or the
+    // workflow_override_transition RPC raises a WORKFLOW_GATE_* / WORKFLOW_OVERRIDE_*
+    // error, preserve the code and surface as HTTP 409 so the client can react.
+    const gate = mapWorkflowGateError(err);
+    if (gate) {
+      log.warn("Workflow gate rejected", { code: gate.code });
+      return new Response(
+        JSON.stringify({ ok: false, gate: true, code: gate.code, error: gate.error }),
+        { status: 409, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
+
+
     const message = err instanceof Error ? err.message : String(err);
     const explicitStatus = typeof (err as { status?: unknown })?.status === "number"
       ? Number((err as { status?: unknown }).status)
