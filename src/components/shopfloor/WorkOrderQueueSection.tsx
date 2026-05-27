@@ -95,6 +95,8 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStart, onP
             open={!!expanded[station]}
             onOpenChange={(o) => setOpenFor(station, o)}
             onUpdateStatus={onUpdateStatus}
+            onStart={onStart}
+            onPause={onPause}
             onStatusChanged={onStatusChanged}
           />
         ))
