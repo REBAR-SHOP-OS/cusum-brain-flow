@@ -158,8 +158,69 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const activeGrouped = useMemo(() => groupByCustomer(activePlans), [activePlans]);
   const completedGrouped = useMemo(() => groupByCustomer(completedPlans), [completedPlans]);
 
-  // Dimension columns
-  const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"];
+  // Per-plan phase aggregates → so each row can show "where the job currently is"
+  const allPlanIds = useMemo(
+    () => [...activePlans, ...completedPlans].map(p => p.id),
+    [activePlans, completedPlans]
+  );
+  const { data: phaseRows } = useQuery({
+    queryKey: ["plan-phase-locations", allPlanIds],
+    enabled: allPlanIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cut_plan_items")
+        .select("cut_plan_id, phase, total_pieces, completed_pieces")
+        .in("cut_plan_id", allPlanIds);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+  const planLocations = useMemo(() => {
+    const map = new Map<string, { label: string; tone: string }>();
+    if (!phaseRows) return map;
+    // phases in production order
+    const order = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
+    const labels: Record<string, string> = {
+      queued: "QUEUED",
+      cutting: "CUTTING",
+      cut_done: "READY TO BEND",
+      bending: "BENDING",
+      clearance: "CLEARANCE",
+      complete: "COMPLETE",
+    };
+    const tones: Record<string, string> = {
+      queued: "text-muted-foreground",
+      cutting: "text-amber-400",
+      cut_done: "text-blue-400",
+      bending: "text-orange-400",
+      clearance: "text-purple-400",
+      complete: "text-green-500",
+    };
+    const buckets = new Map<string, Record<string, number>>();
+    for (const r of phaseRows as any[]) {
+      const id = r.cut_plan_id as string;
+      if (!buckets.has(id)) buckets.set(id, {});
+      const b = buckets.get(id)!;
+      const ph = (r.phase as string) || "queued";
+      b[ph] = (b[ph] || 0) + (r.total_pieces || 0);
+    }
+    for (const [id, b] of buckets) {
+      // Furthest non-complete phase that has any items; fallback to highest with items
+      let chosen = "queued";
+      for (const ph of order) {
+        if ((b[ph] || 0) > 0) chosen = ph;
+        if (ph !== "complete" && (b[ph] || 0) > 0) chosen = ph;
+      }
+      // Prefer the deepest active (non-complete) phase if present
+      const active = order.filter(p => p !== "complete" && (b[p] || 0) > 0);
+      if (active.length > 0) chosen = active[active.length - 1];
+      else if ((b["complete"] || 0) > 0) chosen = "complete";
+      map.set(id, { label: labels[chosen], tone: tones[chosen] });
+    }
+    return map;
+  }, [phaseRows]);
+
+
 
   if (!selectedPlanId) {
     return (
