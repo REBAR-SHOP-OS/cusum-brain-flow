@@ -438,7 +438,7 @@ function OverviewReport({ profileId, userId, date, timezone, userName }: { profi
     const reportText = buildFullReport();
     if (!reportText) return;
     const dateStr = formatDateInTimezone(date, timezone, { year: "numeric", month: "2-digit", day: "2-digit" });
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    getCurrentUser().then((user) => {
       if (!user) return;
       supabase
         .from("vizzy_memory")
