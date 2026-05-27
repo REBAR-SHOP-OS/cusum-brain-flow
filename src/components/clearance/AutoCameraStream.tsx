@@ -1,27 +1,44 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera as CameraIcon, Zap, ZapOff } from "lucide-react";
 
+export type CoachHint =
+  | "scanning"
+  | "move_to_tag"
+  | "hold_steady"
+  | "too_dark"
+  | "turn_on_flashlight"
+  | "align_in_frame"
+  | "ready";
+
 interface AutoCameraStreamProps {
+  /** "tag" = guided ROI capture with auto-trigger; "product" = full-frame manual shutter */
+  mode: "tag" | "product";
+  /** Receives the FINAL image to send to OCR/validation.
+   *  In tag mode this is the cropped ROI; in product mode this is the full frame. */
   onCapture: (blob: Blob) => void;
   ringColor: "blue" | "amber" | "green" | "red" | "none";
   overlayLabel: string;
   disabled?: boolean;
-  flashSupported?: (supported: boolean) => void;
-}
-
-export interface AutoCameraHandle {
-  toggleTorch: () => Promise<void>;
+  /** Live coaching hint for the tag-detection loop */
+  onCoach?: (hint: CoachHint) => void;
 }
 
 /**
  * Persistent <video> stream using getUserMedia. Lives across the whole
  * Auto Clearance session — never reopens between captures.
+ *
+ * In "tag" mode it renders a scan frame and runs a per-frame quality loop
+ * (brightness / blur proxy / edge-density). When the ROI is stable & readable
+ * for ≥500ms it auto-captures the CROPPED ROI and hands it to onCapture.
+ * The full-frame OCR path is intentionally avoided.
  */
 export function AutoCameraStream({
+  mode,
   onCapture,
   ringColor,
   overlayLabel,
   disabled,
+  onCoach,
 }: AutoCameraStreamProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -29,6 +46,11 @@ export function AutoCameraStream({
   const [torchOn, setTorchOn] = useState(false);
   const [torchSupported, setTorchSupported] = useState(false);
   const [capturing, setCapturing] = useState(false);
+  const [hint, setHint] = useState<CoachHint>("scanning");
+
+  // ROI box (relative to displayed video container), tag = portrait-ish band
+  // Tag boxes are typically tall narrow rectangles; centered, 70% w, 55% h.
+  const ROI = { x: 0.15, y: 0.22, w: 0.70, h: 0.56 };
 
   useEffect(() => {
     let cancelled = false;
@@ -82,6 +104,157 @@ export function AutoCameraStream({
     }
   };
 
+  // ============== Frame-quality loop (TAG MODE ONLY) ==============
+  //
+  // Pulls ~6fps low-res samples of the ROI, computes:
+  //   brightness  — mean luma
+  //   sharpness   — variance of Sobel-edge magnitudes (blur proxy)
+  //   edgeDensity — % of strong-edge pixels (text-density proxy)
+  // Auto-captures the cropped ROI once all three pass for 500ms.
+  useEffect(() => {
+    if (mode !== "tag") return;
+    if (error) return;
+
+    const video = videoRef.current;
+    if (!video) return;
+
+    let raf = 0;
+    let stableSince = 0;
+    let lastSample = 0;
+    let cancelled = false;
+    const sample = document.createElement("canvas");
+    sample.width = 160;
+    sample.height = 120;
+    const sctx = sample.getContext("2d", { willReadFrequently: true });
+
+    const setHintBoth = (h: CoachHint) => {
+      setHint((cur) => (cur === h ? cur : h));
+      onCoach?.(h);
+    };
+
+    const loop = (ts: number) => {
+      if (cancelled) return;
+      raf = requestAnimationFrame(loop);
+      if (disabled || capturing) return;
+      if (!video.videoWidth || !sctx) return;
+      if (ts - lastSample < 160) return; // ~6fps
+      lastSample = ts;
+
+      // Crop ROI from video into sample canvas
+      const sx = video.videoWidth * ROI.x;
+      const sy = video.videoHeight * ROI.y;
+      const sw = video.videoWidth * ROI.w;
+      const sh = video.videoHeight * ROI.h;
+      try {
+        sctx.drawImage(video, sx, sy, sw, sh, 0, 0, sample.width, sample.height);
+      } catch {
+        return;
+      }
+      const img = sctx.getImageData(0, 0, sample.width, sample.height);
+      const d = img.data;
+      const W = sample.width;
+      const H = sample.height;
+
+      // Pass 1: luma + grayscale buffer
+      const gray = new Uint8ClampedArray(W * H);
+      let sumLuma = 0;
+      for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+        const y = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+        gray[p] = y;
+        sumLuma += y;
+      }
+      const meanLuma = sumLuma / (W * H);
+
+      // Pass 2: Sobel magnitude across interior pixels
+      let edgeSum = 0;
+      let edgeSqSum = 0;
+      let strongEdges = 0;
+      let n = 0;
+      for (let y = 1; y < H - 1; y++) {
+        for (let x = 1; x < W - 1; x++) {
+          const i = y * W + x;
+          const gx =
+            -gray[i - W - 1] - 2 * gray[i - 1] - gray[i + W - 1] +
+             gray[i - W + 1] + 2 * gray[i + 1] + gray[i + W + 1];
+          const gy =
+            -gray[i - W - 1] - 2 * gray[i - W] - gray[i - W + 1] +
+             gray[i + W - 1] + 2 * gray[i + W] + gray[i + W + 1];
+          const m = Math.abs(gx) + Math.abs(gy);
+          edgeSum += m;
+          edgeSqSum += m * m;
+          if (m > 90) strongEdges++;
+          n++;
+        }
+      }
+      const meanEdge = edgeSum / n;
+      const sharpness = edgeSqSum / n - meanEdge * meanEdge; // edge-magnitude variance
+      const edgeDensity = strongEdges / n;
+
+      // Decision thresholds (empirical for printed rebar tags on phone cams)
+      const tooDark = meanLuma < 55;
+      const tooBlurry = sharpness < 600;
+      const lowText = edgeDensity < 0.04; // <4% strong edges → likely no tag in frame
+
+      if (tooDark) {
+        setHintBoth(torchSupported && !torchOn ? "turn_on_flashlight" : "too_dark");
+        stableSince = 0;
+        return;
+      }
+      if (lowText) {
+        setHintBoth("move_to_tag");
+        stableSince = 0;
+        return;
+      }
+      if (tooBlurry) {
+        setHintBoth("hold_steady");
+        stableSince = 0;
+        return;
+      }
+
+      // All checks pass — start / continue stability window
+      setHintBoth("ready");
+      if (!stableSince) stableSince = ts;
+      if (ts - stableSince >= 500) {
+        stableSince = 0;
+        autoCaptureRoi();
+      }
+    };
+
+    const autoCaptureRoi = async () => {
+      if (capturing || disabled) return;
+      const v = videoRef.current;
+      if (!v || !v.videoWidth) return;
+      setCapturing(true);
+      try {
+        const sx = v.videoWidth * ROI.x;
+        const sy = v.videoHeight * ROI.y;
+        const sw = v.videoWidth * ROI.w;
+        const sh = v.videoHeight * ROI.h;
+        const c = document.createElement("canvas");
+        c.width = Math.round(sw);
+        c.height = Math.round(sh);
+        const cctx = c.getContext("2d");
+        if (!cctx) throw new Error("ctx");
+        cctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+        const blob = await new Promise<Blob | null>((res) =>
+          c.toBlob((b) => res(b), "image/jpeg", 0.9)
+        );
+        if (blob) onCapture(blob);
+      } catch (e) {
+        console.error("ROI capture failed", e);
+      } finally {
+        setTimeout(() => setCapturing(false), 250);
+      }
+    };
+
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [mode, disabled, capturing, error, torchOn, torchSupported, onCapture, onCoach]);
+
+  // Manual shutter — used by PRODUCT mode (full frame).
   const handleShutter = async () => {
     if (disabled || capturing) return;
     const video = videoRef.current;
@@ -113,6 +286,22 @@ export function AutoCameraStream({
     none: "",
   }[ringColor];
 
+  const hintText: Record<CoachHint, string> = {
+    scanning: "Point the tag inside the frame",
+    move_to_tag: "Move camera to the tag",
+    hold_steady: "Hold steady…",
+    too_dark: "Too dark — add light",
+    turn_on_flashlight: "Turn on flashlight",
+    align_in_frame: "Align tag inside the frame",
+    ready: "Reading…",
+  };
+
+  const frameColor =
+    hint === "ready" ? "border-emerald-400"
+    : hint === "hold_steady" ? "border-amber-300"
+    : hint === "too_dark" || hint === "turn_on_flashlight" ? "border-amber-400"
+    : "border-white/80";
+
   return (
     <div className="relative w-full h-full bg-black overflow-hidden">
       {error ? (
@@ -132,12 +321,57 @@ export function AutoCameraStream({
             autoPlay
             className={`w-full h-full object-cover transition-shadow duration-200 ${ringClass}`}
           />
+
           {/* Status pill */}
           <div className="absolute top-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/70 backdrop-blur text-white text-xs font-bold tracking-[0.18em] uppercase">
             {overlayLabel}
           </div>
 
-          {/* Shutter + torch */}
+          {/* TAG SCAN FRAME (tag mode only) */}
+          {mode === "tag" && (
+            <>
+              {/* Dim outside ROI via four black overlays */}
+              <div className="absolute inset-x-0 top-0 bg-black/55 pointer-events-none"
+                style={{ height: `${ROI.y * 100}%` }} />
+              <div className="absolute inset-x-0 bottom-0 bg-black/55 pointer-events-none"
+                style={{ height: `${(1 - ROI.y - ROI.h) * 100}%` }} />
+              <div className="absolute left-0 bg-black/55 pointer-events-none"
+                style={{ top: `${ROI.y * 100}%`, height: `${ROI.h * 100}%`, width: `${ROI.x * 100}%` }} />
+              <div className="absolute right-0 bg-black/55 pointer-events-none"
+                style={{ top: `${ROI.y * 100}%`, height: `${ROI.h * 100}%`, width: `${(1 - ROI.x - ROI.w) * 100}%` }} />
+
+              {/* Frame */}
+              <div
+                className={`absolute border-2 rounded-2xl pointer-events-none transition-colors duration-150 ${frameColor}`}
+                style={{
+                  left: `${ROI.x * 100}%`,
+                  top: `${ROI.y * 100}%`,
+                  width: `${ROI.w * 100}%`,
+                  height: `${ROI.h * 100}%`,
+                  boxShadow: hint === "ready" ? "0 0 32px rgba(52,211,153,0.55) inset" : undefined,
+                }}
+              >
+                {/* corner brackets */}
+                {["top-0 left-0 border-t-4 border-l-4 rounded-tl-2xl",
+                  "top-0 right-0 border-t-4 border-r-4 rounded-tr-2xl",
+                  "bottom-0 left-0 border-b-4 border-l-4 rounded-bl-2xl",
+                  "bottom-0 right-0 border-b-4 border-r-4 rounded-br-2xl"]
+                  .map((c, i) => (
+                    <span key={i} className={`absolute w-8 h-8 ${c} ${frameColor}`} />
+                  ))}
+              </div>
+
+              {/* Coach hint */}
+              <div
+                className="absolute left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/80 text-white text-xs font-bold tracking-wider uppercase whitespace-nowrap pointer-events-none"
+                style={{ top: `calc(${(ROI.y + ROI.h) * 100}% + 12px)` }}
+              >
+                {hintText[hint]}
+              </div>
+            </>
+          )}
+
+          {/* Bottom controls */}
           <div className="absolute bottom-6 left-0 right-0 flex items-center justify-center gap-8 px-6">
             {torchSupported && (
               <button
@@ -149,15 +383,28 @@ export function AutoCameraStream({
                 {torchOn ? <Zap className="w-6 h-6" /> : <ZapOff className="w-6 h-6" />}
               </button>
             )}
-            <button
-              type="button"
-              onClick={handleShutter}
-              disabled={disabled || capturing}
-              className="w-24 h-24 rounded-full bg-white/95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
-              aria-label="Capture photo"
-            >
-              <div className="w-20 h-20 rounded-full border-4 border-black/80" />
-            </button>
+
+            {mode === "product" ? (
+              <button
+                type="button"
+                onClick={handleShutter}
+                disabled={disabled || capturing}
+                className="w-24 h-24 rounded-full bg-white/95 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center shadow-2xl active:scale-95 transition-transform"
+                aria-label="Capture product photo"
+              >
+                <div className="w-20 h-20 rounded-full border-4 border-black/80" />
+              </button>
+            ) : (
+              // Tag mode: auto-capture only. Show passive indicator.
+              <div
+                className={`w-24 h-24 rounded-full flex items-center justify-center border-4 ${
+                  hint === "ready" ? "border-emerald-400 bg-emerald-400/20" : "border-white/40 bg-black/40"
+                }`}
+                aria-hidden
+              >
+                <div className={`w-3 h-3 rounded-full ${hint === "ready" ? "bg-emerald-400 animate-pulse" : "bg-white/60"}`} />
+              </div>
+            )}
             <div className="w-14 h-14" />
           </div>
         </>
