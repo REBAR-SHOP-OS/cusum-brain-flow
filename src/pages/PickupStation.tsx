@@ -309,6 +309,13 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   };
 
   if (selectedBundle) {
+    const total = selectedBundle.items.length;
+    const loadedCount = selectedBundle.items.filter((i) => checklistMap.get(i.id)?.loaded).length;
+    const missingCount = total - loadedCount;
+    const exceptionCount = selectedBundle.items.filter(
+      (i) => (checklistMap.get(i.id) as any)?.exception,
+    ).length;
+    const manifestStatus = (selectedBundle as any).status || "ready";
     const allChecked = checkedItems.size === selectedBundle.items.length;
     return (
       <div className="flex flex-col h-full">
@@ -324,37 +331,60 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
             {allChecked ? "Deselect All" : "Select All"}
           </Button>
         </header>
-        <div className="flex-1 overflow-auto p-4 sm:p-6">
-          <div className="grid gap-3">
-            {selectedBundle.items.map((item) => {
-              const photoUrl = photoUrls.get(item.id);
-              return (
-                <Card key={item.id} className={`cursor-pointer transition-all ${checkedItems.has(item.id) ? "border-primary/50 bg-primary/5" : ""}`} onClick={() => toggleItem(item.id)}>
-                  <CardContent className="p-3 flex items-center gap-3">
-                    <Checkbox
-                      checked={checkedItems.has(item.id)}
-                      onCheckedChange={() => toggleItem(item.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="shrink-0"
-                    />
-                    {photoUrl ? (
-                      <img src={photoUrl} alt="Loading evidence" className="w-10 h-10 rounded object-cover shrink-0 border border-border" />
-                    ) : (
-                      <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0">
-                        <Package className="w-5 h-5 text-muted-foreground" />
-                      </div>
-                    )}
-                    <div className="flex-1 min-w-0">
-                      <span className="text-sm font-medium">{item.mark_number || "No mark"}</span>
-                      <p className="text-xs text-muted-foreground">{item.cut_length_mm}mm • {item.total_pieces} pcs</p>
-                    </div>
-                    <Badge variant="outline">{item.bar_code}</Badge>
-                  </CardContent>
-                </Card>
-              );
-            })}
+        <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-3">
+          {/* Manifest summary */}
+          <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+            <div className="flex items-center gap-3">
+              <Badge className={statusColors[manifestStatus] || statusColors.ready}>
+                {String(manifestStatus).toUpperCase()}
+              </Badge>
+              <span className="text-sm text-foreground tabular-nums">
+                {loadedCount} loaded · {missingCount} missing · {exceptionCount} exceptions
+              </span>
+            </div>
           </div>
+
+          <Collapsible defaultOpen={false}>
+            <CollapsibleTrigger asChild>
+              <Button variant="outline" size="sm" className="w-full justify-between">
+                <span>Details ({total} items)</span>
+                <span className="text-xs text-muted-foreground">tap to expand</span>
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3">
+              <div className="grid gap-3">
+                {selectedBundle.items.map((item) => {
+                  const photoUrl = photoUrls.get(item.id);
+                  return (
+                    <Card key={item.id} className={`cursor-pointer transition-all ${checkedItems.has(item.id) ? "border-primary/50 bg-primary/5" : ""}`} onClick={() => toggleItem(item.id)}>
+                      <CardContent className="p-3 flex items-center gap-3">
+                        <Checkbox
+                          checked={checkedItems.has(item.id)}
+                          onCheckedChange={() => toggleItem(item.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="shrink-0"
+                        />
+                        {photoUrl ? (
+                          <img src={photoUrl} alt="Loading evidence" className="w-10 h-10 rounded object-cover shrink-0 border border-border" />
+                        ) : (
+                          <div className="w-10 h-10 rounded bg-muted flex items-center justify-center shrink-0">
+                            <Package className="w-5 h-5 text-muted-foreground" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <span className="text-sm font-medium">{item.mark_number || "No mark"}</span>
+                          <p className="text-xs text-muted-foreground">{item.cut_length_mm}mm • {item.total_pieces} pcs</p>
+                        </div>
+                        <Badge variant="outline">{item.bar_code}</Badge>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
+
         {/* Sticky footer */}
         <div className="border-t border-border px-4 sm:px-6 py-3 flex items-center justify-between bg-background">
           <span className="text-sm text-muted-foreground">
