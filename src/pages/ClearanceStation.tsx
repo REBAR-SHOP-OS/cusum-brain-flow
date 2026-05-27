@@ -15,7 +15,8 @@ import {
 } from "lucide-react";
 import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
-import { Zap, Hand } from "lucide-react";
+import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
+import { Zap, Hand, Archive as ArchiveIcon, ListChecks } from "lucide-react";
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
@@ -29,6 +30,7 @@ export default function ClearanceStation() {
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
   const [autoMode, setAutoMode] = useState(false);
+  const [listTab, setListTab] = useState<"manifests" | "archive">("manifests");
 
   // Resolve key → label/items from the live hook.
   const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
@@ -168,6 +170,24 @@ export default function ClearanceStation() {
           </div>
         ) : !selectedProjectKey ? (
           <div className="p-4 space-y-3">
+            <div className="inline-flex rounded-lg border border-border overflow-hidden mb-1">
+              <button
+                onClick={() => setListTab("manifests")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase ${listTab === "manifests" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+              >
+                <ListChecks className="w-3.5 h-3.5" /> Manifests
+              </button>
+              <button
+                onClick={() => setListTab("archive")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border ${listTab === "archive" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+              >
+                <ArchiveIcon className="w-3.5 h-3.5" /> Archive
+              </button>
+            </div>
+            {listTab === "archive" ? (
+              <ClearanceArchive />
+            ) : (
+              <>
             <p className="text-sm text-muted-foreground mb-2">
               Select a customer to view its clearance manifests.
             </p>
@@ -269,6 +289,8 @@ export default function ClearanceStation() {
                 </div>
               );
             })}
+              </>
+            )}
           </div>
         ) : (
           <div className="p-4 space-y-4">
