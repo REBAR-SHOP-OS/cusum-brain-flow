@@ -268,7 +268,8 @@ export function useAutoClearance({
       setLastConfidence(best.score);
       const evId = await ensureEvidenceRow(matchedItem.id);
       const path = await uploadToStorage(matchedItem.id, "tag", blob);
-      await supabase
+      console.log("[auto-clearance] tag uploaded", { itemId: matchedItem.id, evId, path });
+      const { error: tagUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           tag_scan_url: path,
@@ -278,6 +279,9 @@ export function useAutoClearance({
           ocr_metadata: { ocr, ranked, decision },
         })
         .eq("id", evId);
+      if (tagUpErr) throw tagUpErr;
+      setActiveEvidenceId(evId);
+      console.log("[auto-clearance] tag evidence row updated", { evId });
       setState("tag_matched");
       speak("Tag matched");
       vibrate(60);
