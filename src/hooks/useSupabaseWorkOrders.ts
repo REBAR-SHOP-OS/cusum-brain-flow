@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback } from "react";
+import { startWorkOrder as dispatchStart, pauseWorkOrder as dispatchPause } from "@/lib/workOrderDispatch";
 
 export interface SupabaseWorkOrder {
   id: string;
