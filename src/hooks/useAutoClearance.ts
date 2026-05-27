@@ -306,7 +306,7 @@ export function useAutoClearance({
     // attached to this item by capturing PRODUCT photo next. Pre-create row.
     try {
       const evId = await ensureEvidenceRow(candidateId);
-      await supabase
+      const { error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           verification_state: "tag_scanned",
@@ -315,6 +315,8 @@ export function useAutoClearance({
           ocr_metadata: { ocr: lastOcr, picked: candidateId },
         })
         .eq("id", evId);
+      if (pickUpErr) throw pickUpErr;
+      setActiveEvidenceId(evId);
     } catch (e) {
       console.error("confirmPick row create failed", e);
     }
