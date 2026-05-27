@@ -36,8 +36,26 @@ export interface DispatchResult {
 }
 
 export async function startWorkOrder(workOrderId: string): Promise<DispatchResult> {
+  // 0) Load WO context (needed for status check + hydration fallback)
+  const { data: wo, error: woErr } = await supabase
+    .from("work_orders")
+    .select("id, status, barlist_id, project_id, order_id")
+    .eq("id", workOrderId)
+    .maybeSingle();
+  if (woErr) {
+    console.error("[startWorkOrder] load WO failed:", woErr.message);
+    return { ok: false, assigned: 0, total: 0, reason: woErr.message };
+  }
+  if (!wo) {
+    return { ok: false, assigned: 0, total: 0, reason: "Work order not found" };
+  }
+  if (wo.status === "in_progress") {
+    console.debug("[startWorkOrder]", { workOrderId, blockedReason: "already_running" });
+    return { ok: false, assigned: 0, total: 0, reason: "Work order is already running" };
+  }
+
   // 1) Load tasks for this WO that are dispatchable
-  const { data: tasks, error: tErr } = await supabase
+  let { data: tasks, error: tErr } = await supabase
     .from("production_tasks")
     .select("id, task_type, status, company_id")
     .eq("work_order_id", workOrderId)
@@ -47,9 +65,36 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
     console.error("[startWorkOrder] load tasks failed:", tErr.message);
     return { ok: false, assigned: 0, total: 0, reason: tErr.message };
   }
-  const taskRows = (tasks || []) as TaskRow[];
+  let taskRows = (tasks || []) as TaskRow[];
+
+  // 1b) Hydration fallback — if no production_tasks exist for this WO,
+  // create them from cut_plan_items still in queued/cutting phase.
   if (taskRows.length === 0) {
-    return { ok: false, assigned: 0, total: 0, reason: "No tasks to dispatch" };
+    const hydrated = await hydrateTasksFromCutPlanItems(wo as WorkOrderRow);
+    console.debug("[startWorkOrder]", {
+      workOrderId,
+      barlistId: wo.barlist_id,
+      productionTasks: 0,
+      eligibleCutItems: hydrated.eligible,
+      hydratedInserted: hydrated.inserted,
+      blockedReason: hydrated.ok ? null : hydrated.reason,
+    });
+    if (!hydrated.ok) {
+      return { ok: false, assigned: 0, total: 0, reason: hydrated.reason };
+    }
+    const reloaded = await supabase
+      .from("production_tasks")
+      .select("id, task_type, status, company_id")
+      .eq("work_order_id", workOrderId)
+      .in("status", ["pending", "queued", "on_hold", "in_progress"]);
+    if (reloaded.error) {
+      console.error("[startWorkOrder] reload tasks failed:", reloaded.error.message);
+      return { ok: false, assigned: 0, total: 0, reason: reloaded.error.message };
+    }
+    taskRows = (reloaded.data || []) as TaskRow[];
+    if (taskRows.length === 0) {
+      return { ok: false, assigned: 0, total: 0, reason: "Work order has no production items" };
+    }
   }
 
   const companyId = taskRows[0].company_id;
