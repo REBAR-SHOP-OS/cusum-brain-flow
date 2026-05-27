@@ -230,15 +230,7 @@ export function AutoCameraStream({
         const sy = v.videoHeight * ROI.y;
         const sw = v.videoWidth * ROI.w;
         const sh = v.videoHeight * ROI.h;
-        const c = document.createElement("canvas");
-        c.width = Math.round(sw);
-        c.height = Math.round(sh);
-        const cctx = c.getContext("2d");
-        if (!cctx) throw new Error("ctx");
-        cctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
-        const blob = await new Promise<Blob | null>((res) =>
-          c.toBlob((b) => res(b), "image/jpeg", 0.9)
-        );
+        const blob = await preprocessRoiForOcr(v, sx, sy, sw, sh);
         if (blob) onCapture(blob);
       } catch (e) {
         console.error("ROI capture failed", e);
