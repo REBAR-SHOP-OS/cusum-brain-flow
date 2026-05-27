@@ -232,9 +232,10 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const handleVerify = async () => {
     if (!canWrite || isCleared) return;
     setVerifying(true);
+    setGateError(null);
     try {
       if (item.evidence_id) {
-        await supabase
+        const { error: evErr } = await supabase
           .from("clearance_evidence")
           .update({
             status: "cleared",
@@ -242,8 +243,9 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             verified_at: new Date().toISOString(),
           })
           .eq("id", item.evidence_id);
+        if (evErr) throw evErr;
       } else {
-        await supabase
+        const { error: evErr } = await supabase
           .from("clearance_evidence")
           .insert({
             cut_plan_item_id: item.id,
@@ -251,17 +253,29 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             verified_by: userId,
             verified_at: new Date().toISOString(),
           });
+        if (evErr) throw evErr;
       }
 
-      await supabase
+      const { error: phErr } = await supabase
         .from("cut_plan_items")
         .update({ phase: "complete" })
         .eq("id", item.id);
+      if (phErr) throw phErr;
 
       await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
       toast({ title: "Item cleared", description: `${item.mark_number || "Item"} verified` });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      const message = err?.message ?? String(err);
+      if (/WORKFLOW_GATE_/.test(message)) {
+        setGateError(message);
+        toast({
+          title: "Blocked by release gate",
+          description: message,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: message, variant: "destructive" });
+      }
     } finally {
       setVerifying(false);
     }
