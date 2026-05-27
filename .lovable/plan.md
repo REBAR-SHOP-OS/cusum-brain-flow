@@ -1,71 +1,72 @@
-## ریشه‌ی مشکل (تأیید شده از DB + کد)
+## Clearance Archive — Auto + Manual
 
-دو ردیف LinkedIn در `integration_connections`:
-- `scope = "email, openid, profile, w_member_social"` (سه scope حیاتی drop شده)
-- `refresh_token = null` (به‌خاطر نبود `offline_access`)
-- `organization_ids = {}` (به‌خاطر نبود `r_organization_social`)
-- `status = "error"`, expired
+A new **Archive** tab inside the Clearance station that shows every cleared evidence record (Auto and Manual) as side-by-side tag + product photo cards, filterable by project, manifest, date range, and operator.
 
-کد `linkedin-oauth` همه‌ی scope های لازم را request می‌کند، ولی LinkedIn فقط scopeهایی را اعطا می‌کند که در LinkedIn Developer Portal برای آن App تأیید شده باشند. وقتی Marketing Developer Platform و Sign In with LinkedIn (OIDC با offline_access) تأیید نشده باشد، LinkedIn سکوت می‌کند و فقط scopeهای پایه را برمی‌گرداند. در نتیجه:
-- توکن ۶۰ روزه بدون refresh ⇒ خطای انقضا تکرار می‌شود.
-- هیچ Company Page کشف نمی‌شود ⇒ پابلیش روی Rebar.shop / Rebar.shop Ontario / Setter همیشه fail می‌کند.
+### Where it lives
 
-این یک باگ کد نیست؛ یک scope-drop خاموش از طرف LinkedIn است که در حال حاضر بی‌صدا ذخیره می‌شود و کاربر را در حلقه‌ی Reconnect بی‌نتیجه گیر می‌اندازد.
+`src/pages/ClearanceStation.tsx` currently has two states: project list, and active manifest. Add a top-level tab switcher on the project-list view:
 
-## هدف اصلاح
+- **Manifests** (current behavior — pick a manifest to clear)
+- **Archive** (new — read-only history)
 
-۱) جلوگیری از ذخیره‌ی یک کانکشن «نیمه‌سالم» (وقتی LinkedIn scope های لازم را drop کرده).
-۲) دادن پیام دقیق و قابل اقدام در لحظه‌ی connect، نه در لحظه‌ی publish.
-۳) جلوگیری از پاک شدن سابق کانکشن‌های خوب با connectهای بعدی ناقص.
+The Archive tab is only visible on the list view, not inside an active manifest or Auto Mode, so it never interferes with the live workflow.
 
-## تغییرات (همگی روی `supabase/functions/linkedin-oauth/index.ts` — جراحی، بدون تغییر معماری)
+### What gets shown
 
-### ۱) Validate scopes پس از token exchange (handleCallback)
-بعد از دریافت `tokens` و قبل از `upsert` در DB:
+Every `clearance_evidence` row where `status = 'cleared'` and both photos are attached, scoped by the existing RLS (company-isolated already — no new policies needed).
 
-- محاسبه‌ی `grantedScopes = Set(tokens.scope)`.
-- محاسبه‌ی `requestedScopes = ["openid","profile","email","w_member_social","w_organization_social","r_organization_social","offline_access"]`.
-- محاسبه‌ی `missing = requestedScopes.filter(s => !grantedScopes.has(s))`.
+For each row the card shows:
 
-اگر `missing` خالی نبود:
-- کانکشن را با `status = "error"` و `error_message` دقیق ذخیره کن (شامل لیست scopeهای drop شده + لینک به اپ LinkedIn برای فعال کردن «Marketing Developer Platform» و «Sign In with LinkedIn using OIDC»).
-- redirect به `/integrations/callback` با `status=error&message=...` تا UI همان لحظه پیام را نمایش دهد.
-- توکن باطل هم نباید ذخیره شود اگر `access_token` فقط شخصی است و کاربر صریحاً شخصی نخواست (در غیر این صورت در گام بعدی کاربر دوباره گیج می‌شود).
+```text
+┌──────────────────────────────────────────┐
+│  [TAG PHOTO]        [PRODUCT PHOTO]      │
+│                                          │
+│  MARK A1501  ·  15M  ·  4318 mm  ·  7pc  │
+│  Manifest: WALDEN-REV2                   │
+│  Project:  Walden Homes / Gensco         │
+│  Cleared:  May 27, 2026 · 14:32          │
+│  By:       Sattar Esmaeili-Oureh  ·  AUTO│
+└──────────────────────────────────────────┘
+```
 
-### ۲) محافظت در برابر overwrite شدن کانکشن سالم
-در `upsert` فعلی هر بار همه‌چیز جایگزین می‌شود؛ اگر کانکشن قبلی `organization_ids` داشت و callback جدید با scope ناقص آمده، orgها پاک می‌شوند. اصلاح: اگر `organization_ids` جدید خالی شد ولی قبلی پر بود، orgهای قبلی را **حفظ کن** و در `error_message` بنویس «orgهای قبلی حفظ شدند ولی scope جدید بدون r_organization_social است؛ پابلیش شرکتی ممکن است fail شود».
+Photos use signed URLs from the existing `clearance-photos` bucket (the same `createSignedUrl` flow used by `validate-clearance-photo`). Click a card → lightbox to view both at full size.
 
-### ۳) پیام خطای دقیق در `getLinkedInStatusError`
-وقتی `expires_at < now()` و `refresh_token == null` و scope فاقد `offline_access` است، علاوه بر متن فعلی، صراحتاً اضافه شود:
-> «LinkedIn App هنوز `offline_access` و `Marketing Developer Platform` را تأیید نکرده — Reconnect به‌تنهایی کافی نیست.»
+### Filters (top of Archive tab)
 
-این متن در DM/Toast دیده می‌شود تا کاربر بداند دلیل تکرار خطا.
+- **Project** — dropdown from distinct projects in the result set
+- **Manifest** — dropdown from distinct cut-plans (filtered by project when one is selected)
+- **Date range** — shadcn date-range picker (default: last 30 days)
+- **Operator** — dropdown of distinct `verified_by` profiles
 
-## تغییر در فرانت (یک خط)
+Filters compose; clearing one widens the result. A small "X cleared items" count sits next to the filters.
 
-`src/hooks/usePublishPost.ts` خط ۶۳ — وقتی `linkedInStatus.status === "error"` با عبارت «`Marketing Developer Platform`» همراه است، toast را با variant: destructive و duration بلندتر نمایش بده تا کاربر زمان بخواند داشته باشد. (تغییر صرفاً UX، بدون منطق.)
+### Data layer
 
-## اقدامات خارج از کد (در گزارش به کاربر — نه در پلن اجرایی)
+New hook `src/hooks/useClearanceArchive.ts`:
 
-پس از deploy، باید روی LinkedIn Developer Portal برای App مربوطه:
-1. به Products → درخواست **Sign In with LinkedIn using OpenID Connect** (شامل `offline_access`).
-2. به Products → درخواست **Share on LinkedIn** (شامل `w_member_social` — قبلاً دارد).
-3. به Products → درخواست **Community Management API** یا **Marketing Developer Platform** (برای `r_organization_social` + `w_organization_social`).
+- Joins `clearance_evidence` → `cut_plan_items` → `cut_plans` → `projects` → `profiles` (verifier name) using the same join shape already proven in `useClearanceData`.
+- Filters server-side by `status='cleared'`, `verified_at` range, optional `project_id`, `cut_plan_id`, `verified_by`.
+- Returns rows already enriched with mark/size/length/qty/manifest/project/operator/verification method.
+- Lazily resolves signed photo URLs in batches when cards mount (intersection observer) to avoid 1000× signed-URL calls up front.
+- Pagination: 50 rows/page, "Load more" button (no infinite scroll, easier for kiosks).
 
-تا تأیید نشدن این محصولات، حتی پس از این patch هم پابلیش روی Company Pages ممکن نخواهد بود — ولی کاربر **فوراً** خواهد فهمید چرا و چه باید بکند، به‌جای دیدن خطای مبهم در لحظه‌ی پابلیش.
+### Files to add / touch
 
-## فایل‌های اصلاحی
+- **New** `src/hooks/useClearanceArchive.ts` — query + filter state
+- **New** `src/components/clearance/ClearanceArchive.tsx` — tabs body: filter bar + card grid + lightbox
+- **New** `src/components/clearance/ArchiveCard.tsx` — single row UI (tag + product side-by-side, metadata)
+- **Edit** `src/pages/ClearanceStation.tsx` — add Manifests/Archive tab switcher on the list view only
 
-- `supabase/functions/linkedin-oauth/index.ts` (callback + getLinkedInStatusError)
-- `src/hooks/usePublishPost.ts` (یک خط toast)
+### What does NOT change
 
-## Verification
+- No DB migration. Existing `clearance_evidence` RLS (company-scoped via `clearance_evidence_company_check`) already restricts the archive to the operator's company.
+- No changes to Auto Mode, Manual Mode, OCR, validation, finalize, or the hard gate that both photos must live on the same row.
+- No changes to the storage bucket or its policies.
+- Manifests tab keeps current behavior, layout, and routing.
 
-- `psql` بررسی ردیف‌های `integration_connections` پس از یک Reconnect واقعی: یا `status=connected` با scope کامل، یا `status=error` با پیام جدید + orgهای قبلی حفظ شده.
-- لاگ edge function `linkedin-oauth` پس از callback باید شامل `[linkedin-oauth] Scopes dropped by provider: [...]` باشد در صورت drop.
+### Edge cases handled
 
-## محدوده‌ی بسته
-
-- نه تغییر در `social-publish` (پیام‌های آن کافی است).
-- نه تغییر در DB schema.
-- نه refactor؛ فقط دو الحاق به handleCallback و یک خط ادیت پیام.
+- Rows where one photo is missing (legacy) — show a "photo missing" placeholder rather than hiding the row, so audits stay honest.
+- Verifier deleted (FK `SET NULL`) — show "Unknown operator".
+- Project/manifest deleted — show "(archived)" but still render the photos and metadata.
+- Date range default 30 days keeps initial load small on a busy shop.
