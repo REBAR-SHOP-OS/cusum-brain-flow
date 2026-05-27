@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserId } from "@/lib/auth";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
 import { requestNotificationPermission, showBrowserNotification, registerPushSubscription } from "@/lib/browserNotification";
 import { normalizeNotificationRoute } from "@/lib/notificationRouting";
@@ -55,9 +56,7 @@ export function useNotifications() {
 
   // Fetch current user id for realtime filtering
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null);
-    });
+    getCurrentUserId().then((id) => setUserId(id));
   }, []);
 
   const load = useCallback(async () => {

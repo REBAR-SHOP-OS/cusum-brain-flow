@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 
 export type SalesLeadActivity = {
@@ -46,7 +47,7 @@ export function useSalesLeadActivities(salesLeadId: string | undefined) {
 
   const create = useMutation({
     mutationFn: async (input: CreateActivity) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { error } = await supabase.from("sales_lead_activities").insert({
         ...input,
         user_id: user?.id,

@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserId, getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useCallback } from "react";
 
@@ -125,10 +126,10 @@ export function usePipelineAI(enabled: boolean) {
         const { data: profile } = await supabase
           .from("profiles")
           .select("company_id")
-          .eq("user_id", (await supabase.auth.getUser()).data.user?.id || "")
+          .eq("user_id", await getCurrentUserId() || "")
           .single();
 
-        const { data: userData } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
 
         // Insert suggestions into DB
         const rows = suggestions.map((s: any) => ({
@@ -138,7 +139,7 @@ export function usePipelineAI(enabled: boolean) {
           ai_reasoning: s.reasoning,
           suggested_data: s.suggested_data || {},
           company_id: profile?.company_id || "",
-          created_by: userData.user?.id || null,
+          created_by: user?.id || null,
         }));
 
         const { error: insertError } = await supabase
