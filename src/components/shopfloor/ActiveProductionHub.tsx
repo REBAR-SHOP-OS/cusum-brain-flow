@@ -114,20 +114,7 @@ export function ActiveProductionHub({ machines, activePlans = [] }: ActiveProduc
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center">
-            <LayoutGrid className="w-5 h-5 text-primary" />
-          </div>
-          <div>
-            <h2 className="text-lg font-black italic tracking-wide uppercase text-primary">
-              Active Production Hub
-            </h2>
-            <p className="text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
-              Select project to start fabrication
-            </p>
-          </div>
-        </div>
+      <div className="flex items-center justify-end">
         <Badge className="bg-success/20 text-success border-success/30">
           {allWorkingMachines.length} WORKING
         </Badge>
