@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BrandProfile } from "@/types/adDirector";

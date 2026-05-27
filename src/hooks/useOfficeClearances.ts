@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 
 export type OfficeClearanceStatus = "pending" | "approved" | "rejected";

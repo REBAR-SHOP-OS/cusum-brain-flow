@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { formatDateInTimezone } from "@/lib/dateConfig";
 import type { TeamMemberActivity } from "@/hooks/useTeamDailyActivity";
 

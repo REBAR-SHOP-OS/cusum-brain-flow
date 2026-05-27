@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 interface VideoCredits {
   id: string;
   user_id: string;

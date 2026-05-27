@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 export function useCompanyId() {
   const { data: companyId, isLoading } = useQuery({
     queryKey: ["my_company_id"],
