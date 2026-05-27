@@ -40,8 +40,6 @@ export function getAgentColor(agentName: string): string {
   return agentColorMap[agentName] || "bg-primary";
 }
 
-// Agent type → display name mapping
-const agentTypeNameMap: Record<string, string> = {
 
 export function useChatSessions() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
