@@ -288,7 +288,16 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                     </Badge>
                   )}
                 </span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{plan.status}</span>
+                {(() => {
+                  const loc = planLocations.get(plan.id);
+                  const label = loc?.label || plan.status?.toUpperCase() || "—";
+                  const tone = loc?.tone || "text-muted-foreground";
+                  return (
+                    <span className={`text-[10px] uppercase tracking-wider font-semibold ${tone}`}>
+                      {label}
+                    </span>
+                  );
+                })()}
               </button>
             ))}
           </div>
