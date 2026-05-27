@@ -14,6 +14,105 @@ import { supabase } from "@/integrations/supabase/client";
 
 type MachineRow = { id: string; type: string; status: string; company_id: string };
 type TaskRow = { id: string; task_type: string | null; status: string | null; company_id: string };
+type WorkOrderRow = {
+  id: string;
+  status: string | null;
+  barlist_id: string | null;
+  project_id: string | null;
+  order_id: string | null;
+};
+
+type HydrationResult = { ok: boolean; eligible: number; inserted: number; reason?: string };
+
+/**
+ * Fallback hydration: when a WO has no production_tasks but its barlist has
+ * cut_plan_items still in queued/cutting phase, create one production_task per
+ * eligible item so the dispatch pipeline has something to assign.
+ * Items already in `clearance` or `complete` are intentionally skipped.
+ */
+async function hydrateTasksFromCutPlanItems(wo: WorkOrderRow): Promise<HydrationResult> {
+  if (!wo.barlist_id) {
+    return { ok: false, eligible: 0, inserted: 0, reason: "Work order has no barlist" };
+  }
+  const { data: plans, error: pErr } = await supabase
+    .from("cut_plans")
+    .select("id, company_id")
+    .eq("barlist_id", wo.barlist_id);
+  if (pErr) {
+    return { ok: false, eligible: 0, inserted: 0, reason: pErr.message };
+  }
+  const planRows = plans || [];
+  if (planRows.length === 0) {
+    return { ok: false, eligible: 0, inserted: 0, reason: "Work order has no cut plan" };
+  }
+  const planIds = planRows.map((p: any) => p.id);
+  const companyId = (planRows[0] as any).company_id as string;
+
+  const { data: items, error: iErr } = await supabase
+    .from("cut_plan_items")
+    .select("id, cut_plan_id, mark_number, bar_code, cut_length_mm, total_pieces, phase, unit_system, drawing_ref")
+    .in("cut_plan_id", planIds);
+  if (iErr) {
+    return { ok: false, eligible: 0, inserted: 0, reason: iErr.message };
+  }
+  const allItems = items || [];
+  if (allItems.length === 0) {
+    return { ok: false, eligible: 0, inserted: 0, reason: "Work order has no production items" };
+  }
+  const eligible = allItems.filter(
+    (it: any) =>
+      ["queued", "cutting"].includes(String(it.phase || "").toLowerCase()) &&
+      Number(it.total_pieces || 0) > 0,
+  );
+  if (eligible.length === 0) {
+    return {
+      ok: false,
+      eligible: 0,
+      inserted: 0,
+      reason: "All cuts already complete — nothing to dispatch",
+    };
+  }
+
+  // Defensive: skip items that already have a production_task on this WO
+  const { data: existingTasks } = await supabase
+    .from("production_tasks")
+    .select("cut_plan_item_id")
+    .eq("work_order_id", wo.id);
+  const existingIds = new Set((existingTasks || []).map((r: any) => r.cut_plan_item_id).filter(Boolean));
+
+  const rows = eligible
+    .filter((it: any) => !existingIds.has(it.id))
+    .map((it: any) => ({
+      company_id: companyId,
+      work_order_id: wo.id,
+      project_id: wo.project_id,
+      order_id: wo.order_id,
+      barlist_id: wo.barlist_id,
+      cut_plan_id: it.cut_plan_id,
+      cut_plan_item_id: it.id,
+      task_type: "cut",
+      bar_code: it.bar_code,
+      mark_number: it.mark_number,
+      drawing_ref: it.drawing_ref ?? null,
+      cut_length_mm: it.cut_length_mm,
+      unit_system: it.unit_system || "mm",
+      qty_required: Number(it.total_pieces || 0),
+      qty_completed: 0,
+      status: "pending",
+      priority: 100,
+    }));
+
+  if (rows.length === 0) {
+    return { ok: true, eligible: eligible.length, inserted: 0 };
+  }
+  const { error: insErr } = await supabase.from("production_tasks").insert(rows);
+  if (insErr) {
+    console.error("[hydrateTasksFromCutPlanItems] insert failed:", insErr.message);
+    return { ok: false, eligible: eligible.length, inserted: 0, reason: insErr.message };
+  }
+  return { ok: true, eligible: eligible.length, inserted: rows.length };
+}
+
 
 function machineTypeForTask(taskType: string | null): string | null {
   switch ((taskType || "").toLowerCase()) {
