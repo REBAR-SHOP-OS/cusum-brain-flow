@@ -50,7 +50,7 @@ export function useAutoGenerate() {
 
     try {
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const postDate = options?.scheduledDate || new Date().toISOString();

@@ -243,8 +243,7 @@ Rules:
 
     if (!res.reply) throw new Error("No response from analysis");
 
-    const { data: userData } = await supabase.auth.getUser();
-    const userId = userData?.user?.id;
+    const userId = await getCurrentUserId();
     if (!userId || !companyId) throw new Error("Missing user/company");
 
     // Parse sections from AI response (excluding TIME CLOCK which is DB-driven)

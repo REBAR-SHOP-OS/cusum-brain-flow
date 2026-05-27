@@ -49,7 +49,7 @@ export function useQBBankActivity() {
   const upsertBankBalance = useCallback(
     async (qbAccountId: string, accountName: string, bankBalance: number) => {
       if (!companyId) return;
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { error } = await supabase
         .from("qb_bank_activity")
         .upsert(

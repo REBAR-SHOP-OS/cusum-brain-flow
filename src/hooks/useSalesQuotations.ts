@@ -201,7 +201,7 @@ export function useSalesQuotations() {
   // Log audit event
   const logAuditEvent = useMutation({
     mutationFn: async (event: { quotation_id: string; event_type: string; previous_value?: string; new_value?: string; notes?: string; metadata?: Record<string, unknown> }) => {
-      const user = (await supabase.auth.getUser()).data.user;
+      const user = await getCurrentUser();
       const { error } = await supabase.from("quote_audit_log").insert({
         quotation_id: event.quotation_id,
         event_type: event.event_type,
