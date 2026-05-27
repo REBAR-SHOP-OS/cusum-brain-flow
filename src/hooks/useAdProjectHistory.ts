@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import type { ScriptSegment, StoryboardScene, ContinuityProfile, ClipOutput } from "@/types/adDirector";
 
 export interface AdProjectRow {
@@ -28,7 +29,7 @@ export function useAdProjectHistory() {
   const projects = useQuery({
     queryKey: QUERY_KEY,
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return [];
       const { data, error } = await supabase
         .from("ad_projects")
@@ -48,7 +49,7 @@ export function useAdProjectHistory() {
     let cancelled = false;
     let channel: ReturnType<typeof supabase.channel> | null = null;
     (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user || cancelled) return;
       const channelName = `ad_projects:${user.id}:${crypto.randomUUID()}`;
       channel = supabase
@@ -79,7 +80,7 @@ export function useAdProjectHistory() {
       finalVideoUrl?: string | null;
       status?: string;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       // Root-cause guard: never persist ephemeral blob: URLs to the database.

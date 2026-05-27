@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { formatDateInTimezone } from "@/lib/dateConfig";
 import type { TeamMemberActivity } from "@/hooks/useTeamDailyActivity";
 
@@ -49,9 +50,7 @@ export function useEagerReportPersistence(
     lastKey.current = key;
 
     const persist = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       const companyId = user.user_metadata?.company_id ?? "";
 

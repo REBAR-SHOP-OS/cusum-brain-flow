@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 
 export interface NotificationPrefs {
@@ -27,7 +28,7 @@ export function useNotificationPreferences() {
   const { data: prefs, isLoading } = useQuery({
     queryKey: ["notification_preferences"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       const { data, error } = await supabase
         .from("notification_preferences")
@@ -42,7 +43,7 @@ export function useNotificationPreferences() {
 
   const upsert = useMutation({
     mutationFn: async (updates: Partial<Omit<NotificationPrefs, "id">>) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const profile = await supabase

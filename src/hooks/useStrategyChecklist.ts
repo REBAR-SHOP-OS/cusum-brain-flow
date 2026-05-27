@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCallback } from "react";
 
 export function useStrategyChecklist() {
@@ -8,7 +9,7 @@ export function useStrategyChecklist() {
   const { data: completedItems, isLoading } = useQuery({
     queryKey: ["social_strategy_checklist"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return [];
       const { data, error } = await supabase
         .from("social_strategy_checklist")
@@ -21,7 +22,7 @@ export function useStrategyChecklist() {
 
   const toggleMutation = useMutation({
     mutationFn: async (itemId: string) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const current = completedItems ?? [];

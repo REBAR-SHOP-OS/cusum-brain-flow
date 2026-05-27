@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 
 export type OfficeClearanceStatus = "pending" | "approved" | "rejected";
@@ -55,7 +56,7 @@ export function useOfficeClearances() {
   const create = useMutation({
     mutationFn: async (input: { title: string; notes?: string; session_id?: string | null }) => {
       if (!companyId) throw new Error("No company");
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabase.from("office_clearances" as any).insert({
         company_id: companyId,
@@ -71,7 +72,7 @@ export function useOfficeClearances() {
 
   const review = useMutation({
     mutationFn: async (input: { id: string; status: "approved" | "rejected" }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
       const { error } = await supabase
         .from("office_clearances" as any)

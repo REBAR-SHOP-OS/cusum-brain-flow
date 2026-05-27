@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
 export interface Communication {
@@ -41,7 +42,7 @@ export function useCommunications(options?: { search?: string; typeFilter?: stri
       // Belt-and-suspenders: get the authenticated user's ID client-side.
       // RLS already enforces user_id = auth.uid() server-side, but this
       // explicit filter ensures correctness even if RLS is ever misconfigured.
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         setCommunications([]);
         setLoading(false);

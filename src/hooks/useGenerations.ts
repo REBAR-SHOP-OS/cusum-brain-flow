@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 export interface Generation {
   id: string;
   user_id: string;
@@ -50,7 +51,7 @@ export function useGenerations() {
       estimated_credits: number;
       metadata?: Record<string, any>;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase

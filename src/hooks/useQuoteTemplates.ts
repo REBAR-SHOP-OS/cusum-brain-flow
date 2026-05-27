@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
 
@@ -55,7 +56,7 @@ export function useQuoteTemplates() {
   const createTemplate = useMutation({
     mutationFn: async (input: Partial<QuoteTemplate> & { items?: Omit<QuoteTemplateItem, "id" | "template_id" | "created_at">[] }) => {
       const { items, ...templateData } = input;
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { data: template, error } = await supabase
         .from("quote_templates")
         .insert({

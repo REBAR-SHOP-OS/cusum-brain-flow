@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
 
@@ -50,7 +51,7 @@ export function useInventoryCounts() {
 
   const createCount = useMutation({
     mutationFn: async (input: { count_type: string; location?: string; notes?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const seq = String(counts.length + 1).padStart(3, "0");
 

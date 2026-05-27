@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BrandProfile } from "@/types/adDirector";
@@ -12,7 +13,7 @@ export function useAdDirectorBrandKit() {
   const { data: savedBrand, isLoading } = useQuery({
     queryKey: ["ad_director_brand_kit"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -43,7 +44,7 @@ export function useAdDirectorBrandKit() {
 
   const saveMutation = useMutation({
     mutationFn: async (brand: BrandProfile) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase
