@@ -53,6 +53,7 @@ export function useAutoClearance({
   const [state, setState] = useState<AutoState>("waiting_tag");
   const [banner, setBanner] = useState<Banner>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
   const [pickCandidates, setPickCandidates] = useState<RankedMatch[]>([]);
   const [lastOcr, setLastOcr] = useState<any>(null);
   const [lastConfidence, setLastConfidence] = useState<number | null>(null);
@@ -126,8 +127,18 @@ export function useAutoClearance({
   }, []);
 
   const ensureEvidenceRow = useCallback(async (itemId: string) => {
-    const existing = itemsRef.current.find((i) => i.id === itemId);
-    if (existing?.evidence_id) return existing.evidence_id;
+    // Prefer locally-tracked id (set right after tag scan) — avoids race with
+    // React Query cache refetch which can cause a duplicate INSERT.
+    const existingLocal = itemsRef.current.find((i) => i.id === itemId);
+    if (existingLocal?.evidence_id) return existingLocal.evidence_id;
+    // Authoritative check against DB before inserting.
+    const { data: found, error: findErr } = await supabase
+      .from("clearance_evidence")
+      .select("id")
+      .eq("cut_plan_item_id", itemId)
+      .maybeSingle();
+    if (findErr) throw findErr;
+    if (found?.id) return found.id as string;
     const { data, error } = await supabase
       .from("clearance_evidence")
       .insert({
@@ -145,17 +156,19 @@ export function useAutoClearance({
   // HARD RULE: only flips to cleared when BOTH photos exist on the row
   // AND validate-clearance-photo returned valid.
   const finalizeVerification = useCallback(async (
+    evidenceId: string,
     itemId: string,
     confidence: number,
     ocrMeta: any,
   ) => {
-    // Re-read latest evidence row to confirm both photos are attached.
+    // Re-read this specific evidence row and confirm both photos are attached.
     const { data: ev, error: readErr } = await supabase
       .from("clearance_evidence")
       .select("id, tag_scan_url, material_photo_url")
-      .eq("cut_plan_item_id", itemId)
+      .eq("id", evidenceId)
       .maybeSingle();
     if (readErr || !ev) throw readErr || new Error("Evidence row missing");
+    console.log("[auto-clearance] finalize read", { evidenceId, itemId, tag: ev.tag_scan_url, product: ev.material_photo_url });
     if (!ev.tag_scan_url || !ev.material_photo_url) {
       throw new Error("Both tag and product photos required before auto verify");
     }
@@ -255,7 +268,8 @@ export function useAutoClearance({
       setLastConfidence(best.score);
       const evId = await ensureEvidenceRow(matchedItem.id);
       const path = await uploadToStorage(matchedItem.id, "tag", blob);
-      await supabase
+      console.log("[auto-clearance] tag uploaded", { itemId: matchedItem.id, evId, path });
+      const { error: tagUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           tag_scan_url: path,
@@ -265,6 +279,9 @@ export function useAutoClearance({
           ocr_metadata: { ocr, ranked, decision },
         })
         .eq("id", evId);
+      if (tagUpErr) throw tagUpErr;
+      setActiveEvidenceId(evId);
+      console.log("[auto-clearance] tag evidence row updated", { evId });
       setState("tag_matched");
       speak("Tag matched");
       vibrate(60);
@@ -289,7 +306,7 @@ export function useAutoClearance({
     // attached to this item by capturing PRODUCT photo next. Pre-create row.
     try {
       const evId = await ensureEvidenceRow(candidateId);
-      await supabase
+      const { error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           verification_state: "tag_scanned",
@@ -298,6 +315,8 @@ export function useAutoClearance({
           ocr_metadata: { ocr: lastOcr, picked: candidateId },
         })
         .eq("id", evId);
+      if (pickUpErr) throw pickUpErr;
+      setActiveEvidenceId(evId);
     } catch (e) {
       console.error("confirmPick row create failed", e);
     }
@@ -330,15 +349,20 @@ export function useAutoClearance({
     setState("auto_verifying");
     try {
       const item = itemsRef.current.find((i) => i.id === activeItemId);
-      const evId = await ensureEvidenceRow(activeItemId);
+      // Reuse the evidence id captured at tag time — avoids creating a second row
+      // because the React Query cache for items hasn't refetched yet.
+      const evId = activeEvidenceId ?? await ensureEvidenceRow(activeItemId);
+      console.log("[auto-clearance] product capture", { itemId: activeItemId, evId, reusedFromState: !!activeEvidenceId });
       const path = await uploadToStorage(activeItemId, "product", blob);
-      await supabase
+      console.log("[auto-clearance] product uploaded", { evId, path });
+      const { error: prodUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           material_photo_url: path,
           verification_state: "product_captured",
         })
         .eq("id", evId);
+      if (prodUpErr) throw prodUpErr;
 
       // Validate product photo against expected mark / drawing.
       const { data: vData, error: vErr } = await supabase.functions.invoke(
@@ -371,15 +395,17 @@ export function useAutoClearance({
       }
 
       // Both photos uploaded + validated. Finalize.
-      await finalizeVerification(activeItemId, lastConfidence ?? 0, {
+      await finalizeVerification(evId, activeItemId, lastConfidence ?? 0, {
         ocr: lastOcr,
         validation,
       });
+      console.log("[auto-clearance] finalized", { evId, itemId: activeItemId });
       setState("completed");
       speak("Verified");
       vibrate(120);
       window.setTimeout(() => {
         setActiveItemId(null);
+        setActiveEvidenceId(null);
         setPickCandidates([]);
         setState("waiting_tag");
       }, 1100);
@@ -391,7 +417,7 @@ export function useAutoClearance({
       setBusy(false);
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-  }, [activeItemId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
+  }, [activeItemId, activeEvidenceId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
 
   // -------- offline drain --------
   const drainQueue = useCallback(async () => {
