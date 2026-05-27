@@ -9,7 +9,7 @@ import {
 type RouteItem = { id: string; label: string; path: string };
 
 const SHOP_FLOOR_TABS: RouteItem[] = [
-  { id: "hub",         label: "Hub",         path: "/shop-floor" },
+  
   { id: "pool",        label: "Pool",        path: "/shopfloor/pool" },
   { id: "station",     label: "Stations",    path: "/shopfloor/station" },
   { id: "cutter",      label: "Cutter",      path: "/shopfloor/cutter" },
