@@ -1,6 +1,81 @@
 import { useEffect, useRef, useState } from "react";
 import { Camera as CameraIcon, Zap, ZapOff } from "lucide-react";
 
+/**
+ * Crop ROI from the live <video>, upscale, convert to high-contrast grayscale
+ * with a light sharpening pass. Produces a JPEG blob optimized for OCR rather
+ * than for human viewing — boosts the chance of reading dirty / bent / faded tags.
+ */
+async function preprocessRoiForOcr(
+  video: HTMLVideoElement,
+  sx: number, sy: number, sw: number, sh: number,
+): Promise<Blob | null> {
+  // Upscale so small printed text has more pixels per stroke.
+  const target = 1600;
+  const scale = Math.max(1, target / Math.max(sw, sh));
+  const W = Math.round(sw * scale);
+  const H = Math.round(sh * scale);
+
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const ctx = c.getContext("2d", { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(video, sx, sy, sw, sh, 0, 0, W, H);
+
+  let img: ImageData;
+  try { img = ctx.getImageData(0, 0, W, H); } catch { return null; }
+  const d = img.data;
+
+  // Pass 1: grayscale + collect luma histogram for contrast stretch
+  const gray = new Uint8ClampedArray(W * H);
+  let lo = 255, hi = 0;
+  for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+    const y = (0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]) | 0;
+    gray[p] = y;
+    if (y < lo) lo = y;
+    if (y > hi) hi = y;
+  }
+  // Robust stretch (ignore extreme 2% so specular highlights don't kill contrast)
+  const range = Math.max(20, hi - lo);
+  const black = Math.min(255, lo + range * 0.02);
+  const white = Math.max(0, hi - range * 0.02);
+  const span = Math.max(1, white - black);
+
+  // Pass 2: contrast stretch
+  const stretched = new Uint8ClampedArray(W * H);
+  for (let p = 0; p < gray.length; p++) {
+    const v = ((gray[p] - black) * 255) / span;
+    stretched[p] = v < 0 ? 0 : v > 255 ? 255 : v;
+  }
+
+  // Pass 3: light unsharp mask (sharpen) — center+, neighbors-
+  const out = new Uint8ClampedArray(W * H);
+  for (let y = 1; y < H - 1; y++) {
+    for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x;
+      const v =
+        5 * stretched[i]
+        - stretched[i - 1] - stretched[i + 1]
+        - stretched[i - W] - stretched[i + W];
+      out[i] = v < 0 ? 0 : v > 255 ? 255 : v;
+    }
+  }
+  // Copy borders unchanged
+  for (let x = 0; x < W; x++) { out[x] = stretched[x]; out[(H - 1) * W + x] = stretched[(H - 1) * W + x]; }
+  for (let y = 0; y < H; y++) { out[y * W] = stretched[y * W]; out[y * W + W - 1] = stretched[y * W + W - 1]; }
+
+  // Write back as grayscale RGBA
+  for (let p = 0, i = 0; p < out.length; p++, i += 4) {
+    const v = out[p];
+    d[i] = v; d[i + 1] = v; d[i + 2] = v; d[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return await new Promise<Blob | null>((res) =>
+    c.toBlob((b) => res(b), "image/jpeg", 0.92)
+  );
+}
+
 export type CoachHint =
   | "scanning"
   | "move_to_tag"
