@@ -111,3 +111,21 @@ export function useAuth() {
   }
   return context;
 }
+
+/**
+ * Cached session-based user accessor. Use this in hooks/services instead of
+ * `supabase.auth.getUser()` — that call hits the Auth server on every
+ * invocation and violates the "Session Stability" rule
+ * (`mem://auth/session-stability`). Reads from the locally-cached session
+ * maintained by `onAuthStateChange`.
+ */
+export async function getCurrentUser(): Promise<User | null> {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user ?? null;
+}
+
+export async function getCurrentUserId(): Promise<string | null> {
+  const u = await getCurrentUser();
+  return u?.id ?? null;
+}
+
