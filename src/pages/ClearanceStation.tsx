@@ -30,6 +30,7 @@ export default function ClearanceStation() {
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
   const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
   const [autoMode, setAutoMode] = useState(false);
+  const [listTab, setListTab] = useState<"manifests" | "archive">("manifests");
 
   // Resolve key → label/items from the live hook.
   const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
