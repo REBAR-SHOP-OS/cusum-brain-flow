@@ -43,7 +43,9 @@ function getLinkedInStatusError(
       !scopeSet.has("w_organization_social") ||
       !scopeSet.has("r_organization_social"))
   ) {
-    reasons.push("the connection was created with older LinkedIn permissions");
+    reasons.push(
+      "the LinkedIn App is missing offline_access / Marketing Developer Platform approval — Reconnect alone will not fix this",
+    );
   }
 
   const detail = reasons.length > 0
@@ -51,6 +53,16 @@ function getLinkedInStatusError(
     : "";
   return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
 }
+
+const REQUIRED_LINKEDIN_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "w_member_social",
+  "w_organization_social",
+  "r_organization_social",
+  "offline_access",
+];
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
