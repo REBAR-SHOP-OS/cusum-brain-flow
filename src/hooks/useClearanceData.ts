@@ -123,7 +123,7 @@ export function useClearanceData() {
   useEffect(() => {
     if (!user) return;
     const channel = supabase
-      .channel(`clearance-live-${companyId}`)
+      .channel(`clearance-live-${companyId}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plan_items" }, () =>
         queryClient.invalidateQueries({ queryKey: ["clearance-items"] })
       )

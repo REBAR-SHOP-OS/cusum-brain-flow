@@ -100,7 +100,7 @@ export function useCutPlans() {
   useEffect(() => {
     if (!user || !companyId) return;
     const channel = supabase
-      .channel(`cut-plans-realtime-${companyId}`)
+      .channel(`cut-plans-realtime-${companyId}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "cut_plans" },
         () => fetchPlans())
       .subscribe();

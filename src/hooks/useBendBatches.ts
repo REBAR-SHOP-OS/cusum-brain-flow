@@ -29,7 +29,7 @@ export function useBendBatches(statusFilter?: string) {
   useEffect(() => {
     if (!companyId) return;
     const channel = supabase
-      .channel(`bend-batches-${companyId}`)
+      .channel(`bend-batches-${companyId}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bend_batches" }, () => {
         queryClient.invalidateQueries({ queryKey: ["bend-batches", companyId] });
       })
