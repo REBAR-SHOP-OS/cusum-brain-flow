@@ -156,17 +156,19 @@ export function useAutoClearance({
   // HARD RULE: only flips to cleared when BOTH photos exist on the row
   // AND validate-clearance-photo returned valid.
   const finalizeVerification = useCallback(async (
+    evidenceId: string,
     itemId: string,
     confidence: number,
     ocrMeta: any,
   ) => {
-    // Re-read latest evidence row to confirm both photos are attached.
+    // Re-read this specific evidence row and confirm both photos are attached.
     const { data: ev, error: readErr } = await supabase
       .from("clearance_evidence")
       .select("id, tag_scan_url, material_photo_url")
-      .eq("cut_plan_item_id", itemId)
+      .eq("id", evidenceId)
       .maybeSingle();
     if (readErr || !ev) throw readErr || new Error("Evidence row missing");
+    console.log("[auto-clearance] finalize read", { evidenceId, itemId, tag: ev.tag_scan_url, product: ev.material_photo_url });
     if (!ev.tag_scan_url || !ev.material_photo_url) {
       throw new Error("Both tag and product photos required before auto verify");
     }
