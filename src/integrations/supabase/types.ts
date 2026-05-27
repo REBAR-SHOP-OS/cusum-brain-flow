@@ -17237,6 +17237,10 @@ export type Database = {
       }
     }
     Functions: {
+      _cut_plan_next_hop: {
+        Args: { _current: string; _target: string }
+        Returns: string
+      }
       _is_evidence_release_ready: {
         Args: { _evidence_id: string }
         Returns: boolean
