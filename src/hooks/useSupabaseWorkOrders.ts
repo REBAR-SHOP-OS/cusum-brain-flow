@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCallback } from "react";
+import { startWorkOrder as dispatchStart, pauseWorkOrder as dispatchPause } from "@/lib/workOrderDispatch";
 
 export interface SupabaseWorkOrder {
   id: string;
@@ -115,11 +116,38 @@ export function useSupabaseWorkOrders() {
     return true;
   }, [queryClient]);
 
+  const invalidateAll = useCallback(async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
+      queryClient.invalidateQueries({ queryKey: ["cut-plans"] }),
+      queryClient.invalidateQueries({ queryKey: ["station-data"] }),
+      queryClient.invalidateQueries({ queryKey: ["production-queues"] }),
+    ]);
+  }, [queryClient]);
+
+  const startWorkOrder = useCallback(async (workOrderId: string) => {
+    const result = await dispatchStart(workOrderId);
+    if (result.ok) {
+      await updateStatus(workOrderId, "in_progress");
+    }
+    await invalidateAll();
+    return result;
+  }, [updateStatus, invalidateAll]);
+
+  const pauseWorkOrder = useCallback(async (workOrderId: string) => {
+    const result = await dispatchPause(workOrderId);
+    await updateStatus(workOrderId, "on_hold");
+    await invalidateAll();
+    return result;
+  }, [updateStatus, invalidateAll]);
+
   return {
     data: data ?? [],
     loading: isLoading,
     error: error ?? null,
     refetch: () => queryClient.invalidateQueries({ queryKey: ["work-orders"] }),
     updateStatus,
+    startWorkOrder,
+    pauseWorkOrder,
   };
 }

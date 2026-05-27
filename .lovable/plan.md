@@ -1,68 +1,95 @@
-# Shop Floor — extend industrial chrome to every tab
+## Goal
 
-## Why
+In the Work Order Queue (Station Dashboard), clicking **Start** on a WO should:
+- auto-assign every one of its production tasks to the first **idle** machine of the matching type,
+- make those tasks show up in **Active Production** and on the **machine cards** (running pill),
+- flip the WO to `in_progress`.
 
-The Hub (`/shop-floor`) now renders inside `ShopFloorChrome` (dark `.industrial` theme, teal top rule, sticky tab strip, `WorkspaceHeader`). The sub-routes (`/shopfloor/station`, `pool`, `clearance`, `loading`, `pickup`, `cutter`, `delivery-ops`, `inventory`, `camera-intelligence`) still render with the global light theme and no tab strip — so clicking any tab drops the operator out of the industrial look (screenshot 1 vs reference screenshot 2).
+Clicking **Pause** on a running WO should:
+- send the tasks back to the queue on the **same machine** (status `queued`, position kept, `qty_completed` untouched),
+- flip the WO to `on_hold`.
 
-Goal: every shop-floor route renders inside the same chrome with a consistent header + tab strip, matching the REBAR OS Core reference.
+Today, the Start/Pause buttons only flip `work_orders.status`. They never touch `machine_queue_items` or `production_tasks`, which is why nothing appears under Active Production or on machine cards.
 
-## Scope (additive only)
+## What changes
 
-- No route changes, no logic changes, no hook changes.
-- Pure presentational wrap: each page's existing JSX moves inside a `<ShopFloorChrome>` wrapper.
-- No edits to shared components, hooks, queries, or RLS.
+### 1. New helper — `src/lib/workOrderDispatch.ts`
 
-## Pages to wrap
-
-| Page file | Route | Header title | Eyebrow |
-|---|---|---|---|
-| `src/pages/StationDashboard.tsx` | `/shopfloor/station` | Stations | Live Operations |
-| `src/pages/PoolView.tsx` | `/shopfloor/pool` | Material Pool | Staging & Flow |
-| `src/pages/ClearanceStation.tsx` | `/shopfloor/clearance` | Clearance | QC & Evidence |
-| `src/pages/LoadingStation.tsx` | `/shopfloor/loading` | Loading Station | Load & Evidence |
-| `src/pages/PickupStation.tsx` | `/shopfloor/pickup` | Pickup Station | Customer Collection |
-| `src/pages/CutterPlanning.tsx` | `/shopfloor/cutter` | Cutter Plan | Cut list & queue |
-| `src/components/shopfloor/InventoryCountView.tsx` (page wrapper) | `/shopfloor/inventory` | Inventory | Counts & Adjustments |
-| `src/pages/DeliveryOps.tsx` | `/shopfloor/delivery-ops` | Delivery Ops | Dispatch & Drop-off |
-| `src/pages/CameraIntelligence.tsx` | `/shopfloor/camera-intelligence` | Camera AI | Vision & Dispatch |
-
-`StationView.tsx` (`/shopfloor/station/:machineId`), `DeliveryTerminal.tsx`, `DeliveryPipeline.tsx` are operator/detail views — out of scope for this pass (they have their own back-nav header).
-
-## Per-page change pattern
-
-For each page, the change is a two-line wrap. Example for `StationDashboard.tsx`:
+Pure service module, no UI. Two functions:
 
 ```text
-return (
-  <ShopFloorChrome
-    eyebrow="Live Operations"
-    title="Stations"
-    subtitle="Released work, active stations, and handoff state across the floor."
-  >
-    {/* existing JSX unchanged */}
-  </ShopFloorChrome>
-);
+startWorkOrder(workOrderId)
+  - load production_tasks for WO where status in ('pending','queued','on_hold')
+  - load machines for company (id, type, status)
+  - map task_type -> machine.type:
+      'cut'    -> 'cutter'
+      'bend'   -> 'bender'
+      'spiral' -> 'bender' (fallback)
+      other    -> first idle of any type
+  - for each task:
+      pick first IDLE machine of matching type (round-robin within the call so we don't
+        cram every task on the same machine when multiple are idle)
+      upsert machine_queue_items by task_id:
+        - if row exists (queued/running): UPDATE status='running', machine_id, updated_at
+        - else: INSERT row (company_id, task_id, machine_id, work_order_id,
+          project_id = work_order_id, status='running', position = max(position)+1)
+      UPDATE production_tasks.status = 'in_progress'
+  - return { ok, assigned: [{taskId, machineId}], skipped: [...] }
+
+pauseWorkOrder(workOrderId)
+  - UPDATE machine_queue_items SET status='queued'
+      WHERE work_order_id = $1 AND status = 'running'
+      (machine_id + position preserved — progress kept)
+  - UPDATE production_tasks SET status='pending'
+      WHERE work_order_id = $1 AND status = 'in_progress'
+  - return { ok }
 ```
 
-- Any existing top-of-page hero / title block inside the page (e.g. `Shop Floor — Live Operations` banner already inside `StationDashboard`) is removed because `WorkspaceHeader` replaces it. This is the only deletion — pure de-duplication, not a refactor.
-- Top-level `<div className="min-h-screen bg-…">` wrappers in each page are removed (the chrome's `IndustrialFrame` already provides full-height dark background). Removing them prevents the light-theme leak shown in screenshot 1.
+Notes:
+- Unique index `idx_queue_task_active` already enforces one active row per task → safe to upsert.
+- No schema change needed; existing RLS (`Admin/workshop can manage queue items`) already governs writes.
+- `qty_completed` lives on `production_tasks` and is never touched here, so progress survives Pause.
+
+### 2. `useSupabaseWorkOrders` — extend the hook
+
+Add two methods alongside `updateStatus`:
+
+```text
+startWorkOrder(wo): calls workOrderDispatch.startWorkOrder, then updateStatus(wo, 'in_progress')
+                   invalidates ['production-queues'], ['station-data'], ['work-orders']
+pauseWorkOrder(wo): calls workOrderDispatch.pauseWorkOrder, then updateStatus(wo, 'on_hold')
+                   same invalidations
+```
+
+Keep `updateStatus` as-is (still used for Complete).
+
+### 3. `WorkOrderQueueSection.tsx` — wire the buttons
+
+- `Start` button → `onStart(wo)` (was `onUpdateStatus(wo.id, 'in_progress')`)
+- `Pause` button → `onPause(wo)` (was `onUpdateStatus(wo.id, 'on_hold')`)
+- `Complete` button → unchanged (`onUpdateStatus(wo.id, 'completed')`)
+- Toast on Start: "Started — assigned to N machine(s)" or "No idle machines available" when nothing got assigned.
+
+Update prop types accordingly; `StationDashboard` passes the new handlers from the hook.
+
+### 4. Failure & edge cases
+
+- WO has zero tasks → toast "No tasks to dispatch", do NOT flip WO to in_progress.
+- No idle machine of the required type → leave that task in `queued` on the closest idle machine of any type; if none at all, toast "All machines busy — queued"; still flip WO to in_progress only if at least one task was placed running.
+- RLS failure on queue insert → roll back WO status optimistic update, surface "Failed to dispatch — check permissions".
+- Pause when no running queue rows exist → still flip WO to on_hold (idempotent).
 
 ## Verification
 
-1. `bunx tsc --noEmit` — must stay clean.
-2. Open `/shopfloor/station` — should show the same dark theme, tab strip (Stations active), and `Shop Floor → Stations` header as screenshot 2.
-3. Click each tab — chrome stays mounted, only the body swaps.
-4. Existing functionality (filters, machine grid, ticker, refresh buttons, project switcher, batch list, photo feedback, pin) must continue to work — verified by spot-checking each page after wrap.
+- Click Start on a WO with cut + bend tasks → row appears in Active Production with the WO name, and the matching CUTTER and BENDER machine cards show a running task.
+- Click Pause → row disappears from Active Production, machine cards return to idle, WO chip flips to ON HOLD, but `qty_completed` on the tasks is unchanged (verify via a quick DB read).
+- Click Start again → same machines pick it back up (position preserved).
 
-## Out of scope
+## Files touched
 
-- No new features (no Supervisor sheet, no QR scanner wiring, no live ops ticker port).
-- No data layer changes.
-- Detail views (`StationView`, `DeliveryTerminal`, `DeliveryPipeline`).
-- Mobile layout tuning beyond what the chrome already provides.
+- `src/lib/workOrderDispatch.ts` (new)
+- `src/hooks/useSupabaseWorkOrders.ts` (add startWorkOrder, pauseWorkOrder)
+- `src/components/shopfloor/WorkOrderQueueSection.tsx` (button wiring + props)
+- `src/pages/StationDashboard.tsx` (pass new handlers)
 
-## Cleanup checklist (after wrap)
-
-- Remove now-unused imports from each page (e.g. duplicated `ArrowLeft` back-buttons, redundant `brandLogo` headers if they were only used for the old top bar).
-- Re-read each touched file to confirm no leftover light-theme wrappers or dead title blocks remain.
-- Report: files touched, dead code removed, remaining risks.
+No DB migration, no new tables, no RLS changes.

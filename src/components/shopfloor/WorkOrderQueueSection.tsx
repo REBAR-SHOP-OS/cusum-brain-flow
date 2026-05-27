@@ -8,6 +8,8 @@ import { SupabaseWorkOrder } from "@/hooks/useSupabaseWorkOrders";
 interface WorkOrderQueueSectionProps {
   workOrders: SupabaseWorkOrder[];
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStart?: (id: string) => Promise<{ ok: boolean; assigned: number; total: number; reason?: string }>;
+  onPause?: (id: string) => Promise<{ ok: boolean; assigned: number; total: number; reason?: string }>;
   onStatusChanged: (name: string, action: string) => void;
 }
 
@@ -32,7 +34,7 @@ function loadExpanded(): Record<string, boolean> {
   }
 }
 
-export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChanged }: WorkOrderQueueSectionProps) {
+export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStart, onPause, onStatusChanged }: WorkOrderQueueSectionProps) {
   const activeOrders = useMemo(() =>
     workOrders.filter(wo => wo.status === "in_progress" || wo.status === "on_hold" || wo.status === "pending" || wo.status === "queued"),
     [workOrders]
@@ -93,6 +95,8 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
             open={!!expanded[station]}
             onOpenChange={(o) => setOpenFor(station, o)}
             onUpdateStatus={onUpdateStatus}
+            onStart={onStart}
+            onPause={onPause}
             onStatusChanged={onStatusChanged}
           />
         ))
@@ -102,12 +106,14 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChan
 }
 
 
-function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus, onStatusChanged }: {
+function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus, onStart, onPause, onStatusChanged }: {
   stationName: string;
   orders: SupabaseWorkOrder[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStart?: WorkOrderQueueSectionProps["onStart"];
+  onPause?: WorkOrderQueueSectionProps["onPause"];
   onStatusChanged: (name: string, action: string) => void;
 }) {
   return (
@@ -136,16 +142,18 @@ function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus,
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-5 pt-1 space-y-1.5">
         {orders.map(wo => (
-          <WorkOrderRow key={wo.id} wo={wo} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+          <WorkOrderRow key={wo.id} wo={wo} onUpdateStatus={onUpdateStatus} onStart={onStart} onPause={onPause} onStatusChanged={onStatusChanged} />
         ))}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function WorkOrderRow({ wo, onUpdateStatus, onStatusChanged }: {
+function WorkOrderRow({ wo, onUpdateStatus, onStart, onPause, onStatusChanged }: {
   wo: SupabaseWorkOrder;
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStart?: WorkOrderQueueSectionProps["onStart"];
+  onPause?: WorkOrderQueueSectionProps["onPause"];
   onStatusChanged: (name: string, action: string) => void;
 }) {
   const isActive = wo.status === "in_progress";
@@ -177,7 +185,15 @@ function WorkOrderRow({ wo, onUpdateStatus, onStatusChanged }: {
           <>
             <Button variant="outline" size="sm"
               className="h-7 text-[10px] gap-1 px-2.5 font-bold border-warning/40 text-warning hover:bg-warning/10"
-              onClick={async () => { const ok = await onUpdateStatus(wo.id, "on_hold"); if (ok) onStatusChanged(wo.work_order_number, "Paused"); else onStatusChanged(wo.work_order_number, "Failed to pause — check permissions"); }}>
+              onClick={async () => {
+                if (onPause) {
+                  const r = await onPause(wo.id);
+                  onStatusChanged(wo.work_order_number, r.ok ? `Paused — ${r.assigned} task(s) back to queue` : (r.reason || "Failed to pause"));
+                } else {
+                  const ok = await onUpdateStatus(wo.id, "on_hold");
+                  onStatusChanged(wo.work_order_number, ok ? "Paused" : "Failed to pause — check permissions");
+                }
+              }}>
               <Pause className="w-3 h-3" /> Pause
             </Button>
             <Button variant="outline" size="sm"
@@ -188,7 +204,19 @@ function WorkOrderRow({ wo, onUpdateStatus, onStatusChanged }: {
           </>
         ) : wo.status !== "completed" ? (
           <Button size="sm" className="h-7 text-[10px] gap-1 px-2.5 font-bold"
-            onClick={async () => { const ok = await onUpdateStatus(wo.id, "in_progress"); if (ok) onStatusChanged(wo.work_order_number, "Started"); else onStatusChanged(wo.work_order_number, "Failed to start — check permissions"); }}>
+            onClick={async () => {
+              if (onStart) {
+                const r = await onStart(wo.id);
+                if (r.ok) {
+                  onStatusChanged(wo.work_order_number, `Started — assigned ${r.assigned}/${r.total} task(s)`);
+                } else {
+                  onStatusChanged(wo.work_order_number, r.reason || "Failed to start — check permissions");
+                }
+              } else {
+                const ok = await onUpdateStatus(wo.id, "in_progress");
+                onStatusChanged(wo.work_order_number, ok ? "Started" : "Failed to start — check permissions");
+              }
+            }}>
             <Play className="w-3 h-3" /> Start
           </Button>
         ) : null}
