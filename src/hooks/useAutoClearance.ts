@@ -349,15 +349,20 @@ export function useAutoClearance({
     setState("auto_verifying");
     try {
       const item = itemsRef.current.find((i) => i.id === activeItemId);
-      const evId = await ensureEvidenceRow(activeItemId);
+      // Reuse the evidence id captured at tag time — avoids creating a second row
+      // because the React Query cache for items hasn't refetched yet.
+      const evId = activeEvidenceId ?? await ensureEvidenceRow(activeItemId);
+      console.log("[auto-clearance] product capture", { itemId: activeItemId, evId, reusedFromState: !!activeEvidenceId });
       const path = await uploadToStorage(activeItemId, "product", blob);
-      await supabase
+      console.log("[auto-clearance] product uploaded", { evId, path });
+      const { error: prodUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           material_photo_url: path,
           verification_state: "product_captured",
         })
         .eq("id", evId);
+      if (prodUpErr) throw prodUpErr;
 
       // Validate product photo against expected mark / drawing.
       const { data: vData, error: vErr } = await supabase.functions.invoke(
@@ -390,15 +395,17 @@ export function useAutoClearance({
       }
 
       // Both photos uploaded + validated. Finalize.
-      await finalizeVerification(activeItemId, lastConfidence ?? 0, {
+      await finalizeVerification(evId, activeItemId, lastConfidence ?? 0, {
         ocr: lastOcr,
         validation,
       });
+      console.log("[auto-clearance] finalized", { evId, itemId: activeItemId });
       setState("completed");
       speak("Verified");
       vibrate(120);
       window.setTimeout(() => {
         setActiveItemId(null);
+        setActiveEvidenceId(null);
         setPickCandidates([]);
         setState("waiting_tag");
       }, 1100);
@@ -410,7 +417,7 @@ export function useAutoClearance({
       setBusy(false);
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-  }, [activeItemId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
+  }, [activeItemId, activeEvidenceId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
 
   // -------- offline drain --------
   const drainQueue = useCallback(async () => {
