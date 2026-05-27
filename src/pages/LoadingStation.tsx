@@ -426,13 +426,59 @@ export default function LoadingStation() {
                   Back to Hub
                 </Button>
               </div>
-            ) : (
-              <ReadyBundleList
-                bundles={bundles}
-                title="Select Bundle to Load"
-                onSelect={setSelectedBundle}
-              />
-            )}
+            ) : (() => {
+              const q = bundleQuery.trim().toLowerCase();
+              const filteredBundles = q
+                ? bundles.filter((b) => {
+                    const hay = [
+                      b.customerName,
+                      b.projectDisplayName,
+                      b.projectName,
+                      b.planName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
+                      .toLowerCase();
+                    return hay.includes(q);
+                  })
+                : bundles;
+              return (
+                <div className="space-y-3">
+                  <div className="flex justify-end">
+                    <div className="relative w-full sm:w-80">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                      <Input
+                        value={bundleQuery}
+                        onChange={(e) => setBundleQuery(e.target.value)}
+                        placeholder="Search project, customer, barlist..."
+                        className="pl-8 pr-8 h-9 text-xs bg-muted/30 border-border/50"
+                      />
+                      {bundleQuery && (
+                        <button
+                          onClick={() => setBundleQuery("")}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                          aria-label="Clear search"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {filteredBundles.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center h-40 text-muted-foreground gap-2">
+                      <Package className="w-8 h-8 opacity-40" />
+                      <p className="text-xs">No bundles match "{bundleQuery}"</p>
+                    </div>
+                  ) : (
+                    <ReadyBundleList
+                      bundles={filteredBundles}
+                      title="Select Bundle to Load"
+                      onSelect={setSelectedBundle}
+                    />
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </ScrollArea>
       ) : (
