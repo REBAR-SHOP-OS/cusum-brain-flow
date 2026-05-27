@@ -232,6 +232,8 @@ export default function StationDashboard() {
                 <WorkOrderQueueSection
                   workOrders={workOrders}
                   onUpdateStatus={updateStatus}
+                  onStart={startWorkOrder}
+                  onPause={pauseWorkOrder}
                   onStatusChanged={(name, action) => toast({ title: action, description: name })}
                 />
               </ProductionQueuePanel>
