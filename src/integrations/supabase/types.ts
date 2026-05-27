@@ -2188,7 +2188,11 @@ export type Database = {
           ai_confidence: number | null
           created_at: string
           cut_plan_item_id: string
+          evidence_valid: boolean
           id: string
+          invalidated_at: string | null
+          invalidated_by: string | null
+          invalidation_reason: string | null
           material_photo_url: string | null
           notes: string | null
           ocr_metadata: Json | null
@@ -2204,7 +2208,11 @@ export type Database = {
           ai_confidence?: number | null
           created_at?: string
           cut_plan_item_id: string
+          evidence_valid?: boolean
           id?: string
+          invalidated_at?: string | null
+          invalidated_by?: string | null
+          invalidation_reason?: string | null
           material_photo_url?: string | null
           notes?: string | null
           ocr_metadata?: Json | null
@@ -2220,7 +2228,11 @@ export type Database = {
           ai_confidence?: number | null
           created_at?: string
           cut_plan_item_id?: string
+          evidence_valid?: boolean
           id?: string
+          invalidated_at?: string | null
+          invalidated_by?: string | null
+          invalidation_reason?: string | null
           material_photo_url?: string | null
           notes?: string | null
           ocr_metadata?: Json | null
@@ -8226,6 +8238,44 @@ export type Database = {
             columns: ["current_run_id"]
             isOneToOne: false
             referencedRelation: "machine_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      manual_review_decisions: {
+        Row: {
+          company_id: string
+          created_at: string
+          decision: string
+          evidence_id: string
+          id: string
+          reason: string | null
+          reviewer_id: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          decision: string
+          evidence_id: string
+          id?: string
+          reason?: string | null
+          reviewer_id: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          decision?: string
+          evidence_id?: string
+          id?: string
+          reason?: string | null
+          reviewer_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_review_decisions_evidence_id_fkey"
+            columns: ["evidence_id"]
+            isOneToOne: false
+            referencedRelation: "clearance_evidence"
             referencedColumns: ["id"]
           },
         ]
@@ -16146,6 +16196,42 @@ export type Database = {
           },
         ]
       }
+      workflow_overrides: {
+        Row: {
+          actor_id: string
+          company_id: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          from_state: string | null
+          id: string
+          reason: string
+          to_state: string
+        }
+        Insert: {
+          actor_id: string
+          company_id: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          from_state?: string | null
+          id?: string
+          reason: string
+          to_state: string
+        }
+        Update: {
+          actor_id?: string
+          company_id?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          from_state?: string | null
+          id?: string
+          reason?: string
+          to_state?: string
+        }
+        Relationships: []
+      }
       workspace_settings: {
         Row: {
           company_id: string
@@ -16329,6 +16415,15 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      entity_state_v: {
+        Row: {
+          company_id: string | null
+          entity_type: string | null
+          id: string | null
+          state: string | null
+        }
+        Relationships: []
       }
       events: {
         Row: {
@@ -17142,6 +17237,11 @@ export type Database = {
       }
     }
     Functions: {
+      _is_evidence_release_ready: {
+        Args: { _evidence_id: string }
+        Returns: boolean
+      }
+      _workflow_override_active: { Args: never; Returns: boolean }
       accounting_health_customer_debug: {
         Args: { p_company_id: string; p_customer_qb_id: string }
         Returns: {
@@ -17347,6 +17447,15 @@ export type Database = {
         Returns: boolean
       }
       verify_admin_pin: { Args: { _pin: string }; Returns: boolean }
+      workflow_override_transition: {
+        Args: {
+          _entity_id: string
+          _entity_type: string
+          _reason: string
+          _to_state: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       app_role:
