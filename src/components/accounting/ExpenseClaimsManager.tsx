@@ -37,9 +37,9 @@ function ClaimEditor({ claim, onBack }: { claim: ExpenseClaim; onBack: () => voi
   const [myProfileId, setMyProfileId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        supabase.from("profiles").select("id").eq("user_id", data.user.id).single()
+    getCurrentUser().then((user) => {
+      if (user) {
+        supabase.from("profiles").select("id").eq("user_id", user.id).single()
           .then(({ data: p }) => setMyProfileId(p?.id ?? null));
       }
     });
