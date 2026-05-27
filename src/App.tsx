@@ -24,6 +24,8 @@ import Prospecting from "./pages/Prospecting";
 import LeadScoring from "./pages/LeadScoring";
 import Customers from "./pages/Customers";
 import ShopFloor from "./pages/ShopFloor";
+import { ShopFloorShell } from "./components/shopfloor/ShopFloorShell";
+
 import LoadingStation from "./pages/LoadingStation";
 import DeliveryOps from "./pages/DeliveryOps";
 import DeliveryTerminal from "./pages/DeliveryTerminal";
