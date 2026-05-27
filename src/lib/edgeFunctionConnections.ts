@@ -98,7 +98,6 @@ export const EDGE_FUNCTION_CALLERS: Record<string, string[]> = {
   "seo-smart-scan": ["src/components/seo/SeoTasks.tsx"],
   "seo-task-execute": ["src/components/seo/SeoTasks.tsx"],
   "shape-vision": ["src/components/office/AiVisionUploadDialog.tsx"],
-  "smart-dispatch": ["src/lib/dispatchService.ts"],
   "stripe-payment": ["src/components/accounting/AccountingInvoices.tsx", "src/components/accounting/PaymentLinksSection.tsx", "src/components/accounting/StripeCard.tsx", "src/components/accounting/documents/DraftInvoiceEditor.tsx", "src/hooks/useIntegrations.ts", "src/hooks/usePaymentSources.ts"],
   "summarize-call": ["src/components/phonecalls/CallSummaryDialog.tsx", "src/components/vizzy/VizzyCallHandler.tsx"],
   "summarize-meeting": ["src/hooks/useTeamMeetings.ts"],
