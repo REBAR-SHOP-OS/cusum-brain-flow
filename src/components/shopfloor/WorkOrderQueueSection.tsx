@@ -8,6 +8,8 @@ import { SupabaseWorkOrder } from "@/hooks/useSupabaseWorkOrders";
 interface WorkOrderQueueSectionProps {
   workOrders: SupabaseWorkOrder[];
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStart?: (id: string) => Promise<{ ok: boolean; assigned: number; total: number; reason?: string }>;
+  onPause?: (id: string) => Promise<{ ok: boolean; assigned: number; total: number; reason?: string }>;
   onStatusChanged: (name: string, action: string) => void;
 }
 
