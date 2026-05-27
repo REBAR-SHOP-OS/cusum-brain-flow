@@ -217,39 +217,26 @@ export default function StationDashboard() {
               </div>
             </div>
 
+            <LiveOpsTicker
+              machines={machines}
+              lanes={projectLanes}
+              readyCounts={readyCounts}
+            />
+
             <WorkOrderQueueSection
               workOrders={workOrders}
               onUpdateStatus={updateStatus}
               onStatusChanged={(name, action) => toast({ title: action, description: name })}
             />
 
-            <MaterialFlowDiagram />
-
-            {readyCounts.total > 0 && (
-              <button
-                onClick={() => navigate("/shopfloor/delivery-ops#ready")}
-                className="w-full flex items-center justify-between gap-3 p-4 rounded-xl border-2 border-success/40 bg-success/5 hover:bg-success/10 transition-colors text-left"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-success/20 flex items-center justify-center">
-                    <PackageCheck className="w-5 h-5 text-success" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-black uppercase tracking-wide text-foreground">
-                      Ready to Ship — {readyCounts.total} item{readyCounts.total !== 1 ? "s" : ""}
-                    </p>
-                    <p className="text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
-                      Pickup {readyCounts.pickup} · Loading {readyCounts.loading} · Delivery {readyCounts.delivery}
-                    </p>
-                  </div>
-                </div>
-                <Badge className="bg-success/20 text-success border-success/30">View</Badge>
-              </button>
-            )}
-
             <ActiveProductionHub machines={filteredMachines} activePlans={activePlans} />
 
             <MachineSelector machines={filteredMachines} />
+
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ProductionQueuePanel lanes={projectLanes} />
+              <ActiveProductionPanel lanes={projectLanes} />
+            </div>
           </>
         )}
       </div>
