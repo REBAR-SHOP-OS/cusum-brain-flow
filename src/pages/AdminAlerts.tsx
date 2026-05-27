@@ -77,12 +77,10 @@ export default function AdminAlerts() {
 
   const toggle = async (next: boolean) => {
     setSaving(true);
-    const { error } = await supabase
-      .from("feature_flags" as never)
+    const { error } = await (supabase as any)
+      .from("feature_flags")
       .update({ enabled: next, updated_at: new Date().toISOString() })
-      .eq("flag_key", "comms_alerts_enabled")
-      .select("id")
-      .maybeSingle();
+      .eq("flag_key", "comms_alerts_enabled");
     setSaving(false);
     if (error) {
       toast({ title: "Update failed", description: error.message, variant: "destructive" });
