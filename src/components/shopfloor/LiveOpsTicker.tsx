@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ProjectLane } from "@/hooks/useProductionQueues";
-import type { MachineWithStatus } from "@/types/machine";
+import type { LiveMachine } from "@/types/machine";
 
 type Tone = "default" | "success" | "info" | "warning" | "destructive";
 
