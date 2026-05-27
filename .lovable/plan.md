@@ -1,196 +1,56 @@
-# Release-Gate Hardening — Revised Plan (v2)
+## Root cause
 
-Additive, backward-compatible. No column renames. No data mutation. Legacy values tolerated.
+The stroke save fails because two legacy auto-advance triggers conflict with the new adjacency gate added in `20260527202349`:
 
-## Corrections applied vs v1
+1. **`auto_advance_item_phase`** (`20260225235108`) jumps `cut_plan_items.phase` directly from `queued`/`cutting` to **`complete`** for straight (non-bend) items. The new adjacency gate only allows `cutting → bent|cut_done|clearance`, so straight items would also break (not triggered in this card, but latent).
 
-1. **No time-based expiry.** Evidence validity is a non-expiring boolean (`evidence_valid` + `invalidated_at`).
-2. **Renamed:** `release_overrides` → `workflow_overrides`; `release_with_override` → `workflow_override_transition`.
-3. **Delivery states added** to all three vocabularies: `ready_for_delivery, driver_assigned, in_transit, delivered`.
-4. **Pickup display** shows manifest badge + operational summary line; per-item states only inside expandable Details.
-5. **Clearance gate sits on the entity transition** (item `phase`, bundle `status`) — `clearance_evidence` is the precondition, not the sole enforcement point.
+2. **`auto_advance_plan_status`** (`20260420185509`) jumps `cut_plans.status` from whatever it is (here `draft`) directly to **`completed`** (or `cut_done`) when all items are done. The new adjacency gate requires step-by-step transitions (`draft → planning/queued → in_production → … → completed`) and the canonical `cut_plans` status list no longer includes `cut_done`. This is what produces the visible error:
 
-## Live-data reality (verified via read_query)
+   `WORKFLOW_GATE_ADJACENCY: cut_plans draft → completed not allowed`
 
-- `cut_plan_items.phase`: `queued (8)`, `cut_done (1)`, `clearance (5)`, `complete (733)`.
-- `bundles.status`: `created (5)`.
-- `cut_plans.status`: `draft, queued, completed`.
-- `clearance_evidence.status`: `pending, cleared`. `verification_state`: `pending, product_captured, tag_scanned, complete`.
-- `app_role` enum already contains `admin`, `workshop`, `shop_supervisor` (no new role invented).
-- `workflow_overrides` does not exist. `machine_runs` exists.
+The stroke RPC succeeds at writing `completed_pieces`, but the cascading `phase` and `status` updates inside the same transaction get blocked, so the RPC rolls back and the toast shows "Stroke save failed".
 
-## 1. Single additive migration
+## Fix (single migration, surgical, additive)
 
-### 1a. Evidence validity columns
+No frontend or edge-function changes. No new tables, columns, or policies. Only rewrite the two existing auto-advance trigger functions to respect canonical vocabulary and adjacency.
 
-```sql
-ALTER TABLE clearance_evidence
-  ADD COLUMN evidence_valid boolean NOT NULL DEFAULT true,
-  ADD COLUMN invalidated_at timestamptz,
-  ADD COLUMN invalidated_by uuid,
-  ADD COLUMN invalidation_reason text;
-```
+### 1. `auto_advance_item_phase`
 
-Evidence is valid iff `verified_at IS NOT NULL AND evidence_valid = true AND invalidated_at IS NULL`. No clock-based expiry anywhere.
+Stop emitting non-adjacent target phases.
 
-### 1b. State vocabulary CHECKs (`NOT VALID` → `VALIDATE CONSTRAINT`)
+- Cutting complete + `bend_type = 'bend'`: set phase to `cut_done` (already adjacency-valid from `queued`/`cutting`).
+- Cutting complete + straight bar: set phase to `clearance` (adjacency-valid from `queued`/`cutting`; matches the new clearance-before-complete intent — straight bars no longer skip clearance).
+- Bending complete: set phase to `clearance` (unchanged, already adjacency-valid from `cut_done`).
 
-```text
-cut_plan_items.phase ∈ {
-  queued, cutting, bent, cut_done, clearance, cleared, zoned,
-  loading, loaded, ready_for_pickup, picked_up,
-  ready_for_delivery, driver_assigned, in_transit, delivered,
-  complete, closed
-}
+### 2. `auto_advance_plan_status`
 
-bundles.status ∈ {
-  building, ready_for_clearance, cleared, zoned,
-  loading, loaded, ready_for_pickup, picked_up,
-  ready_for_delivery, driver_assigned, in_transit, delivered,
-  closed, created  -- legacy alias
-}
+Rewrite to walk allowed adjacency hops and to use only canonical `cut_plans` statuses.
 
-cut_plans.status ∈ {
-  planning, draft, queued, in_production, ready_for_clearance,
-  cleared, ready_for_release, released,
-  ready_for_delivery, driver_assigned, in_transit, delivered,
-  completed, archived
-}
-```
+Logic:
 
-### 1c. Adjacency triggers (`BEFORE UPDATE`)
+- Compute a target canonical status from item aggregate:
+  - all items in `clearance`/`cleared`/beyond → `ready_for_clearance`
+  - all items in `cut_done`/`bent`/`clearance`/beyond → `in_production`
+  - any item past `queued` → `in_production`
+  - otherwise → no change
+- Never auto-advance to `completed`. Completion stays a deliberate downstream step (clearance → release → delivered → completed) and is no longer fired by item progress alone. This matches the new gate's intent and avoids the `draft → completed` jump.
+- Walk current → target one hop at a time using the same adjacency map as the gate. Each `UPDATE cut_plans SET status = next_hop` passes the gate because each hop is adjacency-valid. No override flag, no `app.override_reason` abuse.
+- Remove all references to legacy `cut_done` as a `cut_plans` status.
 
-Three `validate_<entity>_transition` functions. After `loaded`, two parallel branches:
+### 3. Backfill
 
-```text
-loaded → ready_for_pickup → picked_up → closed
-loaded → ready_for_delivery → driver_assigned → in_transit → delivered → closed
-```
+Re-run a phase no-op on one item per existing plan (same pattern as `20260420185509`) so plans currently sitting on `cut_done` or other legacy statuses are re-evaluated into canonical statuses through the new walker.
 
-Legacy bridges accepted: `cut_done → clearance`, `cut_done → bent`, `created → building`.
+## Validation
 
-Override path: `current_setting('app.override_reason', true)` non-empty AND caller has `admin` or `shop_supervisor` → allowed, logged.
+1. In preview, on the GENSCO DTX 400 10M station, record a stroke on MARK A1001 — the toast `WORKFLOW_GATE_ADJACENCY: cut_plans draft → completed not allowed` must not appear and the run must complete normally.
+2. `select status from cut_plans where id = <that plan>` — value is a canonical status (`in_production` or `ready_for_clearance`), not `cut_done` or a stuck `draft`.
+3. `select phase from cut_plan_items where cut_plan_id = <that plan>` — straight items land in `clearance`, bend items in `cut_done`; no item is in `complete` purely from cutting.
+4. Manual override path (`workflow_override_transition`) and clearance evidence gate remain untouched and still enforce on any explicit transition into `cleared`/`completed`.
 
-### 1d. Clearance gate on the ENTITY transition (correction #5)
+## Non-goals
 
-`validate_cut_plan_item_transition` blocks `phase → cleared` unless the joined `clearance_evidence` row satisfies:
-
-1. `material_photo_url IS NOT NULL`
-2. `tag_scan_url IS NOT NULL` OR `verification_state = 'manual_verified'`
-3. `verified_by IS NOT NULL AND verified_at IS NOT NULL`
-4. `evidence_valid = true AND invalidated_at IS NULL`
-5. Confidence matrix:
-   - `ai_confidence >= 0.95` → auto-pass
-   - `0.70 ≤ ai_confidence < 0.95` → require approved `manual_review_decisions` row
-   - `ai_confidence < 0.70` OR NULL → blocked
-
-`validate_bundle_transition` applies the same check to every item linked to a bundle moving to `cleared`.
-
-A lighter trigger on `clearance_evidence` keeps fields 1–4 enforced when `status → cleared`, but the authoritative release decision lives on the entity transition.
-
-### 1e. Cutter / Pool gates
-
-In `validate_cut_plan_item_transition`:
-- `queued → cutting` requires associated `machine_runs` row (linkage check; fallback `cut_plans.status IN ('in_production','queued')` flagged in audit).
-- `bent → clearance` and `cut_done → clearance` require `bend_completed_pieces = total_pieces`.
-
-### 1f. New tables
-
-```sql
-public.workflow_overrides (
-  id uuid pk default gen_random_uuid(),
-  company_id uuid not null,
-  actor_id uuid not null,
-  entity_type text not null check (entity_type in
-    ('cut_plan_item','bundle','cut_plan','clearance_evidence')),
-  entity_id uuid not null,
-  from_state text,
-  to_state text not null,
-  reason text not null check (length(reason) >= 10),
-  created_at timestamptz not null default now()
-);
-
-public.manual_review_decisions (
-  id uuid pk default gen_random_uuid(),
-  company_id uuid not null,
-  evidence_id uuid not null references clearance_evidence(id) on delete cascade,
-  reviewer_id uuid not null,
-  decision text not null check (decision in ('approved','rejected')),
-  reason text,
-  created_at timestamptz not null default now()
-);
-```
-
-GRANTs: `SELECT, INSERT` to `authenticated`; `ALL` to `service_role`.
-RLS: SELECT via `is_company_member(company_id)`.
-- `workflow_overrides` INSERT: `auth.uid() = actor_id` AND (`has_role(auth.uid(),'admin') OR has_role(auth.uid(),'shop_supervisor')`).
-- `manual_review_decisions` INSERT: `auth.uid() = reviewer_id` AND (`has_role(auth.uid(),'admin') OR has_role(auth.uid(),'shop_supervisor') OR has_role(auth.uid(),'workshop')`) — all three roles already exist in the `app_role` enum.
-
-### 1g. State alias view
-
-```sql
-create view public.entity_state_v with (security_invoker=true) as
-  select id, company_id, 'cut_plan_item' as entity_type, phase as state from cut_plan_items
-  union all select id, company_id, 'bundle', status from bundles
-  union all select id, company_id, 'cut_plan', status from cut_plans;
-```
-
-### 1h. Override RPC
-
-```sql
-create function public.workflow_override_transition(
-  _entity_type text, _entity_id uuid, _to_state text, _reason text
-) returns void
-language plpgsql security definer set search_path = public;
-```
-
-1. Verify caller has `admin` or `shop_supervisor`.
-2. Validate `length(_reason) >= 10`.
-3. INSERT `workflow_overrides` row.
-4. `PERFORM set_config('app.override_reason', _reason, true);`
-5. UPDATE the target table's state column to `_to_state`.
-
-## 2. Edge function alignment
-
-Surgical only — `manage-inventory`, `manage-bend` (`complete-bend`, `start-bend`), and clearance/loading mutation paths: keep current UPDATE, catch trigger errors and re-raise with `WORKFLOW_GATE_*` codes for friendly frontend messages. No business-logic rewrites.
-
-## 3. Frontend (minimal)
-
-- New `src/components/shopfloor/OverrideReasonDialog.tsx` — reuses `dialog.tsx`. Reason ≥10 chars. Calls `workflow_override_transition`. Visible only when `useUserRole()` returns `admin` or `shop_supervisor`.
-- Clearance station: catch `WORKFLOW_GATE_*`, show inline blocker + role-gated "Request supervisor override" button.
-- **PickupStation display (correction #4):**
-  - Manifest-level **badge** at top (single state badge).
-  - **Operational summary line** directly under it:
-    `{loadedCount} loaded · {missingCount} missing · {exceptionCount} exceptions`
-  - Per-item states collapsed inside an expandable **Details** section (closed by default). No per-item badges in the summary view.
-  - Counts derived client-side from existing item state data; no new endpoints.
-- No other redesign.
-
-## 4. Regression tests (`tests/regression/shopfloor/`)
-
-- `state-transition-adjacency.test.ts` — invalid jumps rejected; legacy bridges allowed; delivery branch reachable from `loaded`.
-- `clearance-gate-entity.test.ts` — item/bundle transition to `cleared` blocked when any of (photo, tag/manual, verified_by/at, evidence_valid, invalidated_at) fail; confidence-matrix branches.
-- `evidence-validity.test.ts` — invalidated evidence (`evidence_valid=false` or `invalidated_at` set) blocks transition; no time-based expiry.
-- `workflow-override-permissions.test.ts` — non-admin/non-supervisor blocked from RPC; reason <10 chars rejected; success logs `workflow_overrides` row.
-- `cutter-pool-gates.test.ts` — `queued→cutting` without machine_run blocked; `bent→clearance` with incomplete bend blocked.
-- `pickup-summary-render.test.tsx` — Pickup view renders manifest badge + summary line; per-item badges only inside expanded Details.
-
-## 5. Phase 1 gap audit (deliverable, after migration + tests pass)
-
-`docs/engineering/phase1-gap-audit.md` — maps the Phase 1 spec's 12 sections (Pool, Stations, Cutter, Clearance, Loading, Packing Slip, Pickup, Delivery, Inventory, Camera AI, Audit, AI Automation) against current code as EXISTS / PARTIAL / MISSING with file refs. No code changes from the audit in this pass.
-
-## Execution order (build mode)
-
-1. Run single migration.
-2. Update edge functions to surface `WORKFLOW_GATE_*` error codes.
-3. Add `OverrideReasonDialog`; wire into Clearance station; update Pickup display.
-4. Add regression tests; `bunx vitest run tests/regression/shopfloor`.
-5. Write `phase1-gap-audit.md`.
-
-## Risk & rollback
-
-- All schema changes additive: rollback = `DROP TRIGGER` + `DROP FUNCTION` + `DROP CONSTRAINT` + `DROP TABLE workflow_overrides, manual_review_decisions` + `ALTER TABLE clearance_evidence DROP COLUMN evidence_valid, invalidated_at, invalidated_by, invalidation_reason`. No row mutation.
-- Legacy values (`cut_done`, `complete`, `created`) explicitly allowed so 733 existing rows validate.
-- Override RPC provides escape hatch for operational edge cases, all logged with mandatory reason.
-
-Awaiting approval to run the migration.
+- No changes to `CutterStationView`, `ClearanceCard`, `PickupStation`, edge functions, RLS, roles, or the `workflow_overrides` / `manual_review_decisions` tables.
+- No new statuses or columns.
+- No rename of existing objects.
+- Completion of a plan still requires the proper clearance → release → delivery chain; this fix only stops the illegal auto-jump, it does not invent a shortcut.
