@@ -14,6 +14,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { ClearanceCard } from "@/components/clearance/ClearanceCard";
+import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
+import { Zap, Hand } from "lucide-react";
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
