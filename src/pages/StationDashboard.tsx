@@ -5,7 +5,7 @@ import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { LiveOpsTicker } from "@/components/shopfloor/LiveOpsTicker";
-import { ProductionQueuePanel } from "@/components/shopfloor/ProductionQueuePanel";
+
 import { ActiveProductionPanel } from "@/components/shopfloor/ActiveProductionPanel";
 
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
@@ -228,15 +228,13 @@ export default function StationDashboard() {
             <MachineSelector machines={filteredMachines} />
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <ProductionQueuePanel lanes={projectLanes} />
+              <WorkOrderQueueSection
+                workOrders={workOrders}
+                onUpdateStatus={updateStatus}
+                onStatusChanged={(name, action) => toast({ title: action, description: name })}
+              />
               <ActiveProductionPanel lanes={projectLanes} />
             </div>
-
-            <WorkOrderQueueSection
-              workOrders={workOrders}
-              onUpdateStatus={updateStatus}
-              onStatusChanged={(name, action) => toast({ title: action, description: name })}
-            />
           </>
         )}
       </div>
