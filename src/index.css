@@ -448,3 +448,75 @@ body.hide-floating-widgets [data-live-chat-widget="true"] {
 
 .ad-tx-overlay-black { animation: ad-flash-black var(--ad-tx-dur, 500ms) ease-in-out forwards; }
 .ad-tx-overlay-white { animation: ad-flash-white var(--ad-tx-dur, 500ms) ease-in-out forwards; }
+
+/* ============================================================
+   Industrial command-center theme — scoped to .industrial
+   Ported from REBAR OS Core. Used inside Shop Floor.
+   All colors HSL. Additive — does not affect non-.industrial UI.
+   ============================================================ */
+.industrial {
+  --background: 222 28% 7%;
+  --foreground: 205 20% 92%;
+  --card: 220 22% 10%;
+  --card-foreground: 205 20% 92%;
+  --popover: 220 24% 9%;
+  --popover-foreground: 205 20% 92%;
+  --primary: 184 86% 48%;
+  --primary-foreground: 220 35% 8%;
+  --secondary: 218 18% 14%;
+  --secondary-foreground: 205 20% 92%;
+  --muted: 220 17% 13%;
+  --muted-foreground: 212 13% 64%;
+  --accent: 38 62% 18%;
+  --accent-foreground: 38 96% 74%;
+  --destructive: 0 72% 52%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 152 66% 43%;
+  --success-foreground: 220 35% 8%;
+  --warning: 38 94% 56%;
+  --warning-foreground: 220 35% 8%;
+  --info: 199 86% 56%;
+  --info-foreground: 220 35% 8%;
+  --border: 218 16% 18%;
+  --input: 218 17% 15%;
+  --ring: 184 86% 48%;
+  --radius: 0.5rem;
+
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  color-scheme: dark;
+  position: relative;
+}
+
+/* Thin teal top accent rule across the workspace top edge */
+.industrial::before {
+  content: "";
+  position: sticky;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: block;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    hsl(var(--primary) / 0) 0%,
+    hsl(var(--primary) / 0.78) 20%,
+    hsl(var(--primary)) 50%,
+    hsl(var(--primary) / 0.78) 80%,
+    hsl(var(--primary) / 0) 100%
+  );
+  pointer-events: none;
+  z-index: 5;
+}
+
+.industrial .ind-grid-bg {
+  background-image:
+    linear-gradient(hsl(var(--border) / 0.32) 1px, transparent 1px),
+    linear-gradient(90deg, hsl(var(--border) / 0.32) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.industrial .ind-glow {
+  box-shadow: 0 0 0 1px hsl(var(--primary) / 0.22), 0 0 24px -10px hsl(var(--primary) / 0.4);
+}
+
