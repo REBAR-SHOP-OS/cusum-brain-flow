@@ -106,65 +106,6 @@ export function takePrimedMobileAudio(): HTMLAudioElement | null {
   return audio;
 }
 
-/**
- * Create and prime an Audio element specifically for later TTS blob playback.
- * Call this SYNCHRONOUSLY inside a user-gesture handler (e.g. mic tap).
- * After async TTS fetch, call `swapAndPlay(audio, blob)` to play.
- */
-export function createPrimedAudio(): HTMLAudioElement {
-  const audio = new Audio();
-  // Set attributes that help mobile playback
-  audio.setAttribute("playsinline", "true");
-  audio.preload = "auto";
-  audio.volume = 1.0;
-  // Prime with silent WAV so the element is "gesture-unlocked"
-  audio.src = SILENT_WAV;
-  audio.play().then(() => {
-    audio.pause();
-    audio.currentTime = 0;
-    console.log("[audioPlayer] primed audio element for TTS");
-  }).catch(() => {
-    // Outside gesture — will still try to play later
-  });
-  return audio;
-}
-
-/**
- * Swap an already-primed Audio element's src to a real blob and play it.
- * Returns a promise that resolves when playback ends or rejects on error.
- */
-export function swapAndPlay(audio: HTMLAudioElement, blob: Blob): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(blob);
-    audio.src = url;
-    audio.volume = 1.0;
-    audio.onended = () => {
-      URL.revokeObjectURL(url);
-      resolve();
-    };
-    audio.onerror = (e) => {
-      URL.revokeObjectURL(url);
-      reject(e);
-    };
-    // Wait for enough data to play
-    const tryPlay = () => {
-      audio.play().then(() => {
-        console.log("[audioPlayer] swapAndPlay: playing");
-      }).catch((err) => {
-        console.warn("[audioPlayer] swapAndPlay play() blocked:", err?.name);
-        reject(err);
-      });
-    };
-    if (audio.readyState >= 2) {
-      tryPlay();
-    } else {
-      audio.oncanplay = () => {
-        audio.oncanplay = null;
-        tryPlay();
-      };
-    }
-  });
-}
 
 /**
  * Play a notification sound via AudioContext (bypasses autoplay restrictions

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
+import { createContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { toast } from "sonner";
 
 interface ChatPanelContextValue {
@@ -61,10 +61,4 @@ export function ChatPanelProvider({ children }: { children: ReactNode }) {
       {children}
     </ChatPanelContext.Provider>
   );
-}
-
-export function useChatPanel() {
-  const ctx = useContext(ChatPanelContext);
-  if (!ctx) throw new Error("useChatPanel must be used within ChatPanelProvider");
-  return ctx;
 }

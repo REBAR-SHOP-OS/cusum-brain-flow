@@ -30,10 +30,3 @@ export function canWriteToTeamHubChannel(
 export function formatForwardPrefix(senderName?: string | null) {
   return `↪ Forwarded from ${senderName || "Unknown"}:\n`;
 }
-
-export function buildRealtimeChannelName(
-  scope: string,
-  ...parts: Array<string | null | undefined>
-) {
-  return [scope, ...parts.filter(Boolean)].join("-");
-}

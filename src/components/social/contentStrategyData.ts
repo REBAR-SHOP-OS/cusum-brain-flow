@@ -339,24 +339,3 @@ export function getEventsForMonth(month: number): CalendarEvent[] {
   return yearlyEvents.filter((e) => e.month === month);
 }
 
-/** Get upcoming events within the next N days from a given date */
-export function getUpcomingEvents(fromDate: Date, days: number = 14): CalendarEvent[] {
-  const year = fromDate.getFullYear();
-  const endDate = new Date(fromDate);
-  endDate.setDate(endDate.getDate() + days);
-
-  return yearlyEvents.filter((e) => {
-    const eventDate = new Date(year, e.month - 1, e.day);
-    // If event already passed this year, check next year
-    if (eventDate < fromDate) {
-      eventDate.setFullYear(year + 1);
-    }
-    return eventDate >= fromDate && eventDate <= endDate;
-  });
-}
-
-/** Get today's content pillar based on day of week */
-export function getTodaysPillar(date: Date = new Date()): WeekdayTheme | null {
-  const dayIndex = date.getDay(); // 0=Sun, 1=Mon...
-  return weeklySchedule.find((w) => w.dayIndex === dayIndex) || null;
-}
