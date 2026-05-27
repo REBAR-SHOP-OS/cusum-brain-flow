@@ -205,8 +205,8 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
 
   // Fetch user email once for domain check
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUserEmail(data.user?.email ?? null);
+    getCurrentUser().then((user) => {
+      setUserEmail(user?.email ?? null);
     });
   }, []);
   const panelRef = useRef<HTMLDivElement>(null);
