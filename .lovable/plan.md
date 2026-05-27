@@ -1,95 +1,71 @@
-## Goal
+## ریشه‌ی مشکل (تأیید شده از DB + کد)
 
-In the Work Order Queue (Station Dashboard), clicking **Start** on a WO should:
-- auto-assign every one of its production tasks to the first **idle** machine of the matching type,
-- make those tasks show up in **Active Production** and on the **machine cards** (running pill),
-- flip the WO to `in_progress`.
+دو ردیف LinkedIn در `integration_connections`:
+- `scope = "email, openid, profile, w_member_social"` (سه scope حیاتی drop شده)
+- `refresh_token = null` (به‌خاطر نبود `offline_access`)
+- `organization_ids = {}` (به‌خاطر نبود `r_organization_social`)
+- `status = "error"`, expired
 
-Clicking **Pause** on a running WO should:
-- send the tasks back to the queue on the **same machine** (status `queued`, position kept, `qty_completed` untouched),
-- flip the WO to `on_hold`.
+کد `linkedin-oauth` همه‌ی scope های لازم را request می‌کند، ولی LinkedIn فقط scopeهایی را اعطا می‌کند که در LinkedIn Developer Portal برای آن App تأیید شده باشند. وقتی Marketing Developer Platform و Sign In with LinkedIn (OIDC با offline_access) تأیید نشده باشد، LinkedIn سکوت می‌کند و فقط scopeهای پایه را برمی‌گرداند. در نتیجه:
+- توکن ۶۰ روزه بدون refresh ⇒ خطای انقضا تکرار می‌شود.
+- هیچ Company Page کشف نمی‌شود ⇒ پابلیش روی Rebar.shop / Rebar.shop Ontario / Setter همیشه fail می‌کند.
 
-Today, the Start/Pause buttons only flip `work_orders.status`. They never touch `machine_queue_items` or `production_tasks`, which is why nothing appears under Active Production or on machine cards.
+این یک باگ کد نیست؛ یک scope-drop خاموش از طرف LinkedIn است که در حال حاضر بی‌صدا ذخیره می‌شود و کاربر را در حلقه‌ی Reconnect بی‌نتیجه گیر می‌اندازد.
 
-## What changes
+## هدف اصلاح
 
-### 1. New helper — `src/lib/workOrderDispatch.ts`
+۱) جلوگیری از ذخیره‌ی یک کانکشن «نیمه‌سالم» (وقتی LinkedIn scope های لازم را drop کرده).
+۲) دادن پیام دقیق و قابل اقدام در لحظه‌ی connect، نه در لحظه‌ی publish.
+۳) جلوگیری از پاک شدن سابق کانکشن‌های خوب با connectهای بعدی ناقص.
 
-Pure service module, no UI. Two functions:
+## تغییرات (همگی روی `supabase/functions/linkedin-oauth/index.ts` — جراحی، بدون تغییر معماری)
 
-```text
-startWorkOrder(workOrderId)
-  - load production_tasks for WO where status in ('pending','queued','on_hold')
-  - load machines for company (id, type, status)
-  - map task_type -> machine.type:
-      'cut'    -> 'cutter'
-      'bend'   -> 'bender'
-      'spiral' -> 'bender' (fallback)
-      other    -> first idle of any type
-  - for each task:
-      pick first IDLE machine of matching type (round-robin within the call so we don't
-        cram every task on the same machine when multiple are idle)
-      upsert machine_queue_items by task_id:
-        - if row exists (queued/running): UPDATE status='running', machine_id, updated_at
-        - else: INSERT row (company_id, task_id, machine_id, work_order_id,
-          project_id = work_order_id, status='running', position = max(position)+1)
-      UPDATE production_tasks.status = 'in_progress'
-  - return { ok, assigned: [{taskId, machineId}], skipped: [...] }
+### ۱) Validate scopes پس از token exchange (handleCallback)
+بعد از دریافت `tokens` و قبل از `upsert` در DB:
 
-pauseWorkOrder(workOrderId)
-  - UPDATE machine_queue_items SET status='queued'
-      WHERE work_order_id = $1 AND status = 'running'
-      (machine_id + position preserved — progress kept)
-  - UPDATE production_tasks SET status='pending'
-      WHERE work_order_id = $1 AND status = 'in_progress'
-  - return { ok }
-```
+- محاسبه‌ی `grantedScopes = Set(tokens.scope)`.
+- محاسبه‌ی `requestedScopes = ["openid","profile","email","w_member_social","w_organization_social","r_organization_social","offline_access"]`.
+- محاسبه‌ی `missing = requestedScopes.filter(s => !grantedScopes.has(s))`.
 
-Notes:
-- Unique index `idx_queue_task_active` already enforces one active row per task → safe to upsert.
-- No schema change needed; existing RLS (`Admin/workshop can manage queue items`) already governs writes.
-- `qty_completed` lives on `production_tasks` and is never touched here, so progress survives Pause.
+اگر `missing` خالی نبود:
+- کانکشن را با `status = "error"` و `error_message` دقیق ذخیره کن (شامل لیست scopeهای drop شده + لینک به اپ LinkedIn برای فعال کردن «Marketing Developer Platform» و «Sign In with LinkedIn using OIDC»).
+- redirect به `/integrations/callback` با `status=error&message=...` تا UI همان لحظه پیام را نمایش دهد.
+- توکن باطل هم نباید ذخیره شود اگر `access_token` فقط شخصی است و کاربر صریحاً شخصی نخواست (در غیر این صورت در گام بعدی کاربر دوباره گیج می‌شود).
 
-### 2. `useSupabaseWorkOrders` — extend the hook
+### ۲) محافظت در برابر overwrite شدن کانکشن سالم
+در `upsert` فعلی هر بار همه‌چیز جایگزین می‌شود؛ اگر کانکشن قبلی `organization_ids` داشت و callback جدید با scope ناقص آمده، orgها پاک می‌شوند. اصلاح: اگر `organization_ids` جدید خالی شد ولی قبلی پر بود، orgهای قبلی را **حفظ کن** و در `error_message` بنویس «orgهای قبلی حفظ شدند ولی scope جدید بدون r_organization_social است؛ پابلیش شرکتی ممکن است fail شود».
 
-Add two methods alongside `updateStatus`:
+### ۳) پیام خطای دقیق در `getLinkedInStatusError`
+وقتی `expires_at < now()` و `refresh_token == null` و scope فاقد `offline_access` است، علاوه بر متن فعلی، صراحتاً اضافه شود:
+> «LinkedIn App هنوز `offline_access` و `Marketing Developer Platform` را تأیید نکرده — Reconnect به‌تنهایی کافی نیست.»
 
-```text
-startWorkOrder(wo): calls workOrderDispatch.startWorkOrder, then updateStatus(wo, 'in_progress')
-                   invalidates ['production-queues'], ['station-data'], ['work-orders']
-pauseWorkOrder(wo): calls workOrderDispatch.pauseWorkOrder, then updateStatus(wo, 'on_hold')
-                   same invalidations
-```
+این متن در DM/Toast دیده می‌شود تا کاربر بداند دلیل تکرار خطا.
 
-Keep `updateStatus` as-is (still used for Complete).
+## تغییر در فرانت (یک خط)
 
-### 3. `WorkOrderQueueSection.tsx` — wire the buttons
+`src/hooks/usePublishPost.ts` خط ۶۳ — وقتی `linkedInStatus.status === "error"` با عبارت «`Marketing Developer Platform`» همراه است، toast را با variant: destructive و duration بلندتر نمایش بده تا کاربر زمان بخواند داشته باشد. (تغییر صرفاً UX، بدون منطق.)
 
-- `Start` button → `onStart(wo)` (was `onUpdateStatus(wo.id, 'in_progress')`)
-- `Pause` button → `onPause(wo)` (was `onUpdateStatus(wo.id, 'on_hold')`)
-- `Complete` button → unchanged (`onUpdateStatus(wo.id, 'completed')`)
-- Toast on Start: "Started — assigned to N machine(s)" or "No idle machines available" when nothing got assigned.
+## اقدامات خارج از کد (در گزارش به کاربر — نه در پلن اجرایی)
 
-Update prop types accordingly; `StationDashboard` passes the new handlers from the hook.
+پس از deploy، باید روی LinkedIn Developer Portal برای App مربوطه:
+1. به Products → درخواست **Sign In with LinkedIn using OpenID Connect** (شامل `offline_access`).
+2. به Products → درخواست **Share on LinkedIn** (شامل `w_member_social` — قبلاً دارد).
+3. به Products → درخواست **Community Management API** یا **Marketing Developer Platform** (برای `r_organization_social` + `w_organization_social`).
 
-### 4. Failure & edge cases
+تا تأیید نشدن این محصولات، حتی پس از این patch هم پابلیش روی Company Pages ممکن نخواهد بود — ولی کاربر **فوراً** خواهد فهمید چرا و چه باید بکند، به‌جای دیدن خطای مبهم در لحظه‌ی پابلیش.
 
-- WO has zero tasks → toast "No tasks to dispatch", do NOT flip WO to in_progress.
-- No idle machine of the required type → leave that task in `queued` on the closest idle machine of any type; if none at all, toast "All machines busy — queued"; still flip WO to in_progress only if at least one task was placed running.
-- RLS failure on queue insert → roll back WO status optimistic update, surface "Failed to dispatch — check permissions".
-- Pause when no running queue rows exist → still flip WO to on_hold (idempotent).
+## فایل‌های اصلاحی
+
+- `supabase/functions/linkedin-oauth/index.ts` (callback + getLinkedInStatusError)
+- `src/hooks/usePublishPost.ts` (یک خط toast)
 
 ## Verification
 
-- Click Start on a WO with cut + bend tasks → row appears in Active Production with the WO name, and the matching CUTTER and BENDER machine cards show a running task.
-- Click Pause → row disappears from Active Production, machine cards return to idle, WO chip flips to ON HOLD, but `qty_completed` on the tasks is unchanged (verify via a quick DB read).
-- Click Start again → same machines pick it back up (position preserved).
+- `psql` بررسی ردیف‌های `integration_connections` پس از یک Reconnect واقعی: یا `status=connected` با scope کامل، یا `status=error` با پیام جدید + orgهای قبلی حفظ شده.
+- لاگ edge function `linkedin-oauth` پس از callback باید شامل `[linkedin-oauth] Scopes dropped by provider: [...]` باشد در صورت drop.
 
-## Files touched
+## محدوده‌ی بسته
 
-- `src/lib/workOrderDispatch.ts` (new)
-- `src/hooks/useSupabaseWorkOrders.ts` (add startWorkOrder, pauseWorkOrder)
-- `src/components/shopfloor/WorkOrderQueueSection.tsx` (button wiring + props)
-- `src/pages/StationDashboard.tsx` (pass new handlers)
-
-No DB migration, no new tables, no RLS changes.
+- نه تغییر در `social-publish` (پیام‌های آن کافی است).
+- نه تغییر در DB schema.
+- نه refactor؛ فقط دو الحاق به handleCallback و یک خط ادیت پیام.
