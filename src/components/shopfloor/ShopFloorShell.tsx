@@ -37,8 +37,8 @@ export function ShopFloorShell({ children }: { children: ReactNode }) {
   const active = detectActive(location.pathname);
 
   return (
-    <div className="industrial min-h-screen">
-      <div className="px-4 pt-4 sm:px-6 lg:px-8">
+    <div className="industrial flex h-full min-h-0 flex-col">
+      <div className="shrink-0 px-4 pt-4 sm:px-6 lg:px-8">
         <IndustrialTabs<string>
           value={active}
           onChange={(id) => {
@@ -48,7 +48,7 @@ export function ShopFloorShell({ children }: { children: ReactNode }) {
           items={SHOP_FLOOR_TABS.map((item) => ({ id: item.id, label: item.label }))}
         />
       </div>
-      <div>{children}</div>
+      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }
