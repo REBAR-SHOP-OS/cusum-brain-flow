@@ -178,7 +178,6 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const planLocations = useMemo(() => {
     const map = new Map<string, { label: string; tone: string }>();
     if (!phaseRows) return map;
-    // phases in production order
     const order = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
     const labels: Record<string, string> = {
       queued: "QUEUED",
@@ -196,29 +195,28 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
       clearance: "text-purple-400",
       complete: "text-green-500",
     };
-    const buckets = new Map<string, Record<string, number>>();
+    const buckets = new Map<string, { phases: Record<string, number>; total: number; done: number }>();
     for (const r of phaseRows as any[]) {
       const id = r.cut_plan_id as string;
-      if (!buckets.has(id)) buckets.set(id, {});
+      if (!buckets.has(id)) buckets.set(id, { phases: {}, total: 0, done: 0 });
       const b = buckets.get(id)!;
       const ph = (r.phase as string) || "queued";
-      b[ph] = (b[ph] || 0) + (r.total_pieces || 0);
+      const pieces = r.total_pieces || 0;
+      b.phases[ph] = (b.phases[ph] || 0) + pieces;
+      b.total += pieces;
+      b.done += r.completed_pieces || 0;
     }
     for (const [id, b] of buckets) {
-      // Furthest non-complete phase that has any items; fallback to highest with items
-      let chosen = "queued";
-      for (const ph of order) {
-        if ((b[ph] || 0) > 0) chosen = ph;
-        if (ph !== "complete" && (b[ph] || 0) > 0) chosen = ph;
-      }
-      // Prefer the deepest active (non-complete) phase if present
-      const active = order.filter(p => p !== "complete" && (b[p] || 0) > 0);
-      if (active.length > 0) chosen = active[active.length - 1];
-      else if ((b["complete"] || 0) > 0) chosen = "complete";
-      map.set(id, { label: labels[chosen], tone: tones[chosen] });
+      const active = order.filter(p => p !== "complete" && (b.phases[p] || 0) > 0);
+      const chosen = active.length > 0
+        ? active[active.length - 1]
+        : ((b.phases["complete"] || 0) > 0 ? "complete" : "queued");
+      const progress = b.total > 0 ? ` ${b.done}/${b.total}` : "";
+      map.set(id, { label: `${labels[chosen]}${progress}`, tone: tones[chosen] });
     }
     return map;
   }, [phaseRows]);
+
 
   // Dimension columns
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"];
