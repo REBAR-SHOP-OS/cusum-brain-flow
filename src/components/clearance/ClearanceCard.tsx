@@ -241,6 +241,10 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             status: "cleared",
             verified_by: userId,
             verified_at: new Date().toISOString(),
+            verification_state: "complete",
+            evidence_valid: true,
+            invalidated_at: null,
+            ai_confidence: 1.0,
           })
           .eq("id", item.evidence_id);
         if (evErr) throw evErr;
@@ -252,9 +256,13 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             status: "cleared",
             verified_by: userId,
             verified_at: new Date().toISOString(),
+            verification_state: "complete",
+            evidence_valid: true,
+            ai_confidence: 1.0,
           });
         if (evErr) throw evErr;
       }
+
 
       const { error: phErr } = await supabase
         .from("cut_plan_items")
