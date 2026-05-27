@@ -44,7 +44,7 @@ export function LiveOpsTicker({
   lanes,
   readyCounts,
 }: {
-  machines: MachineWithStatus[];
+  machines: LiveMachine[];
   lanes: ProjectLane[];
   readyCounts: { total: number; pickup: number; loading: number; delivery: number };
 }) {
