@@ -185,7 +185,15 @@ function WorkOrderRow({ wo, onUpdateStatus, onStart, onPause, onStatusChanged }:
           <>
             <Button variant="outline" size="sm"
               className="h-7 text-[10px] gap-1 px-2.5 font-bold border-warning/40 text-warning hover:bg-warning/10"
-              onClick={async () => { const ok = await onUpdateStatus(wo.id, "on_hold"); if (ok) onStatusChanged(wo.work_order_number, "Paused"); else onStatusChanged(wo.work_order_number, "Failed to pause — check permissions"); }}>
+              onClick={async () => {
+                if (onPause) {
+                  const r = await onPause(wo.id);
+                  onStatusChanged(wo.work_order_number, r.ok ? `Paused — ${r.assigned} task(s) back to queue` : (r.reason || "Failed to pause"));
+                } else {
+                  const ok = await onUpdateStatus(wo.id, "on_hold");
+                  onStatusChanged(wo.work_order_number, ok ? "Paused" : "Failed to pause — check permissions");
+                }
+              }}>
               <Pause className="w-3 h-3" /> Pause
             </Button>
             <Button variant="outline" size="sm"
@@ -196,7 +204,19 @@ function WorkOrderRow({ wo, onUpdateStatus, onStart, onPause, onStatusChanged }:
           </>
         ) : wo.status !== "completed" ? (
           <Button size="sm" className="h-7 text-[10px] gap-1 px-2.5 font-bold"
-            onClick={async () => { const ok = await onUpdateStatus(wo.id, "in_progress"); if (ok) onStatusChanged(wo.work_order_number, "Started"); else onStatusChanged(wo.work_order_number, "Failed to start — check permissions"); }}>
+            onClick={async () => {
+              if (onStart) {
+                const r = await onStart(wo.id);
+                if (r.ok) {
+                  onStatusChanged(wo.work_order_number, `Started — assigned ${r.assigned}/${r.total} task(s)`);
+                } else {
+                  onStatusChanged(wo.work_order_number, r.reason || "Failed to start — check permissions");
+                }
+              } else {
+                const ok = await onUpdateStatus(wo.id, "in_progress");
+                onStatusChanged(wo.work_order_number, ok ? "Started" : "Failed to start — check permissions");
+              }
+            }}>
             <Play className="w-3 h-3" /> Start
           </Button>
         ) : null}
