@@ -190,8 +190,8 @@ export function PostReviewPanel({
 
   // Fetch current user email for Neel approval gate
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setCurrentUserEmail(data.user?.email ?? null);
+    getCurrentUser().then((user) => {
+      setCurrentUserEmail(user?.email ?? null);
     });
   }, []);
 
