@@ -223,12 +223,6 @@ export default function StationDashboard() {
               readyCounts={readyCounts}
             />
 
-            <WorkOrderQueueSection
-              workOrders={workOrders}
-              onUpdateStatus={updateStatus}
-              onStatusChanged={(name, action) => toast({ title: action, description: name })}
-            />
-
             <ActiveProductionHub machines={filteredMachines} activePlans={activePlans} />
 
             <MachineSelector machines={filteredMachines} />
@@ -237,6 +231,12 @@ export default function StationDashboard() {
               <ProductionQueuePanel lanes={projectLanes} />
               <ActiveProductionPanel lanes={projectLanes} />
             </div>
+
+            <WorkOrderQueueSection
+              workOrders={workOrders}
+              onUpdateStatus={updateStatus}
+              onStatusChanged={(name, action) => toast({ title: action, description: name })}
+            />
           </>
         )}
       </div>
