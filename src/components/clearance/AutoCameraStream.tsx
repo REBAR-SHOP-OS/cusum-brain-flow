@@ -462,15 +462,37 @@ export function AutoCameraStream({
                 <div className="w-20 h-20 rounded-full border-4 border-black/80" />
               </button>
             ) : (
-              // Tag mode: auto-capture only. Show passive indicator.
-              <div
-                className={`w-24 h-24 rounded-full flex items-center justify-center border-4 ${
-                  hint === "ready" ? "border-emerald-400 bg-emerald-400/20" : "border-white/40 bg-black/40"
+              // Tag mode: auto-capture is primary, but expose a manual shutter
+              // so the operator can force-capture dirty / faded / bent tags
+              // that don't trigger auto.
+              <button
+                type="button"
+                onClick={async () => {
+                  if (disabled || capturing) return;
+                  const v = videoRef.current;
+                  if (!v || !v.videoWidth) return;
+                  setCapturing(true);
+                  try {
+                    const sx = v.videoWidth * ROI.x;
+                    const sy = v.videoHeight * ROI.y;
+                    const sw = v.videoWidth * ROI.w;
+                    const sh = v.videoHeight * ROI.h;
+                    const blob = await preprocessRoiForOcr(v, sx, sy, sw, sh);
+                    if (blob) onCapture(blob);
+                  } finally {
+                    setTimeout(() => setCapturing(false), 250);
+                  }
+                }}
+                disabled={disabled || capturing}
+                className={`w-24 h-24 rounded-full flex items-center justify-center border-4 transition-colors active:scale-95 ${
+                  hint === "ready"
+                    ? "border-emerald-400 bg-emerald-400/30"
+                    : "border-white/70 bg-black/40"
                 }`}
-                aria-hidden
+                aria-label="Force capture tag"
               >
-                <div className={`w-3 h-3 rounded-full ${hint === "ready" ? "bg-emerald-400 animate-pulse" : "bg-white/60"}`} />
-              </div>
+                <div className={`w-3 h-3 rounded-full ${hint === "ready" ? "bg-emerald-400 animate-pulse" : "bg-white/80"}`} />
+              </button>
             )}
             <div className="w-14 h-14" />
           </div>
