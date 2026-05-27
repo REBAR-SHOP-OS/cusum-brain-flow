@@ -25,6 +25,8 @@ type MetaError = {
 };
 
 const PROCESSING_PUBLISH_DELAYS_MS = [15000, 30000, 45000, 60000, 60000, 60000];
+const INSTAGRAM_VIDEO_SPEC_ERROR =
+  "Instagram Reels require a real MP4 video encoded as H.264 with AAC audio. This file is not Instagram-ready; re-render/export it as MP4 before publishing to Instagram.";
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -87,18 +89,39 @@ function isSpuriousStatusError(error: MetaError | undefined) {
   return error.code === 100 && error.error_subcode === 33;
 }
 
-async function detectVideoMedia(imageUrl: string) {
+async function detectMediaDetails(imageUrl: string) {
+  let contentType = "";
   let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
   if (!isVideo) {
     try {
       const head = await fetch(imageUrl, { method: "HEAD" });
-      const contentType = head.headers.get("content-type") || "";
+      contentType = head.headers.get("content-type") || "";
       isVideo = contentType.startsWith("video/");
     } catch {
       // Ignore HEAD failures and fall back to URL detection only.
     }
+  } else {
+    try {
+      const head = await fetch(imageUrl, { method: "HEAD" });
+      contentType = head.headers.get("content-type") || "";
+    } catch {
+      // Ignore HEAD failures and fall back to URL detection only.
+    }
   }
-  return isVideo;
+  return { isVideo, contentType };
+}
+
+function isClearlyUnsupportedInstagramVideo(imageUrl: string, contentType: string) {
+  const lowerUrl = imageUrl.toLowerCase();
+  const lowerType = contentType.toLowerCase();
+  return (
+    lowerUrl.includes(".webm") ||
+    lowerType.includes("webm") ||
+    lowerType.includes("matroska") ||
+    lowerType.includes("quicktime") ||
+    lowerType.includes("x-msvideo") ||
+    lowerType.includes("x-ms-wmv")
+  );
 }
 
 async function fetchContainerStatus(
@@ -172,8 +195,16 @@ export async function publishInstagramMedia({
     }
 
     const isStory = contentType === "story";
-    const isVideo = await detectVideoMedia(imageUrl);
+    const mediaDetails = await detectMediaDetails(imageUrl);
+    const isVideo = mediaDetails.isVideo;
     const requiresProcessing = isVideo || isStory;
+
+    if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
+      console.warn(
+        `${logPrefix} BLOCKED unsupported Instagram video: content_type=${mediaDetails.contentType || "unknown"}, url=${imageUrl}`,
+      );
+      return { error: INSTAGRAM_VIDEO_SPEC_ERROR };
+    }
 
     const containerBody: Record<string, string> = {
       access_token: accessToken,
@@ -284,8 +315,9 @@ export async function publishInstagramMedia({
           }
         } else if (statusCode === "ERROR") {
           return {
-            error:
-              "Instagram media processing failed. Try a different image/video.",
+            error: isVideo
+              ? `${INSTAGRAM_VIDEO_SPEC_ERROR} Instagram rejected this upload during processing.`
+              : "Instagram media processing failed. Try a different image/video.",
           };
         } else if (statusCode === "EXPIRED") {
           return {
