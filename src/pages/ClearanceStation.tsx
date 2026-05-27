@@ -27,9 +27,8 @@ export default function ClearanceStation() {
   // Track the active manifest by stable project key (project_id || "__unassigned__")
   // so it survives label/data changes after the last item is cleared.
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
-  // Cache the label of the active manifest so we can keep showing it even after
-  // the project group disappears from byProjectKey on completion.
   const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
+  const [autoMode, setAutoMode] = useState(false);
 
   // Resolve key → label/items from the live hook.
   const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
