@@ -62,7 +62,7 @@ export function usePickupOrders() {
   useEffect(() => {
     if (!companyId) return;
     const channel = supabase
-      .channel(`pickup-live-${companyId}`)
+      .channel(`pickup-live-${companyId}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "pickup_orders" }, () => fetchOrders())
       .on("postgres_changes", { event: "*", schema: "public", table: "pickup_order_items" }, () => {
         queryClient.invalidateQueries({ queryKey: ["pickup-items"] });

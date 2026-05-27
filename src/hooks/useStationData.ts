@@ -157,7 +157,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
     };
 
     const channel = supabase
-      .channel(`station-${machineId}`)
+      .channel(`station-${machineId}-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plan_items" },

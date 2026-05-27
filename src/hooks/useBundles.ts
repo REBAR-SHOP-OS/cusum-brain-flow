@@ -26,7 +26,7 @@ export function useBundles(statusFilter?: string) {
   useEffect(() => {
     if (!companyId) return;
     const channel = supabase
-      .channel(`bundles-${companyId}`)
+      .channel(`bundles-${companyId}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bundles" }, () => {
         queryClient.invalidateQueries({ queryKey: ["bundles", companyId] });
       })

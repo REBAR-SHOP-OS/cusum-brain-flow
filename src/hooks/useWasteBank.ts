@@ -29,7 +29,7 @@ export function useWasteBank(statusFilter?: string) {
   useEffect(() => {
     if (!companyId) return;
     const channel = supabase
-      .channel(`waste-bank-${companyId}`)
+      .channel(`waste-bank-${companyId}-${crypto.randomUUID()}`)
       .on("postgres_changes", {
         event: "*",
         schema: "public",

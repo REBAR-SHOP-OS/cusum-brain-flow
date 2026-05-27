@@ -267,10 +267,17 @@ export default function LoadingStation() {
           });
         if (slipErr) throw slipErr;
       } catch (innerErr) {
-        // Cleanup: set to pending (trigger blocks delete of non-pending), then delete
-        await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id);
+        // Cleanup: set to pending (trigger blocks delete of non-pending), then delete.
+        // .select('id') surfaces RLS-blocked cleanup as a warn so the failure isn't silent.
+        const stops = await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id).select("id");
+        if (stops.error || (stops.data && stops.data.length === 0)) {
+          console.warn("[LoadingStation] cleanup: delivery_stops delete blocked", stops.error?.message);
+        }
         await supabase.from("deliveries").update({ status: "pending" }).eq("id", delivery.id);
-        await supabase.from("deliveries").delete().eq("id", delivery.id);
+        const del = await supabase.from("deliveries").delete().eq("id", delivery.id).select("id");
+        if (del.error || (del.data && del.data.length === 0)) {
+          console.warn("[LoadingStation] cleanup: delivery delete blocked", del.error?.message);
+        }
         throw innerErr;
       }
 

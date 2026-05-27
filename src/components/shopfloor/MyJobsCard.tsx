@@ -28,14 +28,17 @@ export function MyJobsCard() {
     enabled: !!profile?.full_name,
     queryFn: async () => {
       /**
-       * TODO: assigned_to is a text field matching full_name, not a profile ID.
-       * This is fragile — duplicate names or name changes will break assignment.
-       * Ideally migrate assigned_to to reference profile IDs.
+       * Stopgap: assigned_to is a text column matched against profile.full_name.
+       * Uses ilike + trim to tolerate whitespace and casing. Still fragile to renames
+       * and duplicate names.
+       * MIGRATION TODO: add work_orders.assigned_profile_id uuid (FK to profiles.id)
+       * and switch this query to `.eq("assigned_profile_id", profile.id)`.
        */
+      const name = profile!.full_name.trim();
       const { data, error } = await supabase
         .from("work_orders")
         .select("id, work_order_number, status, priority, scheduled_start, workstation")
-        .eq("assigned_to", profile!.full_name)
+        .ilike("assigned_to", name)
         .in("status", ["pending", "in_progress", "queued"])
         .order("priority", { ascending: false })
         .limit(5);

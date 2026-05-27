@@ -33,7 +33,7 @@ export function useBenderBatches(machineId: string | null) {
   useEffect(() => {
     if (!companyId || !machineId) return;
     const channel = supabase
-      .channel(`bender-batches-${machineId}`)
+      .channel(`bender-batches-${machineId}-${crypto.randomUUID()}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "bend_batches" }, () => {
         queryClient.invalidateQueries({ queryKey: ["bender-batches", machineId, companyId] });
       })

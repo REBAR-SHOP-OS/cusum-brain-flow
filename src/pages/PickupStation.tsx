@@ -234,9 +234,16 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
           items: itemsJson,
         };
       } catch (innerErr) {
-        await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id);
+        // .select('id') surfaces RLS-blocked cleanup as a warn so the failure isn't silent.
+        const stops = await supabase.from("delivery_stops").delete().eq("delivery_id", delivery.id).select("id");
+        if (stops.error || (stops.data && stops.data.length === 0)) {
+          console.warn("[PickupStation] cleanup: delivery_stops delete blocked", stops.error?.message);
+        }
         await supabase.from("deliveries").update({ status: "pending" }).eq("id", delivery.id);
-        await supabase.from("deliveries").delete().eq("id", delivery.id);
+        const del = await supabase.from("deliveries").delete().eq("id", delivery.id).select("id");
+        if (del.error || (del.data && del.data.length === 0)) {
+          console.warn("[PickupStation] cleanup: delivery delete blocked", del.error?.message);
+        }
         throw innerErr;
       }
 
