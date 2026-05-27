@@ -34,7 +34,7 @@ function loadExpanded(): Record<string, boolean> {
   }
 }
 
-export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStatusChanged }: WorkOrderQueueSectionProps) {
+export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStart, onPause, onStatusChanged }: WorkOrderQueueSectionProps) {
   const activeOrders = useMemo(() =>
     workOrders.filter(wo => wo.status === "in_progress" || wo.status === "on_hold" || wo.status === "pending" || wo.status === "queued"),
     [workOrders]
