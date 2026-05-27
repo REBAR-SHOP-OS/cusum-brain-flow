@@ -27,7 +27,15 @@ type RankedMatch = {
   reasons: string[];
 };
 
-const HIGH_CONFIDENCE = 0.85;
+// ---------- perf logging ----------
+const PERF = true;
+const tNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+function perfLog(label: string, ms: number, extra?: Record<string, any>) {
+  if (!PERF) return;
+  // single-line, easy to grep: [auto-perf] step=upload ms=412
+  // eslint-disable-next-line no-console
+  console.log(`[auto-perf] step=${label} ms=${Math.round(ms)}`, extra ?? "");
+}
 
 async function blobToBase64(blob: Blob): Promise<string> {
   const buf = await blob.arrayBuffer();
@@ -38,6 +46,30 @@ async function blobToBase64(blob: Blob): Promise<string> {
     binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)) as any);
   }
   return btoa(binary);
+}
+
+/**
+ * Build an OCR-optimized copy of the captured blob: max ~1200px, JPEG 0.8.
+ * Used for the AI call so the OCR roundtrip doesn't wait on the full archive
+ * upload. Falls back to the original blob if anything goes wrong.
+ */
+async function buildOcrBlob(src: Blob): Promise<Blob> {
+  try {
+    if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas === "undefined") return src;
+    const bmp = await createImageBitmap(src);
+    const maxDim = 1200;
+    const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale));
+    const h = Math.max(1, Math.round(bmp.height * scale));
+    const c = new OffscreenCanvas(w, h);
+    const ctx = c.getContext("2d");
+    if (!ctx) return src;
+    ctx.drawImage(bmp, 0, 0, w, h);
+    bmp.close?.();
+    return await c.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+  } catch {
+    return src;
+  }
 }
 
 export function useAutoClearance({
@@ -62,6 +94,11 @@ export function useAutoClearance({
   const [queuedCount, setQueuedCount] = useState(0);
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
+  // Hard scan lock — guarantees we never run two OCR roundtrips on the same
+  // frame, even if React state updates lag the camera shutter.
+  const scanLockRef = useRef(false);
+  // Tracks the full item cycle (tag capture → finalize).
+  const cycleStartRef = useRef<number>(0);
 
   // Track online/offline.
   useEffect(() => {
@@ -90,6 +127,22 @@ export function useAutoClearance({
   const totalCount = items.length;
   const manifestComplete = totalCount > 0 && pendingItems.length === 0;
 
+  // Pre-normalize manifest candidates once; reused on every scan so we don't
+  // rebuild this list per capture.
+  const candidatesRef = useRef<any[]>([]);
+  useEffect(() => {
+    candidatesRef.current = items
+      .filter((i) => i.evidence_status !== "cleared")
+      .map((i) => ({
+        id: i.id,
+        mark_number: i.mark_number,
+        bar_code: i.bar_code,
+        cut_length_mm: i.cut_length_mm,
+        total_pieces: i.total_pieces,
+        asa_shape_code: i.asa_shape_code,
+      }));
+  }, [items]);
+
   useEffect(() => {
     if (manifestComplete && state !== "manifest_complete") {
       setState("manifest_complete");
@@ -109,19 +162,28 @@ export function useAutoClearance({
 
   // -------- pipeline helpers --------
 
+  /**
+   * Compress + upload to storage. Returns the storage path.
+   * The compression also produces a smaller payload for any callers that
+   * already have an OCR-optimized blob via `buildOcrBlob`.
+   */
   const uploadToStorage = useCallback(async (
     itemId: string,
     kind: "tag" | "product",
     blob: Blob,
   ): Promise<string> => {
+    const tCompress = tNow();
     const compressed = await compressImage(
       new File([blob], `${kind}-${Date.now()}.jpg`, { type: "image/jpeg" })
     );
+    perfLog("compress", tNow() - tCompress, { kind, bytes: compressed.size });
     const ext = compressed.name.split(".").pop() || "jpg";
     const path = `${itemId}/${kind}-${Date.now()}.${ext}`;
+    const tUp = tNow();
     const { error } = await supabase.storage
       .from("clearance-photos")
       .upload(path, compressed, { upsert: true });
+    perfLog("upload", tNow() - tUp, { kind });
     if (error) throw error;
     return path;
   }, []);
@@ -168,7 +230,6 @@ export function useAutoClearance({
       .eq("id", evidenceId)
       .maybeSingle();
     if (readErr || !ev) throw readErr || new Error("Evidence row missing");
-    console.log("[auto-clearance] finalize read", { evidenceId, itemId, tag: ev.tag_scan_url, product: ev.material_photo_url });
     if (!ev.tag_scan_url || !ev.material_photo_url) {
       throw new Error("Both tag and product photos required before auto verify");
     }
@@ -191,7 +252,10 @@ export function useAutoClearance({
   // -------- main captures --------
 
   const handleTagCapture = useCallback(async (blob: Blob) => {
-    if (busy) return;
+    // Hard scan lock — prevents stacked OCR roundtrips from a chatty camera loop.
+    if (scanLockRef.current || busy) return;
+    scanLockRef.current = true;
+    cycleStartRef.current = tNow();
     if (!navigator.onLine) {
       try {
         await queue.enqueue({
@@ -205,29 +269,39 @@ export function useAutoClearance({
         refreshQueueCount();
       } catch { /* ignore quota */ }
       showBanner({ kind: "offline", text: "Offline — tag queued. Won't verify until sync." }, 3000);
+      scanLockRef.current = false;
       return;
     }
     setBusy(true);
     setState("tag_matching");
     try {
-      const candidates = itemsRef.current
-        .filter((i) => i.evidence_status !== "cleared")
-        .map((i) => ({
-          id: i.id,
-          mark_number: i.mark_number,
-          bar_code: i.bar_code,
-          cut_length_mm: i.cut_length_mm,
-          total_pieces: i.total_pieces,
-          asa_shape_code: i.asa_shape_code,
-        }));
+      // Pre-normalized candidates (rebuilt only when manifest changes).
+      const candidates = candidatesRef.current;
       if (candidates.length === 0) {
         setState("manifest_complete");
         return;
       }
-      const imageBase64 = await blobToBase64(blob);
-      const { data, error } = await supabase.functions.invoke("match-tag-photo", {
-        body: { imageBase64, candidates },
-      });
+
+      // Run OCR/match in parallel with storage upload. OCR uses a downscaled
+      // copy so the AI roundtrip isn't blocked on the full-size upload.
+      const tOcrPrep = tNow();
+      const ocrBlobPromise = buildOcrBlob(blob);
+      const ocrPromise = ocrBlobPromise
+        .then(blobToBase64)
+        .then(async (imageBase64) => {
+          perfLog("ocr_prep", tNow() - tOcrPrep);
+          const tOcr = tNow();
+          const r = await supabase.functions.invoke("match-tag-photo", {
+            body: { imageBase64, candidates },
+          });
+          perfLog("ocr+match", tNow() - tOcr);
+          return r;
+        });
+
+      // We need the matched item before we know which itemId to upload under,
+      // so the tag upload starts AFTER OCR returns. (Upload path is keyed by
+      // matched itemId — uploading speculatively would create orphaned files.)
+      const { data, error } = await ocrPromise;
       if (error) throw error;
       const ocr = data?.ocr || {};
       const ranked: RankedMatch[] = data?.ranked || [];
@@ -263,12 +337,16 @@ export function useAutoClearance({
         return;
       }
 
-      // High confidence → upload tag photo, write evidence, advance to product.
+      // High confidence — upload tag photo + ensure evidence row in parallel,
+      // then write the evidence row update. Move to product mode the moment
+      // the row update succeeds; cache invalidation happens in background.
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
-      const evId = await ensureEvidenceRow(matchedItem.id);
-      const path = await uploadToStorage(matchedItem.id, "tag", blob);
-      console.log("[auto-clearance] tag uploaded", { itemId: matchedItem.id, evId, path });
+      const [evId, path] = await Promise.all([
+        ensureEvidenceRow(matchedItem.id),
+        uploadToStorage(matchedItem.id, "tag", blob),
+      ]);
+      const tRowUp = tNow();
       const { error: tagUpErr } = await supabase
         .from("clearance_evidence")
         .update({
@@ -279,19 +357,23 @@ export function useAutoClearance({
           ocr_metadata: { ocr, ranked, decision },
         })
         .eq("id", evId);
+      perfLog("tag_row_update", tNow() - tRowUp);
       if (tagUpErr) throw tagUpErr;
       setActiveEvidenceId(evId);
-      console.log("[auto-clearance] tag evidence row updated", { evId });
       setState("tag_matched");
       speak("Tag matched");
       vibrate(60);
-      window.setTimeout(() => setState("waiting_product"), 600);
+      // Snap to product capture quickly — voice/animation don't block.
+      window.setTimeout(() => setState("waiting_product"), 250);
+      perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
     } catch (e: any) {
       console.error("tag capture failed", e);
       showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 3000);
       setState("waiting_tag");
     } finally {
       setBusy(false);
+      scanLockRef.current = false;
+      // Background refetch — never blocks the next state.
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
   }, [busy, ensureEvidenceRow, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
@@ -321,11 +403,11 @@ export function useAutoClearance({
       console.error("confirmPick row create failed", e);
     }
     speak("Confirmed");
-    window.setTimeout(() => setState("waiting_product"), 400);
+    window.setTimeout(() => setState("waiting_product"), 250);
   }, [ensureEvidenceRow, lastConfidence, lastOcr]);
 
   const handleProductCapture = useCallback(async (blob: Blob) => {
-    if (busy) return;
+    if (scanLockRef.current || busy) return;
     if (!activeItemId) {
       showBanner({ kind: "error", text: "Scan a tag first." }, 2000);
       return;
@@ -345,27 +427,27 @@ export function useAutoClearance({
       showBanner({ kind: "offline", text: "Offline — product queued. Won't verify until sync." }, 3000);
       return;
     }
+    scanLockRef.current = true;
     setBusy(true);
     setState("auto_verifying");
+    const tStartProduct = tNow();
     try {
       const item = itemsRef.current.find((i) => i.id === activeItemId);
       // Reuse the evidence id captured at tag time — avoids creating a second row
       // because the React Query cache for items hasn't refetched yet.
       const evId = activeEvidenceId ?? await ensureEvidenceRow(activeItemId);
-      console.log("[auto-clearance] product capture", { itemId: activeItemId, evId, reusedFromState: !!activeEvidenceId });
       const path = await uploadToStorage(activeItemId, "product", blob);
-      console.log("[auto-clearance] product uploaded", { evId, path });
-      const { error: prodUpErr } = await supabase
+      // Fire the row update and validation in parallel — validation only
+      // needs the storage path, not the row update.
+      const tParallel = tNow();
+      const rowUpdatePromise = supabase
         .from("clearance_evidence")
         .update({
           material_photo_url: path,
           verification_state: "product_captured",
         })
         .eq("id", evId);
-      if (prodUpErr) throw prodUpErr;
-
-      // Validate product photo against expected mark / drawing.
-      const { data: vData, error: vErr } = await supabase.functions.invoke(
+      const validatePromise = supabase.functions.invoke(
         "validate-clearance-photo",
         {
           body: {
@@ -376,6 +458,12 @@ export function useAutoClearance({
           },
         }
       );
+      const [{ error: prodUpErr }, { data: vData, error: vErr }] = await Promise.all([
+        rowUpdatePromise,
+        validatePromise,
+      ]);
+      perfLog("product_update+validate", tNow() - tParallel);
+      if (prodUpErr) throw prodUpErr;
       if (vErr) throw vErr;
       const validation = vData || { valid: true, confidence: "unreadable" };
       const validationOk = validation.valid !== false;
@@ -395,26 +483,32 @@ export function useAutoClearance({
       }
 
       // Both photos uploaded + validated. Finalize.
+      const tFinal = tNow();
       await finalizeVerification(evId, activeItemId, lastConfidence ?? 0, {
         ocr: lastOcr,
         validation,
       });
-      console.log("[auto-clearance] finalized", { evId, itemId: activeItemId });
+      perfLog("finalize", tNow() - tFinal);
+      perfLog("cycle_product_total", tNow() - tStartProduct);
+      perfLog("cycle_item_total", tNow() - cycleStartRef.current);
       setState("completed");
       speak("Verified");
       vibrate(120);
+      // Snap back to next item quickly. Voice/animation don't block.
       window.setTimeout(() => {
         setActiveItemId(null);
         setActiveEvidenceId(null);
         setPickCandidates([]);
         setState("waiting_tag");
-      }, 1100);
+      }, 450);
     } catch (e: any) {
       console.error("product capture failed", e);
       showBanner({ kind: "error", text: e?.message || "Verification failed" }, 3000);
       setState("waiting_product");
     } finally {
       setBusy(false);
+      scanLockRef.current = false;
+      // Background refetch — never blocks the next state.
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
   }, [activeItemId, activeEvidenceId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
