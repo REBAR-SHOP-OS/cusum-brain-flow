@@ -264,11 +264,16 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
       }
 
 
+      // Idempotent: only hop clearance -> cleared if the evidence trigger
+      // hasn't already advanced the item (trigger may have moved it to
+      // cleared and the bridge trigger then to complete).
       const { error: phErr } = await supabase
         .from("cut_plan_items")
         .update({ phase: "cleared" })
-        .eq("id", item.id);
+        .eq("id", item.id)
+        .eq("phase", "clearance");
       if (phErr) throw phErr;
+
 
       await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
       toast({ title: "Item cleared", description: `${item.mark_number || "Item"} verified` });
