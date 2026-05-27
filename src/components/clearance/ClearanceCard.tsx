@@ -25,6 +25,8 @@ import {
 import { format } from "date-fns";
 import type { ClearanceItem } from "@/hooks/useClearanceData";
 import { compressImage } from "@/lib/imageCompressor";
+import { useUserRole } from "@/hooks/useUserRole";
+import { OverrideReasonDialog } from "@/components/shopfloor/OverrideReasonDialog";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -47,6 +49,8 @@ interface ValidationResult {
 export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isAdmin, isShopSupervisor } = useUserRole();
+  const canOverride = isAdmin || isShopSupervisor;
   const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
   const [deleting, setDeleting] = useState<"material" | "tag" | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -54,6 +58,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [overrideOpen, setOverrideOpen] = useState(false);
   const materialRef = useRef<HTMLInputElement>(null);
   const tagRef = useRef<HTMLInputElement>(null);
 
@@ -226,9 +232,10 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const handleVerify = async () => {
     if (!canWrite || isCleared) return;
     setVerifying(true);
+    setGateError(null);
     try {
       if (item.evidence_id) {
-        await supabase
+        const { error: evErr } = await supabase
           .from("clearance_evidence")
           .update({
             status: "cleared",
@@ -236,8 +243,9 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             verified_at: new Date().toISOString(),
           })
           .eq("id", item.evidence_id);
+        if (evErr) throw evErr;
       } else {
-        await supabase
+        const { error: evErr } = await supabase
           .from("clearance_evidence")
           .insert({
             cut_plan_item_id: item.id,
@@ -245,17 +253,29 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             verified_by: userId,
             verified_at: new Date().toISOString(),
           });
+        if (evErr) throw evErr;
       }
 
-      await supabase
+      const { error: phErr } = await supabase
         .from("cut_plan_items")
         .update({ phase: "complete" })
         .eq("id", item.id);
+      if (phErr) throw phErr;
 
       await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
       toast({ title: "Item cleared", description: `${item.mark_number || "Item"} verified` });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      const message = err?.message ?? String(err);
+      if (/WORKFLOW_GATE_/.test(message)) {
+        setGateError(message);
+        toast({
+          title: "Blocked by release gate",
+          description: message,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: message, variant: "destructive" });
+      }
     } finally {
       setVerifying(false);
     }
@@ -353,7 +373,34 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           </p>
         )}
 
-        {/* Actions */}
+        {/* Workflow-gate blocker */}
+        {gateError && !isCleared && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2"
+          >
+            <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-destructive">
+                Evidence not release-ready
+              </p>
+              <p className="text-[10px] text-muted-foreground break-words">
+                {gateError}
+              </p>
+              {canOverride && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 h-7 text-[10px]"
+                  onClick={() => setOverrideOpen(true)}
+                >
+                  Request supervisor override
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 mt-1">
           <Tooltip>
             <TooltipTrigger asChild>
@@ -405,6 +452,19 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             )}
           </DialogContent>
         </Dialog>
+
+        <OverrideReasonDialog
+          open={overrideOpen}
+          onOpenChange={setOverrideOpen}
+          entityType="cut_plan_item"
+          entityId={item.id}
+          fromState="clearance"
+          toState="cleared"
+          onSuccess={() => {
+            setGateError(null);
+            queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+          }}
+        />
       </div>
     </TooltipProvider>
   );
