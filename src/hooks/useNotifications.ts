@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUserId } from "@/lib/auth";
 import { playMockingjayWhistle } from "@/lib/notificationSound";
 import { requestNotificationPermission, showBrowserNotification, registerPushSubscription } from "@/lib/browserNotification";
 import { normalizeNotificationRoute } from "@/lib/notificationRouting";
