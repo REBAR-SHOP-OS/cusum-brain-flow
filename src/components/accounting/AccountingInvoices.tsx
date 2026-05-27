@@ -452,7 +452,7 @@ export function AccountingInvoices({ data, initialSearch }: Props) {
           onUpdate={updateInvoice}
           onClose={() => setPreviewInvoice(null)}
           onSyncPayments={async () => {
-            const { supabase } = await import("@/integrations/supabase/client");
+            // supabase already statically imported at top of file
             await supabase.functions.invoke("qb-sync-engine", {
               body: { action: "sync-entity", entity_type: "Payment" },
             });
