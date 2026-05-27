@@ -49,6 +49,8 @@ interface ValidationResult {
 export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { isAdmin, isShopSupervisor } = useUserRole();
+  const canOverride = isAdmin || isShopSupervisor;
   const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
   const [deleting, setDeleting] = useState<"material" | "tag" | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -56,6 +58,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
   const [validating, setValidating] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [overrideOpen, setOverrideOpen] = useState(false);
   const materialRef = useRef<HTMLInputElement>(null);
   const tagRef = useRef<HTMLInputElement>(null);
 
