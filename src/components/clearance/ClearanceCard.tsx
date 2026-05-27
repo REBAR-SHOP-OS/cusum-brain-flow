@@ -258,7 +258,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
 
       const { error: phErr } = await supabase
         .from("cut_plan_items")
-        .update({ phase: "complete" })
+        .update({ phase: "cleared" })
         .eq("id", item.id);
       if (phErr) throw phErr;
 
