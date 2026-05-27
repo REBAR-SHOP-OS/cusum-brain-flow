@@ -37,8 +37,8 @@ export function ShopFloorShell({ children }: { children: ReactNode }) {
   const active = detectActive(location.pathname);
 
   return (
-    <IndustrialFrame className="!px-0 !py-0">
-      <div className="px-4 pt-4 sm:px-6">
+    <div className="industrial min-h-screen">
+      <div className="px-4 pt-4 sm:px-6 lg:px-8">
         <IndustrialTabs<string>
           value={active}
           onChange={(id) => {
@@ -49,6 +49,7 @@ export function ShopFloorShell({ children }: { children: ReactNode }) {
         />
       </div>
       <div>{children}</div>
-    </IndustrialFrame>
+    </div>
   );
 }
+
