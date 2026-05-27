@@ -28,6 +28,7 @@ import { VideoHistory } from "./VideoHistory";
 import { useAdDirectorBrandKit } from "@/hooks/useAdDirectorBrandKit";
 import { useAdProjectHistory, type AdProjectRow } from "@/hooks/useAdProjectHistory";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { DEFAULT_VIDEO_PARAMS, type VideoParams } from "./VideoParameters";
 import {
   backgroundAdDirectorService,
@@ -215,7 +216,7 @@ export function AdDirectorContent({ onEditingChange }: { onEditingChange?: (edit
       // Upload to storage for permanent URL
       let permanentUrl = finalUrl.blobUrl;
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (user) {
           const blob = await fetch(finalUrl.blobUrl).then(r => r.blob());
           const path = `${user.id}/${crypto.randomUUID()}.webm`;

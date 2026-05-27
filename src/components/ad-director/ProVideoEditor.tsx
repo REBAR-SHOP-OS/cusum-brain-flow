@@ -43,6 +43,7 @@ import { TransitionsTab } from "./editor/TransitionsTab";
 import { BrandKitTab } from "./editor/BrandKitTab";
 import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 
 type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image" | "transitions";
@@ -104,7 +105,7 @@ function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: 
 
     setScheduling(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const content = segments.map(s => s.text).join(" ").slice(0, 2200);
@@ -2243,7 +2244,7 @@ export function ProVideoEditor({
 
   const handleReplaceLogo = async (file: File) => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       const path = `${user.id}/logo-${Date.now()}.${file.name.split('.').pop()}`;
       const { error } = await uploadToStorage("brand-assets", path, file, { upsert: true });

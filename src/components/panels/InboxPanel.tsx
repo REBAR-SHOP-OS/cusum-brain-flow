@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { X, ChevronRight, ChevronDown, Loader2, Check, Bell, CheckSquare, Lightbulb, AlertTriangle, Settings, CheckCircle, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 import { getCompanyId } from "@/hooks/useCompanyId";
 import { Button } from "@/components/ui/button";
@@ -344,7 +345,7 @@ export function InboxPanel({ isOpen, onClose }: InboxPanelProps) {
       if (!meta) return;
 
       const companyId = await getCompanyId();
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user || !companyId) { toast.error("خطا در احراز هویت"); return; }
 
       const { data: profile } = await supabase

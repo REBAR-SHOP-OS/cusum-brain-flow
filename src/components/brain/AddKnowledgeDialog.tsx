@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { getSignedFileUrl } from "@/lib/storageUtils";
@@ -61,7 +62,7 @@ export function AddKnowledgeDialog({ open, onOpenChange, onSuccess, defaultMetad
 
     setUploading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         toast({ title: "Please log in to upload files", variant: "destructive" });
         return;

@@ -26,6 +26,7 @@ import { SettingsSheet } from "@/components/social/SettingsSheet";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { schedulePost } from "@/lib/schedulePost";
 import { useAutoGenerate } from "@/hooks/useAutoGenerate";
 import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
@@ -249,7 +250,7 @@ export default function SocialMediaManager() {
   const [declineTarget, setDeclineTarget] = useState<SocialPost | null>(null);
 
   const handleDecline = async (post: SocialPost, reason?: string) => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     const declinedBy = user?.email || "unknown";
     updatePost.mutate({ id: post.id, status: "declined", neel_approved: false, declined_by: declinedBy, decline_reason: reason || null } as any);
     setSelectedPost(null);

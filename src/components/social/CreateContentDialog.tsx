@@ -11,6 +11,7 @@ import { ImageGeneratorDialog } from "./ImageGeneratorDialog";
 import { useToast } from "@/hooks/use-toast";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { getSignedFileUrl } from "@/lib/storageUtils";
 
@@ -102,7 +103,7 @@ export function CreateContentDialog({ open, onOpenChange }: CreateContentDialogP
   const handleSave = async () => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) {
         toast({ title: "Not authenticated", description: "Please log in first.", variant: "destructive" });
         setSaving(false);

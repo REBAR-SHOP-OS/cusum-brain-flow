@@ -17,6 +17,7 @@ import { useUserPerformance } from "@/hooks/useUserPerformance";
 import { formatDateInTimezone } from "@/lib/dateConfig";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import type { ActivityEvent } from "@/hooks/useUserActivityLog";
 import type { TeamMemberActivity } from "@/hooks/useTeamDailyActivity";
 
@@ -699,7 +700,7 @@ function TeamFullReport({ profiles, teamData, date, timezone }: {
   useEffect(() => {
     const saveToMemory = async () => {
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) return;
         const { data: profile } = await supabase
           .from("profiles")

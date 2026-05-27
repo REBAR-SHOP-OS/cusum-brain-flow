@@ -45,6 +45,7 @@ import type { TeamMeeting } from "@/hooks/useTeamMeetings";
 import { cn } from "@/lib/utils";
 import { downloadFile } from "@/lib/downloadUtils";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { useCompanyId } from "@/hooks/useCompanyId";
@@ -367,7 +368,7 @@ export function MessageThread({
     // and guarantees the storage RLS policy (folder[1] = company_id) sees a valid value.
     let activeCompanyId = companyId as string | null;
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (user) {
         const { data: prof } = await supabase
           .from("profiles")

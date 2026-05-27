@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Paperclip, Upload, Trash2, Download, Loader2, FileIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "@/hooks/use-toast";
@@ -56,7 +57,7 @@ export function DocumentAttachments({ entityType, entityId, readOnly }: Props) {
     if (!files?.length || !companyId) return;
     setUploading(true);
     try {
-      const user = (await supabase.auth.getUser()).data.user;
+      const user = (await getCurrentUser());
       for (const file of Array.from(files)) {
         const safeName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
         const storagePath = `${user?.id || "anon"}/${entityType}/${entityId}/${safeName}`;

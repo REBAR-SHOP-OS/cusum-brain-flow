@@ -10,6 +10,7 @@ import {
 import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { useSocialPosts } from "@/hooks/useSocialPosts";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
 const PLATFORMS = [
@@ -64,7 +65,7 @@ export function VideoToSocialPanel({ videoUrl, aspectRatio, onClose }: VideoToSo
   const handleSaveAsPost = async () => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const fullContent = caption + (hashtags.length > 0 ? "\n\n" + hashtags.join(" ") : "");

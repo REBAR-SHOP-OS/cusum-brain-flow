@@ -10,6 +10,7 @@ import { StripeQBSyncPanel } from "@/components/integrations/StripeQBSyncPanel";
 import { PlaidBankSection } from "@/components/integrations/PlaidBankSection";
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 interface StalenessInfo {
   source: string;
   label: string;
@@ -22,7 +23,7 @@ function useStalenessCheck() {
 
   const check = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
 
       // Query max received_at per source

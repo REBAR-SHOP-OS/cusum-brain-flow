@@ -8,6 +8,7 @@ import { ChannelSidebar } from "@/components/teamhub/ChannelSidebar";
 import { MessageThread } from "@/components/teamhub/MessageThread";
 import { CreateChannelDialog } from "@/components/teamhub/CreateChannelDialog";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { StartMeetingDialog } from "@/components/teamhub/StartMeetingDialog";
 import { MeetingRoom } from "@/components/teamhub/MeetingRoom";
 import { MeetingReportDialog } from "@/components/teamhub/MeetingReportDialog";
@@ -231,7 +232,7 @@ export default function TeamHub() {
             setSelectedChannelId(result.id);
           }
           // Mark unread team-hub notifications from this sender as read
-          const { data: { user } } = await supabase.auth.getUser();
+          const user = await getCurrentUser();
           if (user) {
             await supabase
               .from("notifications")

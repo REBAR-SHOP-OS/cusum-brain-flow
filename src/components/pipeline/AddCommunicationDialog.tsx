@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
 
@@ -27,7 +28,7 @@ export function AddCommunicationDialog({ open, onOpenChange, leadId }: Props) {
 
   const mutation = useMutation({
     mutationFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { error } = await supabase.from("lead_communications").insert({
         lead_id: leadId,
         company_id: companyId!,
