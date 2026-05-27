@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { ArrowLeft, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -158,8 +158,70 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const activeGrouped = useMemo(() => groupByCustomer(activePlans), [activePlans]);
   const completedGrouped = useMemo(() => groupByCustomer(completedPlans), [completedPlans]);
 
+  // Per-plan phase aggregates → so each row can show "where the job currently is"
+  const allPlanIds = useMemo(
+    () => [...activePlans, ...completedPlans].map(p => p.id),
+    [activePlans, completedPlans]
+  );
+  const { data: phaseRows } = useQuery({
+    queryKey: ["plan-phase-locations", allPlanIds],
+    enabled: allPlanIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cut_plan_items")
+        .select("cut_plan_id, phase, total_pieces, completed_pieces")
+        .in("cut_plan_id", allPlanIds);
+      if (error) throw error;
+      return data || [];
+    },
+  });
+  const planLocations = useMemo(() => {
+    const map = new Map<string, { label: string; tone: string }>();
+    if (!phaseRows) return map;
+    const order = ["queued", "cutting", "cut_done", "bending", "clearance", "complete"];
+    const labels: Record<string, string> = {
+      queued: "QUEUED",
+      cutting: "CUTTING",
+      cut_done: "READY TO BEND",
+      bending: "BENDING",
+      clearance: "CLEARANCE",
+      complete: "COMPLETE",
+    };
+    const tones: Record<string, string> = {
+      queued: "text-muted-foreground",
+      cutting: "text-amber-400",
+      cut_done: "text-blue-400",
+      bending: "text-orange-400",
+      clearance: "text-purple-400",
+      complete: "text-green-500",
+    };
+    const buckets = new Map<string, { phases: Record<string, number>; total: number; done: number }>();
+    for (const r of phaseRows as any[]) {
+      const id = r.cut_plan_id as string;
+      if (!buckets.has(id)) buckets.set(id, { phases: {}, total: 0, done: 0 });
+      const b = buckets.get(id)!;
+      const ph = (r.phase as string) || "queued";
+      const pieces = r.total_pieces || 0;
+      b.phases[ph] = (b.phases[ph] || 0) + pieces;
+      b.total += pieces;
+      b.done += r.completed_pieces || 0;
+    }
+    for (const [id, b] of buckets) {
+      const active = order.filter(p => p !== "complete" && (b.phases[p] || 0) > 0);
+      const chosen = active.length > 0
+        ? active[active.length - 1]
+        : ((b.phases["complete"] || 0) > 0 ? "complete" : "queued");
+      const progress = b.total > 0 ? ` ${b.done}/${b.total}` : "";
+      map.set(id, { label: `${labels[chosen]}${progress}`, tone: tones[chosen] });
+    }
+    return map;
+  }, [phaseRows]);
+
+
   // Dimension columns
   const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"];
+
+
 
   if (!selectedPlanId) {
     return (
@@ -224,7 +286,16 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                     </Badge>
                   )}
                 </span>
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">{plan.status}</span>
+                {(() => {
+                  const loc = planLocations.get(plan.id);
+                  const label = loc?.label || plan.status?.toUpperCase() || "—";
+                  const tone = loc?.tone || "text-muted-foreground";
+                  return (
+                    <span className={`text-[10px] uppercase tracking-wider font-semibold ${tone}`}>
+                      {label}
+                    </span>
+                  );
+                })()}
               </button>
             ))}
           </div>
