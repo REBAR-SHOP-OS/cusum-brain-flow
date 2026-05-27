@@ -21,7 +21,10 @@ import {
   Sparkles,
   AlertTriangle,
   XCircle,
+  Search,
+  X,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
