@@ -35,6 +35,7 @@ export default function LoadingStation() {
   const navigate = useNavigate();
   const { bundles, isLoading: bundlesLoading } = useCompletedBundles();
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
+  const [bundleQuery, setBundleQuery] = useState("");
   const { companyId } = useCompanyId();
 
   const {
