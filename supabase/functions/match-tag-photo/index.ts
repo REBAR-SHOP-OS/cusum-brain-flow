@@ -13,18 +13,76 @@ interface ExtractedTag {
   tag_number?: string;
   mark?: string;
   bar_size?: string;
+  length_text?: string;
   length_mm?: number;
   quantity?: number;
+  grade?: string;
   shape_code?: string;
   raw_text?: string;
   confidence_ocr?: number;
+}
+
+// ----------------- normalization -----------------
+
+function normMark(s: string | null | undefined): string {
+  if (!s) return '';
+  // Uppercase, strip everything that isn't a letter or digit,
+  // then collapse common OCR confusions: I↔1, O↔0, S↔5, B↔8.
+  // Mark numbers are alphanumeric IDs like A1501, 12B, A-1501.
+  return s
+    .toString()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/I/g, '1')
+    .replace(/O/g, '0');
+}
+
+function normSize(s: string | null | undefined): string {
+  if (!s) return '';
+  // Uppercase, drop spaces/dashes/dots. "15 M" / "15-M" / "#15" → "15M".
+  return s.toString().toUpperCase().replace(/[\s\-_.#]/g, '');
+}
+
+function normGrade(s: string | null | undefined): string {
+  if (!s) return '';
+  return s.toString().toUpperCase().replace(/[\s\-_.]/g, '');
+}
+
+// Parse a length string in either imperial (14'2", 14-2, 14ft 2in) or metric (4318mm, 4.318m)
+// and return millimetres. Returns null if unparseable.
+function parseLengthToMm(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const s = text.toString().trim().toLowerCase().replace(/\s+/g, '');
+  if (!s) return null;
+
+  // metric: 4318mm / 4.318m / 4318
+  let m = s.match(/^(\d+(?:\.\d+)?)mm$/);
+  if (m) return Math.round(parseFloat(m[1]));
+  m = s.match(/^(\d+(?:\.\d+)?)m$/);
+  if (m) return Math.round(parseFloat(m[1]) * 1000);
+
+  // imperial: 14'2", 14'2, 14-2, 14ft2in, 14ft, 14'
+  m = s.match(/^(\d+)['ft]+(\d+)(?:["in]+)?$/);
+  if (m) return Math.round((parseInt(m[1]) * 12 + parseInt(m[2])) * 25.4);
+  m = s.match(/^(\d+)-(\d+)$/);
+  if (m) return Math.round((parseInt(m[1]) * 12 + parseInt(m[2])) * 25.4);
+  m = s.match(/^(\d+)['ft]+$/);
+  if (m) return Math.round(parseInt(m[1]) * 12 * 25.4);
+
+  // plain number — assume mm if > 100, else feet
+  m = s.match(/^(\d+(?:\.\d+)?)$/);
+  if (m) {
+    const n = parseFloat(m[1]);
+    return n > 100 ? Math.round(n) : Math.round(n * 12 * 25.4);
+  }
+  return null;
 }
 
 function levenshtein(a: string, b: string): number {
   if (a === b) return 0;
   if (!a.length) return b.length;
   if (!b.length) return a.length;
-  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+  const dp: number[][] = Array.from({ length: a.length + 1 }, (_, i) => [i]);
   for (let j = 1; j <= b.length; j++) dp[0][j] = j;
   for (let i = 1; i <= a.length; i++) {
     for (let j = 1; j <= b.length; j++) {
@@ -36,44 +94,57 @@ function levenshtein(a: string, b: string): number {
   return dp[a.length][b.length];
 }
 
-function norm(s: string | null | undefined): string {
-  return (s || '').toString().trim().toUpperCase().replace(/\s+/g, '');
-}
+// ----------------- weighted scoring -----------------
+// Weights — MARK dominates, SIZE / LENGTH medium, QTY / GRADE / SHAPE low.
+const W = { mark: 0.50, size: 0.15, length: 0.20, qty: 0.08, shape: 0.07 };
 
-function scoreCandidate(c: Candidate, ocr: ExtractedTag): { score: number; reasons: string[] } {
+function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null) {
   const reasons: string[] = [];
+  const rejected: string[] = [];
   let score = 0;
+  let markExact = false;
 
-  const candMark = norm(c.mark_number);
-  const ocrMark = norm(ocr.mark || ocr.tag_number);
+  const candMark = normMark(c.mark_number);
+  const ocrMark = normMark(ocr.mark || ocr.tag_number);
   if (candMark && ocrMark) {
-    if (candMark === ocrMark) { score += 0.45; reasons.push(`mark=${candMark}`); }
-    else if (levenshtein(candMark, ocrMark) <= 1) { score += 0.25; reasons.push(`~mark=${candMark}≈${ocrMark}`); }
+    if (candMark === ocrMark) {
+      score += W.mark; reasons.push(`MARK=${candMark}`); markExact = true;
+    } else {
+      const d = levenshtein(candMark, ocrMark);
+      if (d === 1) { score += W.mark * 0.6; reasons.push(`~MARK ${ocrMark}≈${candMark}`); }
+      else if (d === 2 && candMark.length >= 4) { score += W.mark * 0.3; reasons.push(`~~MARK ${ocrMark}≈${candMark}`); }
+      else rejected.push(`MARK ${ocrMark}≠${candMark}`);
+    }
   }
 
-  const candSize = norm(c.bar_code);
-  const ocrSize = norm(ocr.bar_size);
-  if (candSize && ocrSize && (candSize === ocrSize || candSize.includes(ocrSize) || ocrSize.includes(candSize))) {
-    score += 0.15; reasons.push(`size=${candSize}`);
+  const candSize = normSize(c.bar_code);
+  const ocrSize = normSize(ocr.bar_size);
+  if (candSize && ocrSize) {
+    if (candSize === ocrSize || candSize.includes(ocrSize) || ocrSize.includes(candSize)) {
+      score += W.size; reasons.push(`SIZE=${candSize}`);
+    } else rejected.push(`SIZE ${ocrSize}≠${candSize}`);
   }
 
-  if (ocr.length_mm && c.cut_length_mm) {
-    const diff = Math.abs(ocr.length_mm - c.cut_length_mm) / c.cut_length_mm;
-    if (diff <= 0.02) { score += 0.20; reasons.push(`len±2%`); }
-    else if (diff <= 0.05) { score += 0.10; reasons.push(`len±5%`); }
+  if (ocrLenMm && c.cut_length_mm) {
+    const diff = Math.abs(ocrLenMm - c.cut_length_mm) / c.cut_length_mm;
+    if (diff <= 0.02) { score += W.length; reasons.push(`LEN±2%`); }
+    else if (diff <= 0.05) { score += W.length * 0.6; reasons.push(`LEN±5%`); }
+    else if (diff <= 0.10) { score += W.length * 0.3; reasons.push(`LEN±10%`); }
+    else rejected.push(`LEN ${ocrLenMm}≠${c.cut_length_mm}mm`);
   }
 
-  if (ocr.quantity && c.total_pieces && ocr.quantity === c.total_pieces) {
-    score += 0.10; reasons.push(`qty=${c.total_pieces}`);
+  if (ocr.quantity && c.total_pieces) {
+    if (ocr.quantity === c.total_pieces) { score += W.qty; reasons.push(`QTY=${c.total_pieces}`); }
+    else rejected.push(`QTY ${ocr.quantity}≠${c.total_pieces}`);
   }
 
-  const candShape = norm(c.asa_shape_code);
-  const ocrShape = norm(ocr.shape_code);
+  const candShape = normSize(c.asa_shape_code);
+  const ocrShape = normSize(ocr.shape_code);
   if (candShape && ocrShape && candShape === ocrShape) {
-    score += 0.10; reasons.push(`shape=${candShape}`);
+    score += W.shape; reasons.push(`SHAPE=${candShape}`);
   }
 
-  return { score: Math.min(score, 1), reasons };
+  return { score: Math.min(score, 1), reasons, rejected, markExact };
 }
 
 Deno.serve(async (req) => {
@@ -105,16 +176,16 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-3-flash-preview',
+        model: 'google/gemini-2.5-flash',
         messages: [
           {
             role: 'system',
-            content: 'You are an OCR assistant reading printed rebar tags. Extract structured fields exactly as they appear. Return numbers in mm. If a field is not visible, omit it.',
+            content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields.',
           },
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Read this rebar tag and extract its fields. Mark number is the primary identifier (e.g., "12B", "A03"). Bar size is like "15M", "20M", "#4". Length is the cut length in mm. Quantity is number of pieces. Shape code if shown.' },
+              { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear.' },
               { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
@@ -123,18 +194,20 @@ Deno.serve(async (req) => {
           type: 'function',
           function: {
             name: 'extract_tag',
-            description: 'Return the extracted tag fields.',
+            description: 'Return the extracted tag fields. Always include raw_text if any text is visible.',
             parameters: {
               type: 'object',
               properties: {
                 tag_number: { type: 'string' },
                 mark: { type: 'string' },
                 bar_size: { type: 'string' },
+                grade: { type: 'string' },
+                length_text: { type: 'string' },
                 length_mm: { type: 'number' },
                 quantity: { type: 'number' },
                 shape_code: { type: 'string' },
                 raw_text: { type: 'string' },
-                confidence_ocr: { type: 'number', description: '0..1 confidence in OCR quality' },
+                confidence_ocr: { type: 'number' },
               },
               additionalProperties: false,
             },
@@ -171,20 +244,87 @@ Deno.serve(async (req) => {
       console.error('Failed to parse tool args', e);
     }
 
-    const ranked = candidates
-      .map((c) => ({ id: c.id, mark_number: c.mark_number, ...scoreCandidate(c, ocr) }))
-      .sort((a, b) => b.score - a.score);
+    // Normalize length to mm if not provided directly.
+    const ocrLenMm = (typeof ocr.length_mm === 'number' && ocr.length_mm > 0)
+      ? ocr.length_mm
+      : parseLengthToMm(ocr.length_text);
 
-    const best = ranked[0];
-    const second = ranked[1];
+    const normalized = {
+      mark: normMark(ocr.mark || ocr.tag_number),
+      size: normSize(ocr.bar_size),
+      grade: normGrade(ocr.grade),
+      length_mm: ocrLenMm,
+      quantity: ocr.quantity ?? null,
+      shape: normSize(ocr.shape_code),
+    };
+
+    // Count meaningful fields. Even raw_text alone is meaningful — we'd rather
+    // pick from a list than tell the operator "unreadable".
+    const fieldHits =
+      (normalized.mark ? 1 : 0) +
+      (normalized.size ? 1 : 0) +
+      (normalized.length_mm ? 1 : 0) +
+      (normalized.quantity ? 1 : 0) +
+      (normalized.grade ? 1 : 0);
+    const rawHasText = !!(ocr.raw_text && ocr.raw_text.replace(/[^A-Z0-9]/gi, '').length >= 4);
+
+    const scored = candidates.map((c) => ({
+      id: c.id,
+      mark_number: c.mark_number,
+      ...scoreCandidate(c, ocr, ocrLenMm),
+    }));
+    const ranked = [...scored].sort((a, b) => b.score - a.score);
+
+    // ---- decision ----
+    // Fast path: if normalized MARK exactly matches exactly ONE candidate, auto.
+    const exactMarkHits = scored.filter((s) => s.markExact);
     let decision: 'auto' | 'confirm' | 'none' = 'none';
-    if (best && best.score >= 0.85 && (!second || best.score - second.score >= 0.15)) {
+    let reason = '';
+
+    if (exactMarkHits.length === 1) {
       decision = 'auto';
-    } else if (best && best.score >= 0.55) {
+      reason = 'unique MARK exact';
+    } else if (exactMarkHits.length > 1) {
+      // Multiple candidates share that mark — let operator pick.
       decision = 'confirm';
+      reason = 'multiple MARK matches';
+    } else {
+      const best = ranked[0];
+      const second = ranked[1];
+      if (best && best.score >= 0.70 && (!second || best.score - second.score >= 0.15)) {
+        decision = 'auto'; reason = `high score ${best.score.toFixed(2)}`;
+      } else if (best && best.score >= 0.25) {
+        decision = 'confirm'; reason = `medium score ${best.score.toFixed(2)}`;
+      } else if (fieldHits === 0 && !rawHasText) {
+        decision = 'none'; reason = 'no readable text';
+      } else if (candidates.length <= 5) {
+        // Some text was read but nothing scored — still show the manifest
+        // as a pick list rather than fail. Operator can confirm visually.
+        decision = 'confirm'; reason = 'low score but text present';
+      } else {
+        decision = 'none'; reason = 'low score, large manifest';
+      }
     }
 
-    return new Response(JSON.stringify({ ocr, ranked: ranked.slice(0, 5), decision }), {
+    const debug = {
+      raw_ocr: ocr,
+      normalized,
+      field_hits: fieldHits,
+      raw_has_text: rawHasText,
+      ranked_top5: ranked.slice(0, 5),
+      decision,
+      reason,
+    };
+    console.log('match-tag-photo', JSON.stringify(debug));
+
+    return new Response(JSON.stringify({
+      ocr,
+      normalized,
+      ranked: ranked.slice(0, 5),
+      decision,
+      reason,
+      debug,
+    }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
