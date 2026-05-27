@@ -1,3 +1,4 @@
+import { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { Workflow, Users, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -7,8 +8,10 @@ import type { ProjectLane } from "@/hooks/useProductionQueues";
 /**
  * Approved Office work → Shop-floor handoff queue.
  * Lists project lanes with item counts. Click → opens cutter queue for that lane.
+ * If `children` is provided, renders it in place of the lane list (used to embed
+ * Work Order Queue inside this box).
  */
-export function ProductionQueuePanel({ lanes }: { lanes: ProjectLane[] }) {
+export function ProductionQueuePanel({ lanes, children }: { lanes: ProjectLane[]; children?: ReactNode }) {
   const navigate = useNavigate();
   const total = lanes.reduce((s, l) => s + l.items.length, 0);
 
