@@ -170,6 +170,24 @@ export default function ClearanceStation() {
           </div>
         ) : !selectedProjectKey ? (
           <div className="p-4 space-y-3">
+            <div className="inline-flex rounded-lg border border-border overflow-hidden mb-1">
+              <button
+                onClick={() => setListTab("manifests")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase ${listTab === "manifests" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+              >
+                <ListChecks className="w-3.5 h-3.5" /> Manifests
+              </button>
+              <button
+                onClick={() => setListTab("archive")}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border ${listTab === "archive" ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+              >
+                <ArchiveIcon className="w-3.5 h-3.5" /> Archive
+              </button>
+            </div>
+            {listTab === "archive" ? (
+              <ClearanceArchive />
+            ) : (
+              <>
             <p className="text-sm text-muted-foreground mb-2">
               Select a customer to view its clearance manifests.
             </p>
