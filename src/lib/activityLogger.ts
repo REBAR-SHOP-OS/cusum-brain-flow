@@ -4,6 +4,7 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 const COMPANY_ID = "a0000000-0000-0000-0000-000000000001";
 
 // Debounce navigation logs to avoid duplicate rapid fires
@@ -24,7 +25,7 @@ interface LogOptions {
  */
 export async function logActivity(opts: LogOptions): Promise<void> {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     await supabase.from("activity_events").insert([{

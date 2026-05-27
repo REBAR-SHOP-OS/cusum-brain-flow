@@ -10,6 +10,7 @@ import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
 import { stitchClips } from "@/lib/videoStitch";
 import { slideshowToVideo } from "@/lib/slideshowToVideo";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { toast } from "sonner";
 import type {
   BrandProfile,
@@ -479,7 +480,7 @@ class BackgroundAdDirectorService {
         let projectId = this.state.projectId;
         if (!projectId && prompt) {
           try {
-            const { data: { user } } = await supabase.auth.getUser();
+            const user = await getCurrentUser();
             if (user) {
               const { data: existing } = await supabase
                 .from("ad_projects")
@@ -1142,7 +1143,7 @@ class BackgroundAdDirectorService {
       // Upload to storage for permanent URL
       let permanentUrl = finalUrl.blobUrl;
       try {
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (user) {
           const blob = await fetch(finalUrl.blobUrl).then(r => r.blob());
           const path = `${user.id}/${crypto.randomUUID()}.webm`;
@@ -1170,7 +1171,7 @@ class BackgroundAdDirectorService {
   // ─── Upload completed clips to storage ─────────
   private async uploadCompletedClips() {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       for (const clip of this.state.clips) {
         if (clip.status === "completed" && clip.videoUrl && !clip.videoUrl.includes("generated-videos")) {
