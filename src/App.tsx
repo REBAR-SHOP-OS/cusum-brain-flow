@@ -55,6 +55,7 @@ import ProductionAudit from "./pages/ProductionAudit";
 const PrintTags = React.lazy(() => import("./pages/PrintTags"));
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
+import AdminAlerts from "./pages/AdminAlerts";
 import CronHealth from "./pages/CronHealth";
 import CleanupReport from "./pages/CleanupReport";
 import ConnectionsAudit from "./pages/ConnectionsAudit";
@@ -263,6 +264,7 @@ const App = () => (
                     <Route path="/admin/bundles" element={<P><AdminRoute><BundleAdmin /></AdminRoute></P>} />
                     <Route path="/admin/production-audit" element={<P><AdminRoute><ProductionAudit /></AdminRoute></P>} />
                     <Route path="/admin/cron-health" element={<P><AdminRoute><CronHealth /></AdminRoute></P>} />
+                    <Route path="/admin/alerts" element={<P><AdminRoute><AdminAlerts /></AdminRoute></P>} />
 
                     {/* Automations Hub */}
                     <Route path="/automations" element={<P><AdminRoute><AutomationsHub /></AdminRoute></P>} />

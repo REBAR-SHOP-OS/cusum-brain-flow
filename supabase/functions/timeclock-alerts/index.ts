@@ -5,6 +5,14 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { serviceClient: supabase, body } = ctx;
 
+    // Master alert kill-switch (admin UI toggle).
+    const { isAlertSendingDisabled } = await import("../_shared/alertKillSwitch.ts");
+    const ks = await isAlertSendingDisabled(supabase);
+    if (ks.disabled) {
+      console.log(`[timeclock-alerts] skipped: ${ks.reason}`);
+      return { ok: true, skipped: true, reason: ks.reason };
+    }
+
     // Safety guard: only run on Fridays (day 5 in UTC)
     const now = new Date();
     if (now.getUTCDay() !== 5) {
