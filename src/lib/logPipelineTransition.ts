@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 /**
  * Logs a pipeline stage transition to the audit trail.
  * Fire-and-forget — errors are logged but don't block the transition.
@@ -24,7 +25,7 @@ export async function logPipelineTransition({
   triggeredBy?: string;
 }) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     await supabase.from("pipeline_transition_log").insert([{
       lead_id: leadId,
       company_id: companyId,

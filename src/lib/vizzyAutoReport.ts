@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 /**
  * Reports an unrecoverable error to Vizzy's fix request queue.
  * Called automatically by SmartErrorBoundary and useGlobalErrorHandler
@@ -7,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
  */
 export async function reportToVizzy(description: string, affectedArea: string) {
   try {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     // Deduplicate: don't report the same error within 5 minutes

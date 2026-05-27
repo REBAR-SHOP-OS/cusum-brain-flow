@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 
+import { getCurrentUser } from "@/lib/auth";
 const PERMISSION_ASKED_KEY = "notification_permission_asked";
 
 export async function requestNotificationPermission(): Promise<void> {
@@ -89,7 +90,7 @@ export async function registerPushSubscription(): Promise<void> {
     }
 
     // Save to database
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) return;
 
     const subJson = subscription.toJSON();
