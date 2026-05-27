@@ -5,7 +5,7 @@ import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
 import { LiveOpsTicker } from "@/components/shopfloor/LiveOpsTicker";
-import { ProductionQueuePanel } from "@/components/shopfloor/ProductionQueuePanel";
+
 import { ActiveProductionPanel } from "@/components/shopfloor/ActiveProductionPanel";
 
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
