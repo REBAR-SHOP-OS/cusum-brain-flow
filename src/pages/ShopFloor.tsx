@@ -1,164 +1,86 @@
 import { Link } from "react-router-dom";
-import { 
-  Factory, 
-  ShieldCheck, 
+import {
+  Factory,
+  ShieldCheck,
   PackageCheck,
-  ArrowLeft,
   ClipboardList,
   Truck,
   Camera,
   Scissors,
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
-
+import { ShopFloorChrome } from "@/components/shopfloor/ShopFloorChrome";
+import {
+  IndustrialCard,
+  SectionHead,
+} from "@/components/industrial/IndustrialShell";
 
 interface HubCard {
   label: string;
-  subtitle?: string;
+  subtitle: string;
   icon: React.ReactNode;
   to: string;
-  state?: Record<string, any>;
 }
 
 const hubCards: HubCard[] = [
-  {
-    label: "MATERIAL POOL",
-    subtitle: "STAGING & FLOW",
-    icon: <Factory className="w-7 h-7" />,
-    to: "/shopfloor/pool",
-  },
-  {
-    label: "SHOP FLOOR",
-    subtitle: "MACHINES & STATIONS",
-    icon: <Factory className="w-7 h-7" />,
-    to: "/shopfloor/station",
-  },
-  {
-    label: "CLEARANCE",
-    subtitle: "QC & EVIDENCE",
-    icon: <ShieldCheck className="w-7 h-7" />,
-    to: "/shopfloor/clearance",
-  },
-  {
-    label: "LOADING ST.",
-    subtitle: "LOAD & EVIDENCE",
-    icon: <PackageCheck className="w-7 h-7" />,
-    to: "/shopfloor/loading",
-  },
-  {
-    label: "PICKUP ST.",
-    subtitle: "CUSTOMER COLLECTION",
-    icon: <PackageCheck className="w-7 h-7" />,
-    to: "/shopfloor/pickup",
-  },
-  {
-    label: "INVENTORY",
-    subtitle: "COUNTS & ADJUSTMENTS",
-    icon: <ClipboardList className="w-7 h-7" />,
-    to: "/shopfloor/inventory",
-  },
-  {
-    label: "CUTTER PLAN",
-    subtitle: "CUT LIST & MACHINE QUEUE",
-    icon: <Scissors className="w-7 h-7" />,
-    to: "/shopfloor/cutter",
-  },
-  {
-    label: "DELIVERY OPS",
-    subtitle: "DISPATCH & DROP-OFF",
-    icon: <Truck className="w-7 h-7" />,
-    to: "/shopfloor/delivery-ops",
-  },
-  {
-    label: "CAMERA AI",
-    subtitle: "VISION & DISPATCH",
-    icon: <Camera className="w-7 h-7" />,
-    to: "/shopfloor/camera-intelligence",
-  },
+  { label: "Material Pool", subtitle: "Staging & flow",          icon: <Factory className="h-5 w-5" />,      to: "/shopfloor/pool" },
+  { label: "Stations",      subtitle: "Machines & operators",    icon: <Factory className="h-5 w-5" />,      to: "/shopfloor/station" },
+  { label: "Cutter Plan",   subtitle: "Cut list & queue",        icon: <Scissors className="h-5 w-5" />,     to: "/shopfloor/cutter" },
+  { label: "Clearance",     subtitle: "QC & evidence",           icon: <ShieldCheck className="h-5 w-5" />,  to: "/shopfloor/clearance" },
+  { label: "Loading St.",   subtitle: "Load & evidence",         icon: <PackageCheck className="h-5 w-5" />, to: "/shopfloor/loading" },
+  { label: "Pickup St.",    subtitle: "Customer collection",     icon: <PackageCheck className="h-5 w-5" />, to: "/shopfloor/pickup" },
+  { label: "Delivery Ops",  subtitle: "Dispatch & drop-off",     icon: <Truck className="h-5 w-5" />,        to: "/shopfloor/delivery-ops" },
+  { label: "Inventory",     subtitle: "Counts & adjustments",    icon: <ClipboardList className="h-5 w-5" />, to: "/shopfloor/inventory" },
+  { label: "Camera AI",     subtitle: "Vision & dispatch",       icon: <Camera className="h-5 w-5" />,       to: "/shopfloor/camera-intelligence" },
 ];
 
 export default function ShopFloor() {
   return (
-    <div className="relative flex flex-col items-center justify-center min-h-screen bg-background overflow-hidden">
-      {/* Radial glow background */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[900px] h-[900px] rounded-full bg-destructive/10 blur-[180px]" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-primary/8 blur-[120px]" />
-      </div>
-
-      {/* Header */}
-      <header className="absolute top-0 left-0 right-0 flex items-center justify-between px-6 py-4 z-10">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center">
-            <div className="w-3 h-3 rounded-full bg-primary animate-pulse" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold tracking-wider text-foreground uppercase">Command Hub</h2>
-            <p className="text-[10px] tracking-widest text-primary uppercase">Access Granted via Identity</p>
-          </div>
-        </div>
-      </header>
-
-      {/* Main content */}
-      <div className="relative z-10 flex flex-col items-center w-full max-w-4xl px-4 py-24">
-        {/* Title */}
-        <h1 className="text-4xl sm:text-5xl font-black italic text-foreground tracking-tight text-center mb-1">
-          SELECT INTERFACE
-        </h1>
-        <p className="text-xs tracking-[0.3em] text-primary/70 uppercase mb-10">
-          Production Environment Active
-        </p>
-
-        {/* My Jobs Card */}
-        <div className="w-full mb-6">
+    <ShopFloorChrome
+      eyebrow="Production"
+      title="Shop Floor"
+      subtitle="Live command center for stations, queues, clearance and dispatch."
+      status={
+        <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-primary" />
+          Production environment active
+        </span>
+      }
+    >
+      <div className="space-y-6">
+        <section>
+          <SectionHead title="My Jobs" subtitle="Assigned to you across all stations" />
           <MyJobsCard />
-        </div>
+        </section>
 
-
-        {/* Cards Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 w-full">
-          {hubCards.map((card) => {
-            const cardContent = (
-              <>
-                <div className="text-muted-foreground group-hover:text-foreground transition-colors">
-                  {card.icon}
-                </div>
-                <div className="text-center">
-                  <span className="text-xs sm:text-sm font-bold tracking-wider text-foreground/90 group-hover:text-foreground uppercase">
-                    {card.label}
-                  </span>
-                  {card.subtitle && (
-                    <p className="text-[9px] tracking-widest text-primary/60 uppercase mt-0.5">
+        <section>
+          <SectionHead title="Workspaces" subtitle="Jump to any shop-floor surface" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {hubCards.map((card) => (
+              <Link key={card.label} to={card.to} className="block focus:outline-none">
+                <IndustrialCard interactive className="group flex h-full flex-col gap-3 p-4">
+                  <div className="flex items-center justify-between">
+                    <div className="inline-flex h-9 w-9 items-center justify-center rounded-md bg-primary/10 text-primary ring-1 ring-primary/20">
+                      {card.icon}
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground group-hover:text-primary">
+                      Open
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold tracking-tight text-foreground">
+                      {card.label}
+                    </div>
+                    <div className="mt-0.5 text-[11px] uppercase tracking-wider text-muted-foreground">
                       {card.subtitle}
-                    </p>
-                  )}
-                </div>
-              </>
-            );
-            const cardClass = "group relative flex flex-col items-center justify-center gap-3 p-6 sm:p-8 rounded-xl border border-border/60 bg-card/50 backdrop-blur-sm hover:bg-card/80 hover:border-primary/40 transition-all duration-200 hover:shadow-[0_0_30px_-10px_hsl(var(--primary)/0.3)]";
-
-            return card.to.startsWith("/shopfloor/") ? (
-              <Link key={card.label} to={card.to} state={card.state} className={cardClass}>
-                {cardContent}
+                    </div>
+                  </div>
+                </IndustrialCard>
               </Link>
-            ) : (
-              <a key={card.label} href={card.to} className={cardClass}>
-                {cardContent}
-              </a>
-            );
-          })}
-        </div>
-
-        {/* Back link */}
-        <Link
-          to="/home"
-          className="mt-12 flex items-center gap-2 text-xs tracking-widest text-muted-foreground hover:text-foreground transition-colors uppercase"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Entry Screen
-        </Link>
+            ))}
+          </div>
+        </section>
       </div>
-
-    </div>
+    </ShopFloorChrome>
   );
 }
