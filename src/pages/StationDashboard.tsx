@@ -228,11 +228,13 @@ export default function StationDashboard() {
             <MachineSelector machines={filteredMachines} />
 
             <div className="grid gap-4 lg:grid-cols-2">
-              <WorkOrderQueueSection
-                workOrders={workOrders}
-                onUpdateStatus={updateStatus}
-                onStatusChanged={(name, action) => toast({ title: action, description: name })}
-              />
+              <ProductionQueuePanel lanes={projectLanes}>
+                <WorkOrderQueueSection
+                  workOrders={workOrders}
+                  onUpdateStatus={updateStatus}
+                  onStatusChanged={(name, action) => toast({ title: action, description: name })}
+                />
+              </ProductionQueuePanel>
               <ActiveProductionPanel lanes={projectLanes} />
             </div>
           </>
