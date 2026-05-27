@@ -118,10 +118,13 @@ export function usePublishPost() {
       const msg = isTimeout
         ? "Publishing is taking longer than expected — the post may still publish. Check back shortly."
         : err?.message || "Failed to publish post";
+      const isLinkedInScopeIssue = /Marketing Developer Platform|offline_access|w_organization_social|r_organization_social/i
+        .test(msg);
       toast({
         title: isTimeout ? "Still processing…" : "Publish failed",
         description: msg,
         variant: isTimeout ? "default" : "destructive",
+        duration: isLinkedInScopeIssue ? 15000 : undefined,
       });
       if (isTimeout) {
         // Server may still succeed — poll for update

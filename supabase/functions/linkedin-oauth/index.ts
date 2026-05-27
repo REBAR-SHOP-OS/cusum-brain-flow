@@ -43,7 +43,9 @@ function getLinkedInStatusError(
       !scopeSet.has("w_organization_social") ||
       !scopeSet.has("r_organization_social"))
   ) {
-    reasons.push("the connection was created with older LinkedIn permissions");
+    reasons.push(
+      "the LinkedIn App is missing offline_access / Marketing Developer Platform approval — Reconnect alone will not fix this",
+    );
   }
 
   const detail = reasons.length > 0
@@ -51,6 +53,16 @@ function getLinkedInStatusError(
     : "";
   return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
 }
+
+const REQUIRED_LINKEDIN_SCOPES = [
+  "openid",
+  "profile",
+  "email",
+  "w_member_social",
+  "w_organization_social",
+  "r_organization_social",
+  "offline_access",
+];
 
 // ─── Main Handler ──────────────────────────────────────────────────
 
@@ -205,22 +217,72 @@ async function handleCallback(
     console.warn("[linkedin-oauth] Failed to fetch organizations:", e);
   }
 
+  // Validate that LinkedIn actually granted every required scope.
+  // LinkedIn silently drops scopes the App is not approved for (e.g. offline_access,
+  // w_organization_social, r_organization_social). Without those, refresh + company
+  // page publishing cannot work — we must surface this immediately, not at publish time.
+  const grantedScopes = new Set(
+    String(tokens.scope || "").split(/[\s,]+/).map((s) => s.trim()).filter(
+      Boolean,
+    ),
+  );
+  const droppedScopes = REQUIRED_LINKEDIN_SCOPES.filter((s) =>
+    !grantedScopes.has(s)
+  );
+  if (droppedScopes.length > 0) {
+    console.warn(
+      `[linkedin-oauth] Scopes dropped by provider: ${
+        droppedScopes.join(", ")
+      }. Granted: ${tokens.scope}`,
+    );
+  }
+
+  // Preserve previously discovered organization_ids when the new grant cannot rediscover them
+  // (e.g. r_organization_social was dropped this round). Never silently wipe a working setup.
+  let mergedOrganizationIds = organizationIds;
+  if (Object.keys(organizationIds).length === 0) {
+    const { data: prev } = await supabase
+      .from("integration_connections")
+      .select("config")
+      .eq("user_id", userId)
+      .eq("integration_id", "linkedin")
+      .maybeSingle();
+    const prevOrgs =
+      (prev?.config as { organization_ids?: Record<string, string> })
+        ?.organization_ids || {};
+    if (Object.keys(prevOrgs).length > 0) {
+      mergedOrganizationIds = prevOrgs;
+      console.log(
+        `[linkedin-oauth] Preserved ${
+          Object.keys(prevOrgs).length
+        } previously discovered org(s) — current grant could not rediscover them`,
+      );
+    }
+  }
+
+  const connectionStatus = droppedScopes.length > 0 ? "error" : "connected";
+  const connectionErrorMessage = droppedScopes.length > 0
+    ? `LinkedIn did not grant required scopes: ${
+      droppedScopes.join(", ")
+    }. The LinkedIn App must be approved for "Sign In with LinkedIn using OpenID Connect" (offline_access) and "Marketing Developer Platform" / "Community Management API" (w_organization_social, r_organization_social) in the LinkedIn Developer Portal. Reconnect alone will not fix this.`
+    : null;
+
   const { error: dbError } = await supabase
     .from("integration_connections")
     .upsert({
       user_id: userId,
       integration_id: "linkedin",
-      status: "connected",
+      status: connectionStatus,
       config: {
         access_token: tokens.access_token,
         expires_at: Date.now() + (tokens.expires_in * 1000),
         refresh_token: tokens.refresh_token || null,
         profile_name: profileName,
         scope: tokens.scope,
-        organization_ids: organizationIds,
+        organization_ids: mergedOrganizationIds,
       },
       last_sync_at: new Date().toISOString(),
-      error_message: null,
+      error_message: connectionErrorMessage,
     }, { onConflict: "user_id,integration_id" });
 
   if (dbError) {
@@ -231,9 +293,15 @@ async function handleCallback(
   // Redirect back to app's own callback page (same origin → popup closes reliably)
   const appBase = returnUrl || "https://erp.rebar.shop";
   const successUrl = new URL("/integrations/callback", appBase);
-  successUrl.searchParams.set("status", "success");
-  successUrl.searchParams.set("integration", "linkedin");
-  successUrl.searchParams.set("email", profileName);
+  if (droppedScopes.length > 0) {
+    successUrl.searchParams.set("status", "error");
+    successUrl.searchParams.set("integration", "linkedin");
+    successUrl.searchParams.set("message", connectionErrorMessage!);
+  } else {
+    successUrl.searchParams.set("status", "success");
+    successUrl.searchParams.set("integration", "linkedin");
+    successUrl.searchParams.set("email", profileName);
+  }
   return Response.redirect(successUrl.toString(), 302);
 }
 
