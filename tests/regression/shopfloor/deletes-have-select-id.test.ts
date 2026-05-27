@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression: shop-floor delete calls must include .select('id') so RLS-blocked
  * deletes surface as detectable failures instead of silent no-ops.

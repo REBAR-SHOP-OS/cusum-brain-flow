@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression: shop-floor realtime channels must append crypto.randomUUID()
  * to prevent collisions when the same hook mounts in multiple components
