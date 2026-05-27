@@ -69,7 +69,7 @@ async function hydrateTasksFromCutPlanItems(wo: WorkOrderRow): Promise<Hydration
       ok: false,
       eligible: 0,
       inserted: 0,
-      reason: "All cuts already complete — nothing to dispatch",
+      reason: "All cuts done — this work order is ready for clearance, not cutting.",
     };
   }
 
