@@ -4,14 +4,16 @@ import { useSupabaseWorkOrders } from "@/hooks/useSupabaseWorkOrders";
 import { useProductionQueues } from "@/hooks/useProductionQueues";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { MachineSelector } from "@/components/shopfloor/MachineSelector";
-import { MaterialFlowDiagram } from "@/components/shopfloor/MaterialFlowDiagram";
+import { LiveOpsTicker } from "@/components/shopfloor/LiveOpsTicker";
+import { ProductionQueuePanel } from "@/components/shopfloor/ProductionQueuePanel";
+import { ActiveProductionPanel } from "@/components/shopfloor/ActiveProductionPanel";
 
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { WorkOrderQueueSection } from "@/components/shopfloor/WorkOrderQueueSection";
 import { DowntimeAlertBanner } from "@/components/shopfloor/DowntimeAlertBanner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle, Sun, Moon, PackageCheck } from "lucide-react";
+import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle, Sun, Moon } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate, Navigate } from "react-router-dom";
 import { useTabletPin } from "@/hooks/useTabletPin";
