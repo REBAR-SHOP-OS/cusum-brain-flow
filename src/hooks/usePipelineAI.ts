@@ -139,7 +139,7 @@ export function usePipelineAI(enabled: boolean) {
           ai_reasoning: s.reasoning,
           suggested_data: s.suggested_data || {},
           company_id: profile?.company_id || "",
-          created_by: userData.user?.id || null,
+          created_by: user?.id || null,
         }));
 
         const { error: insertError } = await supabase
