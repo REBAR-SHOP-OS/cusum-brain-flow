@@ -13,6 +13,7 @@ import { format, formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useSalesLeadActivities, type SalesLeadActivity } from "@/hooks/useSalesLeadActivities";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { uploadToStorage } from "@/lib/storageUpload";
 import { toast } from "sonner";
 import { MentionMenu } from "@/components/chat/MentionMenu";

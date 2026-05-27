@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useExpenseClaims, useExpenseClaimItems, type ExpenseClaim } from "@/hooks/useExpenseClaims";
 import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
