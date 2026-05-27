@@ -338,10 +338,10 @@ export default function Tasks() {
 
   // Fetch current user ID once
   useEffect(() => {
-    supabase.auth.getUser().then(async ({ data }) => {
-      const uid = data.user?.id ?? null;
+    getCurrentUser().then(async (user) => {
+      const uid = user?.id ?? null;
       setCurrentUserId(uid);
-      setCurrentUserEmail(data.user?.email ?? null);
+      setCurrentUserEmail(user?.email ?? null);
       if (uid) {
         const { data: profile } = await supabase
           .from("profiles")
