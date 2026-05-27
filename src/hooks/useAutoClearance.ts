@@ -127,8 +127,18 @@ export function useAutoClearance({
   }, []);
 
   const ensureEvidenceRow = useCallback(async (itemId: string) => {
-    const existing = itemsRef.current.find((i) => i.id === itemId);
-    if (existing?.evidence_id) return existing.evidence_id;
+    // Prefer locally-tracked id (set right after tag scan) — avoids race with
+    // React Query cache refetch which can cause a duplicate INSERT.
+    const existingLocal = itemsRef.current.find((i) => i.id === itemId);
+    if (existingLocal?.evidence_id) return existingLocal.evidence_id;
+    // Authoritative check against DB before inserting.
+    const { data: found, error: findErr } = await supabase
+      .from("clearance_evidence")
+      .select("id")
+      .eq("cut_plan_item_id", itemId)
+      .maybeSingle();
+    if (findErr) throw findErr;
+    if (found?.id) return found.id as string;
     const { data, error } = await supabase
       .from("clearance_evidence")
       .insert({
