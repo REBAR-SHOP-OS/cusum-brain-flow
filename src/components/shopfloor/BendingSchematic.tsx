@@ -1,13 +1,27 @@
 import { Card, CardContent } from "@/components/ui/card";
-import { useUnitSystem, lengthUnit } from "@/lib/unitSystem";
 
 interface BendingSchematicProps {
   dimensions: Record<string, number> | null;
+  /**
+   * Source unit of THIS item (from cut_plan_items.unit_system).
+   * Per the Bending Schematic Unit Rule: NO global conversion. Display A–F
+   * dimensions in the item's own unit. For ft-in items, A–F render as pure
+   * inches (values are already stored as inches for imperial rows).
+   */
+  unitSystem?: string | null;
 }
 
-export function BendingSchematic({ dimensions }: BendingSchematicProps) {
-  const unitSystem = useUnitSystem();
-  const unitLabel = lengthUnit(unitSystem);
+function unitLabelFor(unitSystem: string | null | undefined): string {
+  const u = (unitSystem || "").toLowerCase();
+  if (u === "mm" || u === "metric") return "mm";
+  // in, ft, ft-in, ft_in, imperial → schematic always shows pure inches
+  if (u === "in" || u === "ft" || u === "ft-in" || u === "ft_in" || u === "imperial") return '"';
+  // Unknown / unspecified: no suffix rather than guessing
+  return "";
+}
+
+export function BendingSchematic({ dimensions, unitSystem }: BendingSchematicProps) {
+  const unitLabel = unitLabelFor(unitSystem);
 
   if (!dimensions || Object.keys(dimensions).length === 0) {
     return (
@@ -37,9 +51,11 @@ export function BendingSchematic({ dimensions }: BendingSchematicProps) {
               <span className={`text-xl font-bold ${getColorForDimension(key)}`}>
                 {key}
               </span>
-              <span className="text-3xl font-black font-mono text-foreground">
+              <span className="text-3xl font-black font-mono tabular-nums text-foreground">
                 {value}
-                <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
+                {unitLabel && (
+                  <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
+                )}
               </span>
             </div>
           ))}
