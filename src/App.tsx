@@ -55,6 +55,7 @@ import ProductionAudit from "./pages/ProductionAudit";
 const PrintTags = React.lazy(() => import("./pages/PrintTags"));
 import AdminMachines from "./pages/AdminMachines";
 import AdminDbAudit from "./pages/AdminDbAudit";
+import AdminAlerts from "./pages/AdminAlerts";
 import CronHealth from "./pages/CronHealth";
 import CleanupReport from "./pages/CleanupReport";
 import ConnectionsAudit from "./pages/ConnectionsAudit";
