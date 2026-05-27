@@ -220,6 +220,9 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
     return map;
   }, [phaseRows]);
 
+  // Dimension columns
+  const dimCols = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"];
+
 
 
   if (!selectedPlanId) {
