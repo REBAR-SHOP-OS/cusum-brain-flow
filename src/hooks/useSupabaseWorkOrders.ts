@@ -49,17 +49,22 @@ async function fetchWorkOrders(): Promise<SupabaseWorkOrder[]> {
     created_at: wo.created_at || null,
   }));
 
-  // Filter out work orders with zero cut_plan_items (empty shells)
+  // Filter out WOs with no remaining cuttable items (phase queued/cutting).
+  // WOs whose items are all past cutting belong to clearance/loading/pickup, not the cutter Start queue.
   const woIds = mapped.map(wo => wo.id);
   if (woIds.length > 0) {
-    const { data: itemCounts } = await supabase
+    const { data: cuttable } = await supabase
       .from("cut_plan_items")
-      .select("work_order_id")
+      .select("work_order_id, phase")
       .in("work_order_id", woIds);
 
-    const idsWithItems = new Set((itemCounts || []).map((r: any) => r.work_order_id));
+    const idsWithCuttable = new Set(
+      (cuttable || [])
+        .filter((r: any) => ["queued", "cutting"].includes(String(r.phase || "").toLowerCase()))
+        .map((r: any) => r.work_order_id)
+    );
     return mapped.filter(wo =>
-      idsWithItems.has(wo.id) || wo.status === "in_progress" || wo.status === "completed" || wo.status === "on_hold" || wo.status === "queued"
+      idsWithCuttable.has(wo.id) || wo.status === "in_progress" || wo.status === "on_hold"
     );
   }
   return mapped;
