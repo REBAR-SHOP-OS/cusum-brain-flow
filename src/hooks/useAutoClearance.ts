@@ -53,6 +53,7 @@ export function useAutoClearance({
   const [state, setState] = useState<AutoState>("waiting_tag");
   const [banner, setBanner] = useState<Banner>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [activeEvidenceId, setActiveEvidenceId] = useState<string | null>(null);
   const [pickCandidates, setPickCandidates] = useState<RankedMatch[]>([]);
   const [lastOcr, setLastOcr] = useState<any>(null);
   const [lastConfidence, setLastConfidence] = useState<number | null>(null);
