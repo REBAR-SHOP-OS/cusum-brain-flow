@@ -64,11 +64,11 @@ export function useExtractRows(sessionId: string | null) {
       setLoading(false);
       return;
     }
-    console.log("[useExtractRows] fetching rows for session:", sessionId);
+    
     setLoading(true);
     try {
       const data = await fetchExtractRows(sessionId);
-      console.log("[useExtractRows] fetched", data.length, "rows");
+      
       setRows(data);
 
       // Poll up to 3 times at 2s intervals if 0 rows returned (handles transient RLS / race)
@@ -79,7 +79,7 @@ export function useExtractRows(sessionId: string | null) {
           attempts++;
           try {
             const retryData = await fetchExtractRows(sessionId);
-            console.log("[useExtractRows] retry attempt", attempts, "fetched", retryData.length, "rows");
+            
             if (retryData.length > 0) {
               setRows(retryData);
               retryRef.current = null;

@@ -77,7 +77,6 @@ export function useAutoGenerate() {
       }
 
       const placeholderIds = (placeholders || []).map((p: any) => p.id);
-      console.log("[useAutoGenerate] Created placeholder IDs:", placeholderIds);
 
       // Show placeholders in calendar immediately
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
@@ -96,7 +95,6 @@ export function useAutoGenerate() {
 
       if (error) throw new Error(error.message);
 
-      console.log("[useAutoGenerate] Edge function response:", JSON.stringify(data));
 
       if (data?.error) {
         toast({

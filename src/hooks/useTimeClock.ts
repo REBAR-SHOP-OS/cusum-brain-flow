@@ -153,7 +153,7 @@ export function useTimeClock() {
         console.error("[TimeClock] clockIn close stale error:", closeErr);
       }
 
-      console.log("[TimeClock] clockIn attempt", { profileId: myProfile.id, userId: user?.id });
+      
 
       const { error } = await supabase
         .from("time_clock_entries")

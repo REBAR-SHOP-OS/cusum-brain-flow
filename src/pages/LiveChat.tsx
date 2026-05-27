@@ -59,7 +59,6 @@ export default function LiveChat() {
 
   const handleBrowserAction = useCallback((action: string, data: Record<string, any>) => {
     if (action === "webrtc_call" && data.phone) {
-      console.log("WebRTC call triggered via browser_action:", data.phone);
       widgetMakeCall(data.phone);
     }
   }, [widgetMakeCall]);

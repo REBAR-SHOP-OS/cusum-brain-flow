@@ -323,7 +323,6 @@ export function ProVideoEditor({
       if (enhanceRes.ok) {
         const enhanceData = await enhanceRes.json();
         finalPrompt = enhanceData.enhancedPrompt || result.prompt;
-        console.log("Enhanced prompt:", finalPrompt);
       } else {
         console.warn("Prompt enhancement failed, using original prompt");
       }
