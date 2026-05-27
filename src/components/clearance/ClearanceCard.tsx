@@ -452,6 +452,19 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
             )}
           </DialogContent>
         </Dialog>
+
+        <OverrideReasonDialog
+          open={overrideOpen}
+          onOpenChange={setOverrideOpen}
+          entityType="cut_plan_item"
+          entityId={item.id}
+          fromState={item.phase ?? null}
+          toState="cleared"
+          onSuccess={() => {
+            setGateError(null);
+            queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+          }}
+        />
       </div>
     </TooltipProvider>
   );
