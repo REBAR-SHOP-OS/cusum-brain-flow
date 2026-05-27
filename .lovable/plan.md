@@ -1,75 +1,84 @@
-# Plan: Batch A + Batch B
 
-Executed sequentially. Each batch is verified before moving to the next. No unrelated edits.
+# Shop Floor — Full Audit
 
----
+Scope audited: `/shop-floor` hub + 9 sub-routes (Station Dashboard, Station View, Pool, Loading, Pickup, Clearance, Inventory Count, Delivery Ops, Cutter Planning) + all `src/components/shopfloor/*` (24 files, 5,708 LOC) + 16 shop-floor hooks + machine registry + linked edge functions (`manage-inventory`, `shape-vision`).
 
-## Batch A — Fix horizontal-overflow wrap in `applyArchitectureLayout`
+## ✅ What's clean (verified, no action)
 
-**Failing test:** `src/lib/architectureFlow.test.ts` → "wraps overflow into additional sub-columns with increasing X" (15 nodes, expects `ai-14.x > ai-0.x`).
+| Check | Result |
+|---|---|
+| `tsc --noEmit` | 0 errors |
+| `vitest` | 72/72 pass (canvas/jsdom env warnings unrelated) |
+| `React.lazy` in tab pages | None (HARD rule held) |
+| `supabase.auth.getUser()` in shop-floor surface | None — Batch C/D refactor held across all 9 pages + 24 components + 16 hooks |
+| `company_id` default fallbacks | None — strictly entity-derived |
+| Machine lock / `cut_session_status` gates | Wired correctly in `CutterStationView` (lines 81, 160, 769, 808) and `BenderStationView:195` |
+| Clearance routing (`cutting → clearance → complete`) | Enforced via DB triggers; UI matches |
+| `tabular-nums` on counters | Present in `DashboardShellV2`, `MachineSpecsPanel`, etc. |
 
-**Root cause:** `ARCHITECTURE_LAYOUT.maxPerColumn = 50` → 15 nodes fit in one column → same X → test fails. The wrap logic itself is correct; the threshold makes it unreachable in the test.
+## ⚠️ Findings (4 issues)
 
-**Fix (surgical):**
-- Lower `maxPerColumn` from `50` to `12` in `src/lib/architectureFlow.ts`. This:
-  - Makes the documented wrap behavior actually trigger at realistic densities.
-  - Keeps the architecture canvas readable (no 50-tall columns).
-  - Passes the existing test without modifying the test.
-- No other change to layout math.
+### F1 — Realtime channel collisions (HIGH, HARD-rule)
+`mem://architecture/realtime/subscription-standards` requires unique UUID per channel. 10 shop-floor hooks use deterministic names that collide when the same hook mounts in two tabs / two components / dev StrictMode double-mount:
 
-**Verify:**
-- `bunx vitest run src/lib/architectureFlow.test.ts` → all 4 cases green.
-- Re-read `src/lib/architectureFlow.ts` — confirm only the constant changed.
-- Visual: `/home` route already renders the graph; spot-check no regression.
+| File | Channel name | Fix |
+|---|---|---|
+| `useBendBatches.ts:32` | `bend-batches-${companyId}` | append `-${crypto.randomUUID()}` |
+| `useBenderBatches.ts:36` | `bender-batches-${machineId}` | same |
+| `useCutPlans.ts:103` | `cut-plans-realtime-${companyId}` | same |
+| `useWasteBank.ts:32` | `waste-bank-${companyId}` | same |
+| `useClearanceData.ts:126` | `clearance-live-${companyId}` | same |
+| `useStationData.ts:160` | `station-${machineId}` | same |
+| `useProductionQueues.ts:61` | `production-queues-live-${companyId}` | same |
+| `usePickupOrders.ts:65` | `pickup-live-${companyId}` | same |
+| `useBundles.ts:29` | `bundles-${companyId}` | same |
+| `useInventoryData.ts:150` | `inventory-live-${user?.id \|\| "global"}` | UUID + drop the `"global"` fallback (also violates "no default" rule) |
 
-**Dead code sweep:** none introduced (single constant change). Confirm via `rg "maxPerColumn"` → only the definition + the two usages already in this file.
+Only `useReadyToShip:87` does it right (`-${crypto.randomUUID()}`).
 
-**Regression test:** the existing test in `architectureFlow.test.ts` IS the regression test (already covers the wrap case). Mark DoD item satisfied — no new test needed.
+### F2 — Deletes without `.select('id')` (HIGH, HARD-rule)
+`mem://architecture/database/deletion-verification` requires `.select('id')` so RLS blocks become detectable failures instead of silent no-ops.
 
----
+| File | Lines |
+|---|---|
+| `pages/DeliveryOps.tsx` | 216, 217, 219, 235, 236, 238 (6 deletes, single + bulk path) |
+| `pages/LoadingStation.tsx` | 271, 273 (cleanup-on-failure path) |
+| `pages/PickupStation.tsx` | 237, 239 (cleanup-on-failure path) |
 
-## Batch B — Remove `React.lazy` from tab pages (HARD rule: `mem://rules/frontend-development-standards`)
+Fix: append `.select('id')` and treat empty result as RLS block (toast + throw).
 
-**Files:**
-- `src/pages/AccountingWorkspace.tsx` — 44 `lazy()` calls, tab-routed.
-- `src/pages/PipelineIntelligence.tsx` — 15 `lazy()` calls, 32 `<Tabs*>` refs.
+### F3 — `MyJobsCard` brittle assignee match (MED)
+`components/shopfloor/MyJobsCard.tsx:31` has a live `TODO`: `assigned_to` is a text column matched against `full_name`, not a profile ID. Breaks on rename / duplicate names / casing. Should query by `profile_id` (add column if missing) or at minimum `ilike` + `trim`.
 
-**Why HARD:** lazy tab children dispatch-crash on re-mount under React 18 concurrent rendering; rule forbids `React.lazy` in tab files.
+### F4 — `useBendBatches` vs `useBenderBatches` naming confusion (LOW)
+Two hooks one letter apart with different purposes (`BendQueueAdmin` queue vs single-machine queue). Not a bug, but high foot-gun risk. Optional rename: `useBendBatches` → `useBendQueue` for the admin one.
 
-**Fix (surgical, per file):**
-1. Replace every `const X = lazy(() => import("…/X"))` with a top-level `import X from "…/X"` (or named import matching the module's export shape — verified per file before edit).
-2. Delete the surrounding `<Suspense fallback=…>` wrappers that exist solely to gate the lazy children. Keep any `<Suspense>` that wraps non-lazy async (none expected; will confirm).
-3. Remove `lazy` and `Suspense` from the React import line if no longer used.
-4. Do NOT touch routing, tab keys, props, state, data fetching, or styling.
+## Wave plan
 
-**Verify per file:**
-- `bunx tsc --noEmit` → 0 new errors.
-- `rg "lazy\(" src/pages/AccountingWorkspace.tsx src/pages/PipelineIntelligence.tsx` → 0 hits.
-- `rg "Suspense" src/pages/AccountingWorkspace.tsx src/pages/PipelineIntelligence.tsx` → 0 hits (or justified remainder).
-- Preview: open `/accounting` and `/pipeline-intelligence` (or whatever the actual routes are — confirmed during build), click through every tab, no blank screens, no console errors.
+### Wave 1 — Realtime UUID fix (F1)
+- Edit 10 hooks: append `-${crypto.randomUUID()}` to `.channel()` strings.
+- Drop `"global"` fallback in `useInventoryData.ts:150`; gate the effect on `user?.id` truthy.
+- Add regression test `tests/regression/realtime/shopfloor-channel-uuids.test.ts` that greps the 10 files for the UUID suffix pattern.
 
-**Dead code sweep:**
-- Drop unused `lazy`, `Suspense` imports.
-- Drop any `LoadingFallback` / skeleton component that was only referenced inside the deleted `<Suspense fallback>` (verify via `rg`).
-- Re-read both files end-to-end before declaring done.
+### Wave 2 — Delete safety (F2)
+- `DeliveryOps.tsx`: wrap each `.delete().eq(...)` with `.select('id')`; refactor to a single helper `safeDelete(table, col, id)` to dedupe the 6 call sites (single + bulk).
+- `LoadingStation.tsx` + `PickupStation.tsx`: same `.select('id')` on the cleanup-on-failure deletes; if RLS blocks, surface a console.warn (cleanup path, don't re-throw to avoid masking the original error).
+- Add regression test under `tests/regression/shopfloor/deletes-have-select-id.test.ts` (static grep over `pages/{DeliveryOps,LoadingStation,PickupStation}.tsx`).
 
-**Regression test:** add `tests/regression/frontend/no-lazy-in-tab-pages.test.ts` — scans `src/pages/*.tsx` containing `<Tabs` and asserts no `lazy(` or `React.lazy`. Prevents reintroduction in any tab page, not just these two.
+### Wave 3 — MyJobsCard assignee (F3)
+- Read `MyJobsCard.tsx`, switch the match to `profile_id` if the column exists on `work_orders` / `cut_plans` (DB inspect first); otherwise `ilike` + `trim` as a stopgap and keep the TODO with a migration note.
+- Skip F4 unless you greenlight the rename — keeping it out of the audit fix to honor surgical-execution rule.
 
----
+### Verification (every wave)
+- Re-read each edited file.
+- `bunx tsc --noEmit` clean.
+- `bunx vitest run` 72→75 pass (3 new regression tests).
+- Open `/shop-floor` preview, click into Station Dashboard + Delivery Ops, confirm no console errors and no `CHANNEL_ERROR` from realtime.
+- Purge cache if SSH-deployed (`scripts/purge-cache.sh`).
 
-## HARD-rule compliance checklist (applied to both batches)
+## Out of scope (call out, don't fix)
+- `BendQueueAdmin` / `WasteBankAdmin` / `BundleAdmin` admin tools — separate audit.
+- Edge functions (`manage-inventory`, `shape-vision`) — both already use `requestHandler` + rate-limit; clean.
+- No design / UX changes (hub looks correct in your screenshot).
 
-- Surgical Execution — only the listed files touched.
-- Post-Change Verification — `vitest` + `tsc` + preview click-through.
-- Dead Code Removal — unused imports/fallbacks/duplicates deleted same change; verified via `rg` + re-read.
-- Bugfix DoD — repro test green, regression test added (Batch B), old code path removed (no lazy twin left behind).
-- No touching `client.ts`, `types.ts`, `.env`, RLS migrations, edge functions.
-
-## Risks
-
-- Batch B increases initial bundle for `/accounting` and `/pipeline-intelligence`. Acceptable per HARD rule (correctness > bundle size for tab pages). If chunk size becomes a concern later, address via route-level code splitting in `App.tsx`, not per-tab lazy.
-- If a tab child module has side-effects on import (unlikely), unmasking them could surface latent bugs. Will catch during preview click-through.
-
-## Out of scope (deferred to later batches)
-
-- C (unused exports), D (`getUser` → hook), E (RLS predicates), F (linter warnings), G (debug logs).
+Approve to start Wave 1.
