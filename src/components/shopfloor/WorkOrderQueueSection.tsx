@@ -106,12 +106,14 @@ export function WorkOrderQueueSection({ workOrders, onUpdateStatus, onStart, onP
 }
 
 
-function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus, onStatusChanged }: {
+function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus, onStart, onPause, onStatusChanged }: {
   stationName: string;
   orders: SupabaseWorkOrder[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStart?: WorkOrderQueueSectionProps["onStart"];
+  onPause?: WorkOrderQueueSectionProps["onPause"];
   onStatusChanged: (name: string, action: string) => void;
 }) {
   return (
@@ -140,16 +142,18 @@ function StationGroup({ stationName, orders, open, onOpenChange, onUpdateStatus,
       </CollapsibleTrigger>
       <CollapsibleContent className="pl-5 pt-1 space-y-1.5">
         {orders.map(wo => (
-          <WorkOrderRow key={wo.id} wo={wo} onUpdateStatus={onUpdateStatus} onStatusChanged={onStatusChanged} />
+          <WorkOrderRow key={wo.id} wo={wo} onUpdateStatus={onUpdateStatus} onStart={onStart} onPause={onPause} onStatusChanged={onStatusChanged} />
         ))}
       </CollapsibleContent>
     </Collapsible>
   );
 }
 
-function WorkOrderRow({ wo, onUpdateStatus, onStatusChanged }: {
+function WorkOrderRow({ wo, onUpdateStatus, onStart, onPause, onStatusChanged }: {
   wo: SupabaseWorkOrder;
   onUpdateStatus: (id: string, status: string) => Promise<boolean>;
+  onStart?: WorkOrderQueueSectionProps["onStart"];
+  onPause?: WorkOrderQueueSectionProps["onPause"];
   onStatusChanged: (name: string, action: string) => void;
 }) {
   const isActive = wo.status === "in_progress";
