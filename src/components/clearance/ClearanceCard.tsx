@@ -373,7 +373,34 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           </p>
         )}
 
-        {/* Actions */}
+        {/* Workflow-gate blocker */}
+        {gateError && !isCleared && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2"
+          >
+            <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-destructive">
+                Evidence not release-ready
+              </p>
+              <p className="text-[10px] text-muted-foreground break-words">
+                {gateError}
+              </p>
+              {canOverride && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 h-7 text-[10px]"
+                  onClick={() => setOverrideOpen(true)}
+                >
+                  Request supervisor override
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
         <div className="flex gap-2 mt-1">
           <Tooltip>
             <TooltipTrigger asChild>
