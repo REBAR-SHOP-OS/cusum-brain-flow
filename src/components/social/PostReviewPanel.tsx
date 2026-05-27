@@ -1274,7 +1274,7 @@ export function PostReviewPanel({
                           post={post}
                          onSetDate={async (date) => {
                             const originalDay = post.scheduled_date?.substring(0, 10);
-                            console.log(`[PostReviewPanel] Set Date (bulk siblings) — title=${post.title} platform=${post.platform} originalDay=${originalDay} newDate=${date.toISOString()}`);
+                            
                             let query = supabase
                               .from("social_posts")
                               .update({ scheduled_date: date.toISOString() })
@@ -1457,7 +1457,7 @@ export function PostReviewPanel({
                         currentPlatforms = ["instagram"];
                         setLocalPlatforms(currentPlatforms);
                         updatePost.mutate({ id: post.id, platform: "instagram" });
-                        console.log("[PostReviewPanel] Auto-repaired unassigned story platform → instagram");
+                        
                       }
 
                       if (currentPlatforms.length === 0) {
@@ -1607,7 +1607,7 @@ export function PostReviewPanel({
 
                         const isUnassigned = post.platform === "unassigned";
                         const allCombos = combos.map(c => ({ platform: c.platform, page: c.page }));
-                        console.log(`[PostReviewPanel] Schedule button — post=${postId} platform=${primary.platform} page=${primary.page} date=${post.scheduled_date} unassigned=${isUnassigned}`);
+                        
                         setScheduling(true);
                         const result = await schedulePost({
                           post_id: postId,

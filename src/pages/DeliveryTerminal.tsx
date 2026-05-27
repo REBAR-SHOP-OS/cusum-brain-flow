@@ -179,7 +179,6 @@ export default function DeliveryTerminal() {
                 .eq("company_id", companyId)
                 .then(({ error: upErr }) => {
                   if (upErr) console.error("[Invoice] backfill failed:", upErr.message);
-                  else console.log("[Invoice] backfill success:", updates);
                 });
             }
           }

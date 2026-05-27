@@ -73,7 +73,6 @@ export function useNilaVoiceRelay() {
 
     try {
       const voiceId = lang === "fa" ? VOICE_FARSI : VOICE_ENGLISH;
-      console.log("[relay] TTS request:", { text: text.slice(0, 40), lang, voiceId });
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
         {
@@ -147,7 +146,6 @@ export function useNilaVoiceRelay() {
       if (wordCount < 3 || trimmed.length < 10) return;
       if (NOISE_BLOCKLIST.test(trimmed.toLowerCase()) && wordCount <= 3) return;
       if (isRepetitiveText(trimmed)) return;
-      console.log("[relay] committed transcript accepted:", trimmed, `(${wordCount} words, ${trimmed.length} chars)`);
 
       const isRtl = detectRtl(trimmed);
       const detectedLang: "en" | "fa" = isRtl ? "fa" : "en";
@@ -178,7 +176,6 @@ export function useNilaVoiceRelay() {
             return;
           }
 
-          console.log("[relay] translation received:", translation.slice(0, 40));
           contextRef.current.push(translation);
           if (contextRef.current.length > 10) contextRef.current = contextRef.current.slice(-5);
 

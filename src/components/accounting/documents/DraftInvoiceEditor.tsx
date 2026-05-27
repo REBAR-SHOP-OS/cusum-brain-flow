@@ -371,8 +371,8 @@ export function DraftInvoiceEditor({ invoiceId, onClose }: Props) {
         address: newCustAddress || undefined,
         localCustomerId: newCust.id,
       },
-    }).then(({ data: qbRes }) => {
-      if (qbRes?.qbCustomerId) console.log("Customer synced to QB:", qbRes.qbCustomerId);
+    }).then(() => {
+      /* QB sync fire-and-forget */
     }).catch((err) => {
       console.warn("QB customer sync failed (non-blocking):", err);
     });

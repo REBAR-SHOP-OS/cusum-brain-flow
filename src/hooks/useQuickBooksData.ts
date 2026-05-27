@@ -362,7 +362,6 @@ export function useQuickBooksData() {
         }));
       }
 
-      console.log("[QB] Loaded from ERP mirror tables");
       return true;
     } catch (err) {
       console.warn("[QB] Mirror load failed, falling back to API:", err);
@@ -393,7 +392,7 @@ export function useQuickBooksData() {
             await qbAction("incremental-sync");
             // Re-load from mirror after sync completes to update UI with fresh data
             await loadFromMirror();
-            console.log("[QB] Background incremental sync completed, mirror refreshed");
+            
           } catch (e) {
             console.warn("[QB] Background incremental sync failed:", e);
           }

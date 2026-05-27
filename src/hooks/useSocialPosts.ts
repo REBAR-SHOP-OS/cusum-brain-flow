@@ -92,7 +92,7 @@ export function useSocialPosts() {
 
   const updatePost = useMutation({
     mutationFn: async ({ id, ...updates }: Partial<SocialPost> & { id: string }) => {
-      console.log(`[useSocialPosts] updatePost called — id: ${id}, payload:`, updates);
+      
       const { data, error } = await supabase
         .from("social_posts")
         .update(updates)
@@ -107,7 +107,7 @@ export function useSocialPosts() {
         console.error(`[useSocialPosts] updatePost returned NULL data — id: ${id}. RLS blocked or row not found.`);
         throw new Error("Update failed — post not found or permission denied. Check that you have access.");
       }
-      console.log(`[useSocialPosts] updatePost SUCCESS — id: ${id}, new status: ${data.status}, qa_status: ${data.qa_status}`);
+      
       return data;
     },
     onSuccess: () => {
