@@ -2185,38 +2185,50 @@ export type Database = {
       }
       clearance_evidence: {
         Row: {
+          ai_confidence: number | null
           created_at: string
           cut_plan_item_id: string
           id: string
           material_photo_url: string | null
           notes: string | null
+          ocr_metadata: Json | null
           status: string
           tag_scan_url: string | null
           updated_at: string
+          verification_method: string
+          verification_state: string
           verified_at: string | null
           verified_by: string | null
         }
         Insert: {
+          ai_confidence?: number | null
           created_at?: string
           cut_plan_item_id: string
           id?: string
           material_photo_url?: string | null
           notes?: string | null
+          ocr_metadata?: Json | null
           status?: string
           tag_scan_url?: string | null
           updated_at?: string
+          verification_method?: string
+          verification_state?: string
           verified_at?: string | null
           verified_by?: string | null
         }
         Update: {
+          ai_confidence?: number | null
           created_at?: string
           cut_plan_item_id?: string
           id?: string
           material_photo_url?: string | null
           notes?: string | null
+          ocr_metadata?: Json | null
           status?: string
           tag_scan_url?: string | null
           updated_at?: string
+          verification_method?: string
+          verification_state?: string
           verified_at?: string | null
           verified_by?: string | null
         }

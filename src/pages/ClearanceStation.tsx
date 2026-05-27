@@ -14,6 +14,8 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { ClearanceCard } from "@/components/clearance/ClearanceCard";
+import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
+import { Zap, Hand } from "lucide-react";
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
@@ -25,9 +27,8 @@ export default function ClearanceStation() {
   // Track the active manifest by stable project key (project_id || "__unassigned__")
   // so it survives label/data changes after the last item is cleared.
   const [selectedProjectKey, setSelectedProjectKey] = useState<string | null>(null);
-  // Cache the label of the active manifest so we can keep showing it even after
-  // the project group disappears from byProjectKey on completion.
   const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
+  const [autoMode, setAutoMode] = useState(false);
 
   // Resolve key → label/items from the live hook.
   const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
@@ -271,7 +272,7 @@ export default function ClearanceStation() {
           </div>
         ) : (
           <div className="p-4 space-y-4">
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <ShieldCheck className="w-5 h-5 text-primary" />
               <h2 className="text-sm font-bold tracking-wider uppercase text-foreground truncate">
                 Manifest: {displayLabel}
@@ -279,6 +280,22 @@ export default function ClearanceStation() {
               <Badge variant="secondary" className="text-[10px] shrink-0">
                 {activeClearedCount} / {activeItems.length}
               </Badge>
+              {!manifestComplete && canWrite && activeItems.some((i) => i.evidence_status !== "cleared") && (
+                <div className="ml-auto inline-flex rounded-lg border border-border overflow-hidden">
+                  <button
+                    onClick={() => setAutoMode(false)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase ${!autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+                  >
+                    <Hand className="w-3.5 h-3.5" /> Manual
+                  </button>
+                  <button
+                    onClick={() => setAutoMode(true)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border ${autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+                  >
+                    <Zap className="w-3.5 h-3.5" /> Auto Clearance
+                  </button>
+                </div>
+              )}
             </div>
             {manifestComplete ? (
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
@@ -295,11 +312,20 @@ export default function ClearanceStation() {
                   onClick={() => {
                     setSelectedProjectKey(null);
                     setSelectedProjectLabel("");
+                    setAutoMode(false);
                   }}
                 >
                   Back to Projects
                 </Button>
               </div>
+            ) : autoMode && canWrite ? (
+              <AutoClearanceMode
+                items={activeItems}
+                manifestLabel={displayLabel}
+                manifestKey={selectedProjectKey!}
+                userId={user?.id}
+                onExit={() => setAutoMode(false)}
+              />
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeItems.map((item) => (
@@ -313,6 +339,7 @@ export default function ClearanceStation() {
               </div>
             )}
           </div>
+
         )}
       </ScrollArea>
     </div>
