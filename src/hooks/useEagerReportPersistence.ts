@@ -49,9 +49,7 @@ export function useEagerReportPersistence(
     lastKey.current = key;
 
     const persist = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return;
       const companyId = user.user_metadata?.company_id ?? "";
 

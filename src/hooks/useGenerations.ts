@@ -50,7 +50,7 @@ export function useGenerations() {
       estimated_credits: number;
       metadata?: Record<string, any>;
     }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase

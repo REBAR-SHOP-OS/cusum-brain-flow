@@ -5,7 +5,7 @@ export function useCompanyId() {
   const { data: companyId, isLoading } = useQuery({
     queryKey: ["my_company_id"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
       const { data } = await supabase
         .from("profiles")
@@ -25,7 +25,7 @@ export function useCompanyId() {
  * Returns null if no authenticated user or no profile found.
  */
 export async function getCompanyId(): Promise<string | null> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
   const { data } = await supabase
     .from("profiles")

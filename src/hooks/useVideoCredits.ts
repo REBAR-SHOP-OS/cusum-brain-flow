@@ -23,7 +23,7 @@ export function useVideoCredits() {
   const { data: credits, isLoading } = useQuery({
     queryKey: ["video_credits"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
 
       const now = new Date();
@@ -64,7 +64,7 @@ export function useVideoCredits() {
 
   const consumeCredits = useMutation({
     mutationFn: async ({ durationSeconds, mode, generationId }: { durationSeconds: number; mode: string; generationId?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
       if (!credits) throw new Error("Credits not loaded");
 
@@ -111,7 +111,7 @@ export function useVideoCredits() {
 
   const refundCredits = useMutation({
     mutationFn: async ({ cost, generationId }: { cost: number; generationId?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
       if (!credits) throw new Error("Credits not loaded");
 
@@ -142,7 +142,7 @@ export function useVideoCredits() {
   const { data: totalSpent = 0 } = useQuery({
     queryKey: ["total_spent"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return 0;
 
       const { data, error } = await supabase

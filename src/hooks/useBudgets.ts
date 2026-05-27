@@ -45,7 +45,7 @@ export function useBudgets(fiscalYear?: number) {
 
   const createBudget = useMutation({
     mutationFn: async (input: Partial<Budget> & { name: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { data, error } = await supabase
         .from("budgets")
         .insert({ ...input, company_id: companyId!, fiscal_year: year, created_by: user?.id })

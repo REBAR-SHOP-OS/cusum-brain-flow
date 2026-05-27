@@ -50,7 +50,7 @@ export function useInventoryCounts() {
 
   const createCount = useMutation({
     mutationFn: async (input: { count_type: string; location?: string; notes?: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
       const seq = String(counts.length + 1).padStart(3, "0");
 

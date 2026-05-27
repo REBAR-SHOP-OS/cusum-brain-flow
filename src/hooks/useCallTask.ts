@@ -54,7 +54,7 @@ export function useCallTask(): UseCallTaskReturn {
       return null;
     }
 
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) {
       toast.error("Not authenticated");
       return null;

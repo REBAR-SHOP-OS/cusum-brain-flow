@@ -23,7 +23,7 @@ export function useBrandKit() {
   const { data: brandKit, isLoading } = useQuery({
     queryKey: ["brand_kit"],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) return null;
 
       const { data, error } = await supabase
@@ -41,7 +41,7 @@ export function useBrandKit() {
 
   const saveBrandKit = useMutation({
     mutationFn: async (kit: Omit<BrandKit, "id" | "created_at" | "updated_at" | "user_id">) => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       if (!user) throw new Error("Not authenticated");
 
       const { data, error } = await supabase

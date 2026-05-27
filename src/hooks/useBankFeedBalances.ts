@@ -40,7 +40,7 @@ export function useBankFeedBalances() {
   const upsertBalance = useCallback(
     async (accountId: string, accountName: string, bankBalance: number) => {
       if (!companyId) return;
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const { error } = await supabase
         .from("bank_feed_balances")
         .upsert(
@@ -79,7 +79,7 @@ export function useBankFeedBalances() {
       const existingIds = new Set((existing || []).map((e: any) => e.account_id));
       const toSeed = bankAccounts.filter((a) => !existingIds.has(a.id));
       if (toSeed.length === 0) return;
-      const { data: { user } } = await supabase.auth.getUser();
+      const user = await getCurrentUser();
       const rows = toSeed.map((a) => ({
         account_id: a.id,
         account_name: a.name,
