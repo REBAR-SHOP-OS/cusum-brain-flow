@@ -110,6 +110,10 @@ export function useAutoClearance({
   const scanLockRef = useRef(false);
   // Tracks the full item cycle (tag capture → finalize).
   const cycleStartRef = useRef<number>(0);
+  // Held tag photo blob during the confirm-pick branch. Required so that the
+  // tag photo is actually uploaded AFTER the operator picks the right item.
+  const pendingTagBlobRef = useRef<Blob | null>(null);
+  const pendingTagOcrRef = useRef<any>(null);
 
   // Track online/offline.
   useEffect(() => {
