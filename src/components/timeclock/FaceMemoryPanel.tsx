@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Trash2, ImageOff, Brain, UserPlus, Camera, Check, X, ArrowLeft, RefreshCw } from "lucide-react";
+import { Loader2, Trash2, ImageOff, Brain, UserPlus, Camera, Check, X, ArrowLeft, RefreshCw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -250,6 +250,34 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
       .eq("id", enrollmentId);
     if (error) toast.error("Failed to delete photo");
     else { toast.success("Photo removed"); fetchData(); }
+  };
+
+  const sanitize = (s: string) => s.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+
+  const handleDownloadAll = async (group: ProfileGroup) => {
+    try {
+      const base = sanitize(group.full_name) || "face";
+      let i = 0;
+      for (const enrollment of group.enrollments) {
+        const storagePath = enrollment.photo_url.replace(/^.*face-enrollments\//, "");
+        const { data, error } = await supabase.storage.from("face-enrollments").download(storagePath);
+        if (error || !data) continue;
+        const ext = storagePath.split(".").pop() || "jpg";
+        const url = URL.createObjectURL(data);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${base}_${++i}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+      if (i === 0) toast.error("No photos available to download");
+      else toast.success(`Downloaded ${i} photo${i !== 1 ? "s" : ""}`);
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error("Download failed");
+    }
   };
 
   const handleCreateNewPerson = async () => {
@@ -495,6 +523,15 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
                         {group.enrollments.length} photo{group.enrollments.length !== 1 ? "s" : ""}
                       </Badge>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleDownloadAll(group)}
+                      title="Download all photos"
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon"
