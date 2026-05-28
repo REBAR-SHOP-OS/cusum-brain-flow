@@ -526,6 +526,15 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      onClick={() => handleDownloadAll(group)}
+                      title="Download all photos"
+                    >
+                      <Download className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 text-destructive hover:bg-destructive/10"
                       onClick={() => handleDeleteAll(group.profile_id, group.full_name)}
                     >
