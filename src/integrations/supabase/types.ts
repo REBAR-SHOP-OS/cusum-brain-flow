@@ -17348,6 +17348,13 @@ export type Database = {
           schedule: string
         }[]
       }
+      get_enabled_features_for_user: {
+        Args: never
+        Returns: {
+          flag_key: string
+          metadata: Json
+        }[]
+      }
       get_internal_function_secret: { Args: never; Returns: string }
       get_my_gmail_status: {
         Args: never
