@@ -361,8 +361,6 @@ function handleGetAuthUrl(
   return jsonRes({ authUrl: authUrl.toString(), scopeMode });
 }
 
-}
-
 // ─── Check Status ──────────────────────────────────────────────────
 
 async function handleCheckStatus(
