@@ -27,6 +27,7 @@ import type { ClearanceItem } from "@/hooks/useClearanceData";
 import { compressImage } from "@/lib/imageCompressor";
 import { useUserRole } from "@/hooks/useUserRole";
 import { OverrideReasonDialog } from "@/components/shopfloor/OverrideReasonDialog";
+import { assertEvidenceComplete, ClearanceGateError } from "@/lib/clearanceEvidenceGate";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -235,6 +236,9 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     setGateError(null);
     try {
       if (item.evidence_id) {
+        // HARD GATE — confirm both photos are on the SAME evidence row before
+        // flipping status to cleared. Mirrors the auto-clearance finalize gate.
+        await assertEvidenceComplete(item.evidence_id, item.id);
         const { error: evErr } = await supabase
           .from("clearance_evidence")
           .update({
@@ -279,7 +283,14 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
       toast({ title: "Item cleared", description: `${item.mark_number || "Item"} verified` });
     } catch (err: any) {
       const message = err?.message ?? String(err);
-      if (/WORKFLOW_GATE_/.test(message)) {
+      if (err instanceof ClearanceGateError) {
+        setGateError(message);
+        toast({
+          title: "Missing evidence",
+          description: message,
+          variant: "destructive",
+        });
+      } else if (/WORKFLOW_GATE_/.test(message)) {
         setGateError(message);
         toast({
           title: "Blocked by release gate",

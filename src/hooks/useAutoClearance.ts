@@ -5,14 +5,25 @@ import { compressImage } from "@/lib/imageCompressor";
 import type { ClearanceItem } from "@/hooks/useClearanceData";
 import { speak, vibrate } from "@/lib/voiceFeedback";
 import * as queue from "@/lib/autoClearanceQueue";
+import {
+  assertTagEvidenceReady,
+  assertEvidenceComplete,
+  ClearanceGateError,
+} from "@/lib/clearanceEvidenceGate";
 
+// Strict sequential state machine. Any forbidden transition (e.g. waiting_tag
+// → waiting_product without tag_evidence_saved) is impossible because each
+// stage is set only inside the matching code path below.
 export type AutoState =
   | "waiting_tag"
-  | "tag_matching"
-  | "tag_matched"
-  | "tag_pick"           // medium confidence — show top 3
+  | "tag_uploading"
+  | "ocr_running"
+  | "matching"
+  | "tag_pick"              // medium confidence — show top 3 (tag blob held)
+  | "tag_evidence_saved"
   | "waiting_product"
-  | "auto_verifying"
+  | "product_uploading"
+  | "product_validating"
   | "completed"
   | "manifest_complete";
 
@@ -99,6 +110,10 @@ export function useAutoClearance({
   const scanLockRef = useRef(false);
   // Tracks the full item cycle (tag capture → finalize).
   const cycleStartRef = useRef<number>(0);
+  // Held tag photo blob during the confirm-pick branch. Required so that the
+  // tag photo is actually uploaded AFTER the operator picks the right item.
+  const pendingTagBlobRef = useRef<Blob | null>(null);
+  const pendingTagOcrRef = useRef<any>(null);
 
   // Track online/offline.
   useEffect(() => {
@@ -223,16 +238,8 @@ export function useAutoClearance({
     confidence: number,
     ocrMeta: any,
   ) => {
-    // Re-read this specific evidence row and confirm both photos are attached.
-    const { data: ev, error: readErr } = await supabase
-      .from("clearance_evidence")
-      .select("id, tag_scan_url, material_photo_url")
-      .eq("id", evidenceId)
-      .maybeSingle();
-    if (readErr || !ev) throw readErr || new Error("Evidence row missing");
-    if (!ev.tag_scan_url || !ev.material_photo_url) {
-      throw new Error("Both tag and product photos required before auto verify");
-    }
+    // Shared gate — same definition of "complete" used by Manual Verify.
+    await assertEvidenceComplete(evidenceId, itemId);
     const { error: upErr } = await supabase
       .from("clearance_evidence")
       .update({
@@ -244,7 +251,7 @@ export function useAutoClearance({
         verified_by: userId,
         verified_at: new Date().toISOString(),
       })
-      .eq("id", ev.id);
+      .eq("id", evidenceId);
     if (upErr) throw upErr;
     // The auto_advance trigger flips cut_plan_items.phase to 'complete'.
   }, [userId]);
@@ -273,7 +280,7 @@ export function useAutoClearance({
       return;
     }
     setBusy(true);
-    setState("tag_matching");
+    setState("tag_uploading");
     try {
       // Pre-normalized candidates (rebuilt only when manifest changes).
       const candidates = candidatesRef.current;
@@ -286,6 +293,7 @@ export function useAutoClearance({
       // copy so the AI roundtrip isn't blocked on the full-size upload.
       const tOcrPrep = tNow();
       const ocrBlobPromise = buildOcrBlob(blob);
+      setState("ocr_running");
       const ocrPromise = ocrBlobPromise
         .then(blobToBase64)
         .then(async (imageBase64) => {
@@ -307,6 +315,7 @@ export function useAutoClearance({
       const ranked: RankedMatch[] = data?.ranked || [];
       const decision: "auto" | "confirm" | "none" = data?.decision || "none";
       setLastOcr(ocr);
+      setState("matching");
 
       if (decision === "none" || ranked.length === 0) {
         setLastConfidence(ranked[0]?.score ?? 0);
@@ -330,6 +339,11 @@ export function useAutoClearance({
       }
 
       if (decision === "confirm") {
+        // HOLD the captured tag blob — confirmPick will upload it after the
+        // operator confirms the candidate. Previously this branch dropped the
+        // blob entirely, leaving evidence rows without a tag_scan_url.
+        pendingTagBlobRef.current = blob;
+        pendingTagOcrRef.current = { ocr, ranked, decision };
         setPickCandidates(ranked.slice(0, 3));
         setLastConfidence(best.score);
         setState("tag_pick");
@@ -338,8 +352,8 @@ export function useAutoClearance({
       }
 
       // High confidence — upload tag photo + ensure evidence row in parallel,
-      // then write the evidence row update. Move to product mode the moment
-      // the row update succeeds; cache invalidation happens in background.
+      // then write the evidence row update. Move to product mode ONLY after
+      // the DB-confirmed gate passes (assertTagEvidenceReady).
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
       const [evId, path] = await Promise.all([
@@ -359,12 +373,15 @@ export function useAutoClearance({
         .eq("id", evId);
       perfLog("tag_row_update", tNow() - tRowUp);
       if (tagUpErr) throw tagUpErr;
+      // HARD GATE — re-read the row; do NOT trust the local update result.
+      await assertTagEvidenceReady(evId, matchedItem.id);
       setActiveEvidenceId(evId);
-      setState("tag_matched");
+      setState("tag_evidence_saved");
       speak("Tag matched");
       vibrate(60);
-      // Snap to product capture quickly — voice/animation don't block.
-      window.setTimeout(() => setState("waiting_product"), 250);
+      // Direct flip — no setTimeout. Removing the previous 250ms gap so the
+      // product shutter cannot fire while the gate is mid-flight.
+      setState("waiting_product");
       perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
     } catch (e: any) {
       console.error("tag capture failed", e);
@@ -381,35 +398,58 @@ export function useAutoClearance({
   const confirmPick = useCallback(async (candidateId: string) => {
     const match = itemsRef.current.find((i) => i.id === candidateId);
     if (!match) return;
+    const blob = pendingTagBlobRef.current;
+    if (!blob) {
+      // No held tag blob (page refresh / drain path). Cannot guarantee
+      // tag_scan_url — bounce back to waiting_tag so operator rescans.
+      showBanner({ kind: "error", text: "Tag photo lost — rescan tag." }, 2500);
+      setPickCandidates([]);
+      setState("waiting_tag");
+      return;
+    }
     setActiveItemId(candidateId);
     setPickCandidates([]);
-    setState("tag_matched");
-    // We already uploaded nothing yet for pick path — operator will rescan tag
-    // attached to this item by capturing PRODUCT photo next. Pre-create row.
+    setBusy(true);
+    setState("tag_uploading");
     try {
-      const evId = await ensureEvidenceRow(candidateId);
+      const [evId, path] = await Promise.all([
+        ensureEvidenceRow(candidateId),
+        uploadToStorage(candidateId, "tag", blob),
+      ]);
       const { error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
+          tag_scan_url: path,
           verification_state: "tag_scanned",
           verification_method: "assisted",
           ai_confidence: lastConfidence,
-          ocr_metadata: { ocr: lastOcr, picked: candidateId },
+          ocr_metadata: { ...(pendingTagOcrRef.current || { ocr: lastOcr }), picked: candidateId },
         })
         .eq("id", evId);
       if (pickUpErr) throw pickUpErr;
+      await assertTagEvidenceReady(evId, candidateId);
       setActiveEvidenceId(evId);
-    } catch (e) {
-      console.error("confirmPick row create failed", e);
+      setState("tag_evidence_saved");
+      speak("Confirmed");
+      setState("waiting_product");
+    } catch (e: any) {
+      console.error("confirmPick failed", e);
+      showBanner({ kind: "error", text: e?.message || "Tag save failed" }, 3000);
+      setState("waiting_tag");
+    } finally {
+      pendingTagBlobRef.current = null;
+      pendingTagOcrRef.current = null;
+      setBusy(false);
+      queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-    speak("Confirmed");
-    window.setTimeout(() => setState("waiting_product"), 250);
-  }, [ensureEvidenceRow, lastConfidence, lastOcr]);
+  }, [ensureEvidenceRow, lastConfidence, lastOcr, queryClient, showBanner, uploadToStorage]);
+
 
   const handleProductCapture = useCallback(async (blob: Blob) => {
     if (scanLockRef.current || busy) return;
-    if (!activeItemId) {
-      showBanner({ kind: "error", text: "Scan a tag first." }, 2000);
+    if (!activeItemId || !activeEvidenceId) {
+      showBanner({ kind: "error", text: "Scan and save tag first." }, 2200);
+      setState("waiting_tag");
       return;
     }
     if (!navigator.onLine) {
@@ -429,25 +469,42 @@ export function useAutoClearance({
     }
     scanLockRef.current = true;
     setBusy(true);
-    setState("auto_verifying");
+    setState("product_uploading");
     const tStartProduct = tNow();
     try {
+      // HARD GATE — re-read evidence row and confirm tag photo persisted on
+      // the SAME row before allowing product upload. Prevents the "product
+      // photo without tag photo" failure mode entirely.
+      try {
+        await assertTagEvidenceReady(activeEvidenceId, activeItemId);
+      } catch (gateErr: any) {
+        const msg = gateErr instanceof ClearanceGateError
+          ? gateErr.message
+          : "Tag photo required before product photo.";
+        showBanner({ kind: "error", text: msg }, 3000);
+        setActiveItemId(null);
+        setActiveEvidenceId(null);
+        setState("waiting_tag");
+        return;
+      }
+
       const item = itemsRef.current.find((i) => i.id === activeItemId);
-      // Reuse the evidence id captured at tag time — avoids creating a second row
-      // because the React Query cache for items hasn't refetched yet.
-      const evId = activeEvidenceId ?? await ensureEvidenceRow(activeItemId);
+      const evId = activeEvidenceId;
       const path = await uploadToStorage(activeItemId, "product", blob);
-      // Fire the row update and validation in parallel — validation only
-      // needs the storage path, not the row update.
+      // Row update first (so DB has product photo), then validation. Keeping
+      // them parallel previously meant validation could pass before the row
+      // existed if the row update silently failed.
       const tParallel = tNow();
-      const rowUpdatePromise = supabase
+      const { error: prodUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           material_photo_url: path,
           verification_state: "product_captured",
         })
         .eq("id", evId);
-      const validatePromise = supabase.functions.invoke(
+      if (prodUpErr) throw prodUpErr;
+      setState("product_validating");
+      const { data: vData, error: vErr } = await supabase.functions.invoke(
         "validate-clearance-photo",
         {
           body: {
@@ -456,15 +513,11 @@ export function useAutoClearance({
             expected_drawing_ref: item?.drawing_ref,
             photo_type: "material",
           },
-        }
+        },
       );
-      const [{ error: prodUpErr }, { data: vData, error: vErr }] = await Promise.all([
-        rowUpdatePromise,
-        validatePromise,
-      ]);
       perfLog("product_update+validate", tNow() - tParallel);
-      if (prodUpErr) throw prodUpErr;
       if (vErr) throw vErr;
+
       const validation = vData || { valid: true, confidence: "unreadable" };
       const validationOk = validation.valid !== false;
       if (!validationOk) {
@@ -526,8 +579,19 @@ export function useAutoClearance({
           if (cap.kind === "tag") {
             await handleTagCapture(cap.blob);
           } else if (cap.itemId) {
-            // Restore activeItemId temporarily to route product upload.
+            // Drain safety — never write a product photo to a row whose tag
+            // photo has not been confirmed. Look up evidence row first.
+            const { data: ev } = await supabase
+              .from("clearance_evidence")
+              .select("id, tag_scan_url")
+              .eq("cut_plan_item_id", cap.itemId)
+              .maybeSingle();
+            if (!ev?.id || !ev.tag_scan_url) {
+              console.warn("drain skipping orphan product capture (no tag_scan_url)", cap.id);
+              continue; // leave in queue
+            }
             setActiveItemId(cap.itemId);
+            setActiveEvidenceId(ev.id);
             await handleProductCapture(cap.blob);
           }
           await queue.remove(cap.id);

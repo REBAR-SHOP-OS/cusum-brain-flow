@@ -44,24 +44,42 @@ export function AutoClearanceMode({
   const [voiceOn, setVoiceOn] = useState(isVoiceEnabled());
   const [showPanel, setShowPanel] = useState(false);
 
-  const stage: "tag" | "product" = state === "waiting_product" || state === "auto_verifying" || state === "tag_matched" ? "product" : "tag";
+  // Stage drives which camera mode is active. PRODUCT mode is only reached
+  // after the DB-confirmed tag gate passes (state === 'waiting_product').
+  // tag_evidence_saved is a momentary stage just before waiting_product —
+  // keep it on the TAG camera mode so the product shutter cannot fire early.
+  const stage: "tag" | "product" =
+    state === "waiting_product" ||
+    state === "product_uploading" ||
+    state === "product_validating"
+      ? "product"
+      : "tag";
+
+  // Hard lock: product shutter only fires once tag photo is DB-confirmed.
+  const productLocked = stage === "product" && state !== "waiting_product";
 
   const ringColor =
     state === "waiting_tag" ? "blue"
-    : state === "tag_matching" ? "blue"
-    : state === "tag_matched" ? "green"
+    : state === "tag_uploading" ? "blue"
+    : state === "ocr_running" ? "blue"
+    : state === "matching" ? "blue"
+    : state === "tag_evidence_saved" ? "green"
     : state === "waiting_product" ? "amber"
-    : state === "auto_verifying" ? "amber"
+    : state === "product_uploading" ? "amber"
+    : state === "product_validating" ? "amber"
     : state === "completed" ? "green"
     : "none";
 
   const overlayLabel =
     state === "waiting_tag" ? "SCAN TAG"
-    : state === "tag_matching" ? "READING TAG…"
-    : state === "tag_matched" ? `MATCHED ${activeItem?.mark_number ?? ""}`
+    : state === "tag_uploading" ? "UPLOADING TAG…"
+    : state === "ocr_running" ? "READING TAG…"
+    : state === "matching" ? "MATCHING…"
+    : state === "tag_evidence_saved" ? `MATCHED ${activeItem?.mark_number ?? ""}`
     : state === "tag_pick" ? "CONFIRM MATCH"
     : state === "waiting_product" ? `PHOTO BUNDLE ${activeItem?.mark_number ?? ""}`
-    : state === "auto_verifying" ? "VERIFYING…"
+    : state === "product_uploading" ? "UPLOADING PHOTO…"
+    : state === "product_validating" ? "VERIFYING…"
     : state === "completed" ? "VERIFIED"
     : state === "manifest_complete" ? "MANIFEST COMPLETE"
     : "";
@@ -149,7 +167,7 @@ export function AutoClearanceMode({
           onCapture={onCapture}
           ringColor={ringColor as any}
           overlayLabel={overlayLabel}
-          disabled={busy || manifestComplete || state === "tag_pick"}
+          disabled={busy || manifestComplete || state === "tag_pick" || productLocked}
         />
       </div>
 
@@ -160,17 +178,30 @@ export function AutoClearanceMode({
         </div>
       )}
 
+      {/* PRODUCT LOCK NOTICE — shutter disabled until tag photo confirmed */}
+      {productLocked && (
+        <div className="absolute inset-x-0 bottom-32 z-30 flex justify-center pointer-events-none">
+          <div className="bg-amber-500/95 text-black rounded-xl px-4 py-2 text-xs font-bold tracking-wider uppercase shadow-2xl">
+            Scan and save tag first
+          </div>
+        </div>
+      )}
+
       {/* BUSY OVERLAY */}
-      {(state === "auto_verifying" || state === "tag_matching") && (
+      {(state === "product_validating" || state === "product_uploading" || state === "ocr_running" || state === "matching" || state === "tag_uploading") && (
         <div className="absolute inset-0 z-30 bg-black/40 pointer-events-none flex items-center justify-center">
           <div className="bg-black/80 rounded-2xl px-6 py-4 flex items-center gap-3 text-white">
             <Loader2 className="w-6 h-6 animate-spin" />
             <span className="text-sm font-bold tracking-wider uppercase">
-              {state === "auto_verifying" ? "Verifying" : "Reading tag"}
+              {state === "product_validating" ? "Verifying"
+                : state === "product_uploading" ? "Uploading"
+                : state === "tag_uploading" ? "Saving tag"
+                : "Reading tag"}
             </span>
           </div>
         </div>
       )}
+
 
       {/* PICK 3 OVERLAY */}
       {state === "tag_pick" && (
