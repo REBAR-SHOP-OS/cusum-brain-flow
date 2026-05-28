@@ -17,13 +17,37 @@ async function convertPdfToImages(pdfData: Uint8Array, maxPages: number, dpi: nu
 }
 
 Deno.serve((req) =>
+Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
-    const { body } = ctx;
+    const { userId, body } = ctx;
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      );
+    }
     const { pdfUrl, maxPages = 50, dpi = 150 } = body;
 
-    if (!pdfUrl) {
+    if (!pdfUrl || typeof pdfUrl !== "string") {
       return new Response(
         JSON.stringify({ error: "pdfUrl is required" }),
+        { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+
+    // Allowlist: only HTTPS URLs from our own Supabase storage to prevent SSRF
+    let parsed: URL;
+    try {
+      parsed = new URL(pdfUrl);
+    } catch {
+      return new Response(
+        JSON.stringify({ error: "Invalid URL" }),
+        { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
+      );
+    }
+    if (parsed.protocol !== "https:" || !/\.supabase\.(co|in)$/i.test(parsed.hostname)) {
+      return new Response(
+        JSON.stringify({ error: "Only Supabase storage URLs are allowed" }),
         { status: 400, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" } },
       );
     }
@@ -42,5 +66,5 @@ Deno.serve((req) =>
       processedPages: result.pages.length,
       pages: result.pages,
     };
-  }, { functionName: "pdf-to-images", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, { functionName: "pdf-to-images", authMode: "required", requireCompany: false, wrapResult: false })
 );
