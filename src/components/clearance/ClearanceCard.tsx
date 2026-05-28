@@ -27,6 +27,7 @@ import type { ClearanceItem } from "@/hooks/useClearanceData";
 import { compressImage } from "@/lib/imageCompressor";
 import { useUserRole } from "@/hooks/useUserRole";
 import { OverrideReasonDialog } from "@/components/shopfloor/OverrideReasonDialog";
+import { assertEvidenceComplete, ClearanceGateError } from "@/lib/clearanceEvidenceGate";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
