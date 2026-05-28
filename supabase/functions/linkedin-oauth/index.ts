@@ -388,11 +388,14 @@ async function handleCheckStatus(
   const scopeSet = getScopeSet(
     (connection.config as { scope?: string })?.scope,
   );
-  const missingModernScopes = !scopeSet.has("offline_access") ||
-    !scopeSet.has("w_organization_social") ||
-    !scopeSet.has("r_organization_social");
+  // Only flag the connection as broken when MIN scopes are missing. Missing optional
+  // scopes (offline_access / org scopes) downgrade capabilities but personal posting
+  // still works, so we keep the connection usable.
+  const missingMinScopes = !scopeSet.has("openid") ||
+    !scopeSet.has("profile") ||
+    !scopeSet.has("w_member_social");
 
-  if (!config.access_token || missingModernScopes) {
+  if (!config.access_token || missingMinScopes) {
     await supabase
       .from("integration_connections")
       .update({ status: "error", error_message: reconnectError })
