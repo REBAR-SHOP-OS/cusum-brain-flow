@@ -731,23 +731,46 @@ Deno.serve((req) =>
           }
         }
       } else if (platform === "linkedin") {
-        // Support multi-page LinkedIn (personal + company pages)
-        const linkedInPages = individualPages.length > 0
-          ? individualPages
-          : [null];
-        for (const targetPage of linkedInPages) {
-          const result = await publishToLinkedIn(
-            supabaseAdmin,
-            userId,
-            message,
-            image_url,
-            targetPage || undefined,
-          );
-          const label = targetPage || "linkedin";
-          if (result.error) {
-            markFailure(label, result.error);
-          } else {
-            markSuccess(label, (result as any).id);
+        // Pre-flight: if the caller's LinkedIn connection is fundamentally dead
+        // (expired with no refresh_token) AND no usable teammate fallback exists,
+        // fail once with a single clean message instead of repeating the same error
+        // for every requested page.
+        const { data: liConn } = await supabaseAdmin
+          .from("integration_connections")
+          .select("config, status")
+          .eq("user_id", userId)
+          .eq("integration_id", "linkedin")
+          .maybeSingle();
+        const liCfg = (liConn?.config || {}) as LinkedInConnectionConfig;
+        const liDead = !liCfg.access_token ||
+          ((liCfg.expires_at || 0) < Date.now() && !liCfg.refresh_token);
+        if (liDead) {
+          const singleError = getLinkedInReconnectError(liCfg, {
+            pageName: page_name,
+            status: liConn?.status || "error",
+          });
+          for (const targetPage of (individualPages.length > 0 ? individualPages : [null])) {
+            markFailure(targetPage || "linkedin", singleError);
+          }
+        } else {
+          // Support multi-page LinkedIn (personal + company pages)
+          const linkedInPages = individualPages.length > 0
+            ? individualPages
+            : [null];
+          for (const targetPage of linkedInPages) {
+            const result = await publishToLinkedIn(
+              supabaseAdmin,
+              userId,
+              message,
+              image_url,
+              targetPage || undefined,
+            );
+            const label = targetPage || "linkedin";
+            if (result.error) {
+              markFailure(label, result.error);
+            } else {
+              markSuccess(label, (result as any).id);
+            }
           }
         }
       } else if (platform === "twitter") {
