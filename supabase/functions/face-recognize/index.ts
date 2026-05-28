@@ -131,24 +131,26 @@ Deno.serve((req) =>
     const contentParts: any[] = [
       {
         type: "text",
-        text: `Facial recognition system. Compare the CAPTURED photo against ALL enrolled reference photos below.
+        text: `You are a face verification system for an employee time clock. Compare the CAPTURED photo against each labeled reference set and identify which enrolled person it most likely is.
 
 Enrolled employees:
 ${employeeList}
 
-Each employee may have multiple reference photos taken from different angles and lighting conditions. Use ALL provided reference photos to build a complete understanding of each person's facial features.
-
-Rules:
-- Match ONLY on facial features: bone structure, nose shape, eye shape/spacing, jawline, facial hair, glasses, face shape, skin tone.
-- Cross-reference ALL reference photos for each person — if the captured face matches consistently across multiple references, increase confidence.
-- Account for variations in lighting, angle, expression, and camera quality between the captured photo and references.
-- Confidence 85+: highly certain match. 60-84: likely resemblance. Below 50: no match (set matched_profile_id="null").
+DECISION RUBRIC — be decisive, not overly cautious:
+- Focus on stable facial geometry: eye shape & spacing, nose shape, mouth, jawline, brow, ear shape, skin tone. IGNORE clothing, headwear (hijab/hat), background, lighting, expression, makeup, glasses, and image quality.
+- Cross-reference ALL provided photos for each person — variations in angle/lighting between references and the capture are expected.
+- If the captured face's stable features are CONSISTENT with one reference person and clearly distinct from the others → set matched_profile_id to that profile_id. Confidence scale:
+    • 90-99 = obvious same person
+    • 75-89 = clearly the same person despite minor differences (angle, lighting, expression)
+    • 60-74 = same person, lower-quality capture but features still align
+- Only set matched_profile_id="null" if (a) no enrolled reference shares the captured face's stable features, OR (b) the capture is too blurry/occluded to read facial geometry. Do NOT return no-match just because clothing/background/lighting differ.
 - Multiple faces in captured photo → identify the center/largest face only.
-- When uncertain, prefer "no match" over a wrong match.
+- 'reason' must be ONE short sentence stating the decision (e.g. "Same eye shape, nose, and jawline as Zahra's references.").
 
 Call face_match_result with your answer.`,
       },
     ];
+
 
     // Add enrolled reference photos
     for (const face of enrolledFaces) {
