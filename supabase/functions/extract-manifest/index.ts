@@ -336,6 +336,10 @@ Rules:
           .eq("id", sessionId);
 
         let parsedWorkbook: any = null;
+        // Deterministic PDF parser result — populated if the schedule table can
+        // be read directly from PDF text streams (header + coordinate mapping).
+        // When set, we skip the AI vision call entirely to prevent column shifts.
+        let deterministicPdfItems: any[] | null = null;
         if (isSpreadsheet) {
           console.log(`Parsing spreadsheet: ${fileName}`);
           const fileResp = await fetch(fileUrl);
@@ -364,20 +368,42 @@ Rules:
           const fileResp = await fetch(fileUrl);
           if (!fileResp.ok) throw new Error(`Failed to fetch file: ${fileResp.status}`);
           const fileBytes = new Uint8Array(await fileResp.arrayBuffer());
-          // Chunked btoa to avoid stack overflow on large files
-          let binary = "";
-          const chunkSize = 8192;
-          for (let i = 0; i < fileBytes.length; i += chunkSize) {
-            binary += String.fromCharCode(...fileBytes.subarray(i, i + chunkSize));
-          }
-          const b64 = btoa(binary);
-          const mimeType = getMimeType(fileName || fileUrl);
-          const dataUrl = `data:${mimeType};base64,${b64}`;
 
-          userContent.push({
-            type: "image_url",
-            image_url: { url: dataUrl },
-          });
+          // ── DETERMINISTIC PDF SCHEDULE PARSE ──
+          // For text-based PDFs (RebarCAD exports, bar schedule tables), read
+          // text items WITH x/y coordinates and map cells to columns by header
+          // position. This avoids the column-shift artifacts seen when the AI
+          // vision model guesses table reading order in dense schedules.
+          if (isPdf) {
+            try {
+              const parsed = await extractRebarTableFromPdf(fileBytes);
+              if (parsed.headerFound && parsed.items.length > 0) {
+                console.log(`[extract-manifest] Deterministic PDF parse OK: ${parsed.items.length} items across ${parsed.pages} pages — skipping AI`);
+                deterministicPdfItems = parsed.items;
+              } else {
+                console.log(`[extract-manifest] Deterministic PDF parse skipped: ${parsed.reason || "no items"} — falling back to AI`);
+              }
+            } catch (pdfErr) {
+              console.warn(`[extract-manifest] Deterministic PDF parse failed, falling back to AI:`, pdfErr);
+            }
+          }
+
+          if (!deterministicPdfItems) {
+            // Chunked btoa to avoid stack overflow on large files
+            let binary = "";
+            const chunkSize = 8192;
+            for (let i = 0; i < fileBytes.length; i += chunkSize) {
+              binary += String.fromCharCode(...fileBytes.subarray(i, i + chunkSize));
+            }
+            const b64 = btoa(binary);
+            const mimeType = getMimeType(fileName || fileUrl);
+            const dataUrl = `data:${mimeType};base64,${b64}`;
+
+            userContent.push({
+              type: "image_url",
+              image_url: { url: dataUrl },
+            });
+          }
         }
 
         const model = isSpreadsheet
