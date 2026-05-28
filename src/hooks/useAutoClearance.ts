@@ -579,8 +579,19 @@ export function useAutoClearance({
           if (cap.kind === "tag") {
             await handleTagCapture(cap.blob);
           } else if (cap.itemId) {
-            // Restore activeItemId temporarily to route product upload.
+            // Drain safety — never write a product photo to a row whose tag
+            // photo has not been confirmed. Look up evidence row first.
+            const { data: ev } = await supabase
+              .from("clearance_evidence")
+              .select("id, tag_scan_url")
+              .eq("cut_plan_item_id", cap.itemId)
+              .maybeSingle();
+            if (!ev?.id || !ev.tag_scan_url) {
+              console.warn("drain skipping orphan product capture (no tag_scan_url)", cap.id);
+              continue; // leave in queue
+            }
             setActiveItemId(cap.itemId);
+            setActiveEvidenceId(ev.id);
             await handleProductCapture(cap.blob);
           }
           await queue.remove(cap.id);
