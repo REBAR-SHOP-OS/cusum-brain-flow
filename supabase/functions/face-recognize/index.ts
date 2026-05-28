@@ -32,15 +32,13 @@ Deno.serve((req) =>
       companyId = callerProfile?.company_id || null;
     }
 
-    // Match REBAR OS Core: scope enrollments by company. Do NOT filter profiles by is_active
-    // (that flag means "currently clocked in" in this app, which would exclude everyone trying to punch in).
-    let enrollQuery = supabase
+    // Enrollments do not carry company_id in this app. Keep enrollments as the source of truth,
+    // then scope by company through the linked profile. Do NOT filter profiles by is_active
+    // (that flag means "currently clocked in" here, which would exclude everyone trying to punch in).
+    const enrollQuery = supabase
       .from("face_enrollments")
-      .select("id, profile_id, photo_url, company_id")
+      .select("id, profile_id, photo_url")
       .eq("is_active", true);
-    if (companyId) {
-      enrollQuery = enrollQuery.eq("company_id", companyId);
-    }
 
     const { data: enrollments, error: enrollErr } = await enrollQuery;
 
@@ -56,10 +54,15 @@ Deno.serve((req) =>
     }
 
     const profileIds = Array.from(new Set(enrollments.map((e: any) => e.profile_id)));
-    const { data: profiles, error: profileErr } = await supabase
+    let profileQuery = supabase
       .from("profiles")
       .select("id, full_name, avatar_url, company_id")
       .in("id", profileIds);
+    if (companyId) {
+      profileQuery = profileQuery.eq("company_id", companyId);
+    }
+
+    const { data: profiles, error: profileErr } = await profileQuery;
     if (profileErr) {
       console.error("Error fetching profiles:", profileErr);
       return new Response(JSON.stringify({ error: "Failed to fetch profiles" }), {
@@ -70,10 +73,17 @@ Deno.serve((req) =>
 
 
 
-    // Group enrollments by profile_id, limit to 1 per person for speed
+    const allowedProfileIds = new Set((profiles || []).map((p: any) => p.id));
+    const scopedEnrollments = enrollments.filter((e: any) => allowedProfileIds.has(e.profile_id));
+
+    if (scopedEnrollments.length === 0) {
+      return { matched: false, reason: "No enrolled faces found for this company", confidence: 0, enrollment_count: 0 };
+    }
+
+    // Group enrollments by profile_id, limit to 3 per person for accuracy
     const profileEnrollments = new Map<string, string[]>();
     const profileEnrollmentCounts = new Map<string, number>();
-    for (const e of enrollments) {
+    for (const e of scopedEnrollments) {
       profileEnrollmentCounts.set(e.profile_id, (profileEnrollmentCounts.get(e.profile_id) || 0) + 1);
       const urls = profileEnrollments.get(e.profile_id) || [];
       if (urls.length < 3) {
