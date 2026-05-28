@@ -223,23 +223,21 @@ async function handleCallback(
     console.warn("[linkedin-oauth] Failed to fetch organizations:", e);
   }
 
-  // Validate that LinkedIn actually granted every required scope.
-  // LinkedIn silently drops scopes the App is not approved for (e.g. offline_access,
-  // w_organization_social, r_organization_social). Without those, refresh + company
-  // page publishing cannot work — we must surface this immediately, not at publish time.
+  // Validate scopes. Two tiers:
+  //   - MIN_LINKEDIN_SCOPES missing → connection is unusable, mark as "error".
+  //   - OPTIONAL_LINKEDIN_SCOPES missing → keep "connected" but record a warning so
+  //     the UI can tell the user that auto-refresh / company-page publishing is off
+  //     until the LinkedIn App is approved for those products.
   const grantedScopes = new Set(
     String(tokens.scope || "").split(/[\s,]+/).map((s) => s.trim()).filter(
       Boolean,
     ),
   );
-  const droppedScopes = REQUIRED_LINKEDIN_SCOPES.filter((s) =>
-    !grantedScopes.has(s)
-  );
-  if (droppedScopes.length > 0) {
+  const missingRequired = MIN_LINKEDIN_SCOPES.filter((s) => !grantedScopes.has(s));
+  const missingOptional = OPTIONAL_LINKEDIN_SCOPES.filter((s) => !grantedScopes.has(s));
+  if (missingRequired.length > 0 || missingOptional.length > 0) {
     console.warn(
-      `[linkedin-oauth] Scopes dropped by provider: ${
-        droppedScopes.join(", ")
-      }. Granted: ${tokens.scope}`,
+      `[linkedin-oauth] Scopes missing — required: [${missingRequired.join(", ")}], optional: [${missingOptional.join(", ")}]. Granted: ${tokens.scope}`,
     );
   }
 
@@ -266,12 +264,17 @@ async function handleCallback(
     }
   }
 
-  const connectionStatus = droppedScopes.length > 0 ? "error" : "connected";
-  const connectionErrorMessage = droppedScopes.length > 0
-    ? `LinkedIn did not grant required scopes: ${
-      droppedScopes.join(", ")
-    }. The LinkedIn App must be approved for "Sign In with LinkedIn using OpenID Connect" (offline_access) and "Marketing Developer Platform" / "Community Management API" (w_organization_social, r_organization_social) in the LinkedIn Developer Portal. Reconnect alone will not fix this.`
-    : null;
+  const connectionStatus = missingRequired.length > 0 ? "error" : "connected";
+  let connectionErrorMessage: string | null = null;
+  if (missingRequired.length > 0) {
+    connectionErrorMessage =
+      `LinkedIn did not grant required scopes: ${missingRequired.join(", ")}. Enable "Sign In with LinkedIn using OpenID Connect" and "Share on LinkedIn" in the LinkedIn Developer Portal, then Reconnect.`;
+  } else if (missingOptional.length > 0) {
+    connectionErrorMessage =
+      `Personal publishing is enabled. Some capabilities are off because the LinkedIn App did not grant: ${missingOptional.join(", ")}. ` +
+      `Without offline_access the token expires every ~60 days and must be reconnected manually. ` +
+      `Without w_organization_social/r_organization_social, company-page publishing is disabled — enable the "Community Management API" product in the LinkedIn Developer Portal and Reconnect to unlock it.`;
+  }
 
   const { error: dbError } = await supabase
     .from("integration_connections")
@@ -299,7 +302,7 @@ async function handleCallback(
   // Redirect back to app's own callback page (same origin → popup closes reliably)
   const appBase = returnUrl || "https://erp.rebar.shop";
   const successUrl = new URL("/integrations/callback", appBase);
-  if (droppedScopes.length > 0) {
+  if (missingRequired.length > 0) {
     successUrl.searchParams.set("status", "error");
     successUrl.searchParams.set("integration", "linkedin");
     successUrl.searchParams.set("message", connectionErrorMessage!);
@@ -307,6 +310,9 @@ async function handleCallback(
     successUrl.searchParams.set("status", "success");
     successUrl.searchParams.set("integration", "linkedin");
     successUrl.searchParams.set("email", profileName);
+    if (connectionErrorMessage) {
+      successUrl.searchParams.set("warning", connectionErrorMessage);
+    }
   }
   return Response.redirect(successUrl.toString(), 302);
 }
