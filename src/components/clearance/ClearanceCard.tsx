@@ -236,6 +236,9 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     setGateError(null);
     try {
       if (item.evidence_id) {
+        // HARD GATE — confirm both photos are on the SAME evidence row before
+        // flipping status to cleared. Mirrors the auto-clearance finalize gate.
+        await assertEvidenceComplete(item.evidence_id, item.id);
         const { error: evErr } = await supabase
           .from("clearance_evidence")
           .update({
