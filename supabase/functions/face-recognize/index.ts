@@ -68,9 +68,7 @@ Deno.serve((req) =>
     }
 
 
-    if (!enrollments || enrollments.length === 0) {
-      return { matched: false, reason: "No enrolled faces found" };
-    }
+
 
     // Group enrollments by profile_id, limit to 1 per person for speed
     const profileEnrollments = new Map<string, string[]>();
