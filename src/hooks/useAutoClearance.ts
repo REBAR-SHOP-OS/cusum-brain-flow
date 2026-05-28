@@ -455,8 +455,9 @@ export function useAutoClearance({
 
   const handleProductCapture = useCallback(async (blob: Blob) => {
     if (scanLockRef.current || busy) return;
-    if (!activeItemId) {
-      showBanner({ kind: "error", text: "Scan a tag first." }, 2000);
+    if (!activeItemId || !activeEvidenceId) {
+      showBanner({ kind: "error", text: "Scan and save tag first." }, 2200);
+      setState("waiting_tag");
       return;
     }
     if (!navigator.onLine) {
@@ -476,25 +477,42 @@ export function useAutoClearance({
     }
     scanLockRef.current = true;
     setBusy(true);
-    setState("auto_verifying");
+    setState("product_uploading");
     const tStartProduct = tNow();
     try {
+      // HARD GATE — re-read evidence row and confirm tag photo persisted on
+      // the SAME row before allowing product upload. Prevents the "product
+      // photo without tag photo" failure mode entirely.
+      try {
+        await assertTagEvidenceReady(activeEvidenceId, activeItemId);
+      } catch (gateErr: any) {
+        const msg = gateErr instanceof ClearanceGateError
+          ? gateErr.message
+          : "Tag photo required before product photo.";
+        showBanner({ kind: "error", text: msg }, 3000);
+        setActiveItemId(null);
+        setActiveEvidenceId(null);
+        setState("waiting_tag");
+        return;
+      }
+
       const item = itemsRef.current.find((i) => i.id === activeItemId);
-      // Reuse the evidence id captured at tag time — avoids creating a second row
-      // because the React Query cache for items hasn't refetched yet.
-      const evId = activeEvidenceId ?? await ensureEvidenceRow(activeItemId);
+      const evId = activeEvidenceId;
       const path = await uploadToStorage(activeItemId, "product", blob);
-      // Fire the row update and validation in parallel — validation only
-      // needs the storage path, not the row update.
+      // Row update first (so DB has product photo), then validation. Keeping
+      // them parallel previously meant validation could pass before the row
+      // existed if the row update silently failed.
       const tParallel = tNow();
-      const rowUpdatePromise = supabase
+      const { error: prodUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           material_photo_url: path,
           verification_state: "product_captured",
         })
         .eq("id", evId);
-      const validatePromise = supabase.functions.invoke(
+      if (prodUpErr) throw prodUpErr;
+      setState("product_validating");
+      const { data: vData, error: vErr } = await supabase.functions.invoke(
         "validate-clearance-photo",
         {
           body: {
@@ -503,15 +521,11 @@ export function useAutoClearance({
             expected_drawing_ref: item?.drawing_ref,
             photo_type: "material",
           },
-        }
+        },
       );
-      const [{ error: prodUpErr }, { data: vData, error: vErr }] = await Promise.all([
-        rowUpdatePromise,
-        validatePromise,
-      ]);
       perfLog("product_update+validate", tNow() - tParallel);
-      if (prodUpErr) throw prodUpErr;
       if (vErr) throw vErr;
+
       const validation = vData || { valid: true, confidence: "unreadable" };
       const validationOk = validation.valid !== false;
       if (!validationOk) {
