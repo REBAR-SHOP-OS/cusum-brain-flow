@@ -4,6 +4,7 @@ import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 import { corsHeaders } from "../_shared/auth.ts";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { extractRebarTableFromPdf } from "../_shared/pdfTableExtractor.ts";
 
 function getMimeType(filename: string): string {
   const ext = filename.split(".").pop()?.toLowerCase() || "";
