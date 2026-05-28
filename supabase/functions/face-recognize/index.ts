@@ -144,8 +144,6 @@ Deno.serve((req) =>
           "Respond ONLY by calling the face_match_result tool.",
       },
     ];
-      },
-    ];
 
 
     // Add enrolled reference photos
