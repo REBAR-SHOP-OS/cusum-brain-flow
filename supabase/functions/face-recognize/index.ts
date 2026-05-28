@@ -3,10 +3,15 @@ import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
 
 Deno.serve((req) =>
-  handleRequest(req, async ({ serviceClient: supabase, body }) => {
+  handleRequest(req, async ({ serviceClient: supabase, body, userId }) => {
     const faceSchema = z.object({
-      capturedImageBase64: z.string().min(100).max(10_000_000, "Image too large (max ~7.5MB)"),
+      capturedImageBase64: z.string().min(100).max(10_000_000, "Image too large (max ~7.5MB)").optional(),
+      photo_base64: z.string().min(100).max(10_000_000, "Image too large (max ~7.5MB)").optional(),
       companyId: z.string().uuid().optional(),
+      company_id: z.string().uuid().optional(),
+    }).refine((value) => Boolean(value.capturedImageBase64 || value.photo_base64), {
+      message: "capturedImageBase64 or photo_base64 is required",
+      path: ["capturedImageBase64"],
     });
     const parsed = faceSchema.safeParse(body);
     if (!parsed.success) {
@@ -15,24 +20,44 @@ Deno.serve((req) =>
         status: 400, headers: { "Content-Type": "application/json" },
       });
     }
-    const { capturedImageBase64, companyId } = parsed.data;
+    const capturedImageBase64 = (parsed.data.capturedImageBase64 || parsed.data.photo_base64 || "").replace(/^data:[^,]+,/, "");
+    let companyId = parsed.data.companyId || parsed.data.company_id || null;
 
-    // Fetch active face enrollments, filtered by company if provided
-    let enrollQuery = supabase
+    if (!companyId && userId && userId !== "service_role") {
+      const { data: callerProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+      companyId = callerProfile?.company_id || null;
+    }
+
+    let profileQuery = supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url, company_id")
+      .eq("is_active", true);
+    if (companyId) {
+      profileQuery = profileQuery.eq("company_id", companyId);
+    }
+
+    const { data: profiles, error: profileErr } = await profileQuery;
+    if (profileErr) {
+      console.error("Error fetching active profiles:", profileErr);
+      return new Response(JSON.stringify({ error: "Failed to fetch active profiles" }), {
+        status: 500, headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    const profileIds = (profiles || []).map((p: any) => p.id);
+    if (profileIds.length === 0) {
+      return { matched: false, reason: "No active enrolled profiles found", confidence: 0, enrollment_count: 0 };
+    }
+
+    const enrollQuery = supabase
       .from("face_enrollments")
       .select("id, profile_id, photo_url")
-      .eq("is_active", true);
-
-    if (companyId) {
-      // Get profile IDs for this company first
-      const { data: companyProfiles } = await supabase
-        .from("profiles")
-        .select("id")
-        .eq("company_id", companyId);
-      if (companyProfiles && companyProfiles.length > 0) {
-        enrollQuery = enrollQuery.in("profile_id", companyProfiles.map(p => p.id));
-      }
-    }
+      .eq("is_active", true)
+      .in("profile_id", profileIds);
 
     const { data: enrollments, error: enrollErr } = await enrollQuery;
 
@@ -58,13 +83,6 @@ Deno.serve((req) =>
         profileEnrollments.set(e.profile_id, urls);
       }
     }
-
-    // Fetch profile names
-    const profileIds = Array.from(profileEnrollments.keys());
-    const { data: profiles } = await supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url")
-      .in("id", profileIds);
 
     const profileMap = new Map(
       (profiles || []).map((p: any) => [p.id, { name: p.full_name, avatar: p.avatar_url }])
