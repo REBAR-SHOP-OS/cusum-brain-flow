@@ -754,5 +754,5 @@ Deno.serve((req) =>
       mode,
       validation: validationSummary,
     });
-  }, { functionName: "odoo-crm-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, { functionName: "odoo-crm-sync", authMode: "optional", requireCompany: false, wrapResult: false, internalOnly: true })
 );
