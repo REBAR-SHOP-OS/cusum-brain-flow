@@ -252,6 +252,34 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
     else { toast.success("Photo removed"); fetchData(); }
   };
 
+  const sanitize = (s: string) => s.replace(/[^a-z0-9]+/gi, "_").toLowerCase();
+
+  const handleDownloadAll = async (group: ProfileGroup) => {
+    try {
+      const base = sanitize(group.full_name) || "face";
+      let i = 0;
+      for (const enrollment of group.enrollments) {
+        const storagePath = enrollment.photo_url.replace(/^.*face-enrollments\//, "");
+        const { data, error } = await supabase.storage.from("face-enrollments").download(storagePath);
+        if (error || !data) continue;
+        const ext = storagePath.split(".").pop() || "jpg";
+        const url = URL.createObjectURL(data);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${base}_${++i}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      }
+      if (i === 0) toast.error("No photos available to download");
+      else toast.success(`Downloaded ${i} photo${i !== 1 ? "s" : ""}`);
+    } catch (err) {
+      console.error("Download error:", err);
+      toast.error("Download failed");
+    }
+  };
+
   const handleCreateNewPerson = async () => {
     const trimmed = newPersonName.trim();
     if (trimmed.length < 2) return;
