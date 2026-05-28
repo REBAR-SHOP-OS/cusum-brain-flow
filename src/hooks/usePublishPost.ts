@@ -60,6 +60,17 @@ export function usePublishPost() {
         }
 
         if (linkedInStatus?.status === "error") {
+          // Inline Reconnect — open LinkedIn OAuth in a new tab so the operator doesn't have to bounce through Settings.
+          try {
+            const { data: authData } = await supabase.functions.invoke("linkedin-oauth", {
+              body: { action: "get-auth-url", returnUrl: window.location.origin },
+            });
+            if (authData?.authUrl) {
+              window.open(authData.authUrl, "_blank", "noopener,noreferrer");
+            }
+          } catch (e) {
+            console.warn("[publish] Could not auto-open LinkedIn reconnect:", e);
+          }
           throw new Error(linkedInStatus.error || "Reconnect LinkedIn from Settings → Integrations.");
         }
       }

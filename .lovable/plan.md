@@ -1,110 +1,98 @@
+# LinkedIn publish error + Instagram scheduled post — root cause & fix
 
-## Problem
+## What the data actually shows
 
-In `src/hooks/useAutoClearance.ts`, Auto Clearance can advance to product capture even when the tag photo did not actually persist on the evidence row.
+I queried the DB and the cron/publish code. Two distinct problems, two different root causes.
 
-Root causes found in code:
+### 1) LinkedIn — error is factually correct, can't be fixed by code alone
 
-1. **Tag-pick path skips the tag upload entirely.** `confirmPick()` (line 381) only updates `verification_state = 'tag_scanned'` but never uploads the captured tag blob. The blob from `handleTagCapture` is dropped, so `tag_scan_url` stays NULL while the UI moves to `waiting_product`.
-2. **High-confidence path advances on React state only.** After `tagUpErr` check it `setState("tag_matched")` then `setTimeout → waiting_product`. There is no re-read of the row to confirm `tag_scan_url` is actually present before unlocking product capture.
-3. **`handleProductCapture` does not re-verify the evidence row.** It uses cached `activeEvidenceId` and fires product upload + validation in parallel. If the tag row update silently failed (RLS, network), product photo still gets written.
-4. **UI gating is weak.** `AutoClearanceMode.tsx` line 47 computes `stage` from local state only and lets the shutter fire as soon as `state === 'tag_matched'`. The shutter button is not bound to "tag photo confirmed on DB".
-5. **Offline drain** re-feeds queued product captures without checking that the matching evidence row has `tag_scan_url`.
-
-## Fix
-
-All edits are frontend-only. No DB schema changes, no RLS bypass, no new evidence rows.
-
-### 1. `src/hooks/useAutoClearance.ts` — strict state machine
-
-Replace the loose `AutoState` union with the explicit sequence:
+Both LinkedIn connections in `integration_connections`:
 
 ```
-waiting_tag → tag_uploading → ocr_running → matching →
-tag_evidence_saved → waiting_product → product_uploading →
-product_validating → completed → (waiting_tag | manifest_complete)
-tag_pick (medium confidence branch, must still upload tag before waiting_product)
+status         = error
+refresh_token  = NULL
+scope          = email, openid, profile, w_member_social
+organization_ids = empty
+expires_at     < now()
 ```
 
-Add a single helper `assertTagEvidenceReady(evidenceId, itemId)` that:
+LinkedIn's authorization server silently dropped `offline_access`, `w_organization_social`, `r_organization_social` during the last OAuth round, because the LinkedIn **App** in the LinkedIn Developer Portal is not approved for:
 
-- `SELECT id, cut_plan_item_id, tag_scan_url, verification_state FROM clearance_evidence WHERE id = evidenceId`
-- Throws `"Tag photo required before product photo"` if `tag_scan_url` is null/empty.
-- Throws if `cut_plan_item_id !== itemId`.
-- Throws if `verification_state` not in (`tag_scanned`, `product_captured`, `complete`).
+- "Sign In with LinkedIn using OpenID Connect" product → grants `offline_access` (required for `refresh_token`)
+- "Marketing Developer Platform" / "Community Management API" → grants `w_organization_social` + `r_organization_social` (required to publish to company pages and to discover them via `organizationAcls`)
 
-Use this helper in two places:
+Consequences baked into the data:
+- No `refresh_token` → token expires in ~60 days and the server CANNOT auto-refresh, no matter what we change in code.
+- No `organization_ids` → company-page publishing has nothing to target.
+- Both tokens are already past `expires_at`, so today every publish attempt produces exactly the multi-reason error in the screenshot.
 
-- End of `handleTagCapture` (both high-confidence and confirm-pick branches): only call `setState("waiting_product")` after this helper resolves.
-- Start of `handleProductCapture`: run it before any upload. On failure: `setState("waiting_tag")`, clear `activeEvidenceId`/`activeItemId`, show banner "Tag photo required before product photo."
+The error message you saw lists 4 reasons and every single one is true in the DB right now. We can't "fix" it from inside the app any more than we already do — the LinkedIn App itself must be approved for the missing products, then someone reconnects.
 
-### 2. Fix the tag-pick branch
+What I will improve in code so this doesn't keep biting silently:
 
-In `handleTagCapture`, when `decision === "confirm"`:
+1. **Token health cron (new)** `supabase/functions/linkedin-token-health/index.ts`
+   - Runs daily.
+   - For every `integration_connections` row where `integration_id='linkedin'` and `status='connected'` and `expires_at < now() + 7 days` and `refresh_token IS NOT NULL`, call LinkedIn refresh and store new token + `expires_at`.
+   - For rows where token is already expired and there is no `refresh_token`, OR where `scope` is missing any of `offline_access / w_organization_social / r_organization_social`, set `status='error'` and write a precise `error_message` so the Integrations card shows "Reconnect required: LinkedIn App missing X product approval" instead of waiting until publish time.
+   - Schedule in `supabase/config.toml`-equivalent cron config (re-use existing cron infra used by `social-cron-publish`).
 
-- Keep the captured `blob` in a ref (`pendingTagBlobRef`) before showing the picker.
-- In `confirmPick(candidateId)`:
-  1. `ensureEvidenceRow(candidateId)`
-  2. `uploadToStorage(candidateId, "tag", pendingTagBlobRef.current)`
-  3. UPDATE the row with `tag_scan_url`, `verification_state='tag_scanned'`, method `'assisted'`, ocr/confidence.
-  4. `assertTagEvidenceReady` → only then `setState("waiting_product")` and set `activeEvidenceId`.
-- If the blob is missing (drain path / refresh), do not advance; return to `waiting_tag`.
+2. **Block "Publish Now" earlier in the UI**
+   - In `src/hooks/usePublishPost.ts`, when `linkedin-oauth check-status` returns `status='error'`, do NOT just toast — also surface a one-click "Reconnect LinkedIn" action that opens `linkedin-oauth get-auth-url` directly, so the operator doesn't bounce through Settings.
 
-### 3. High-confidence branch sequencing
+3. **Callback page improvement** (`src/pages/IntegrationCallback.tsx`)
+   - When `status=error&integration=linkedin&message=...` arrives (the case where LinkedIn dropped scopes), render a dedicated panel listing the exact LinkedIn Developer Portal steps to request the missing products. Keep the technical message but add the human action list.
 
-Keep parallel `Promise.all([ensureEvidenceRow, uploadToStorage])` but make the state transition strictly:
+What you (the user) must still do once for this to actually work:
+
+- In https://www.linkedin.com/developers/apps select the app, **Products** tab, request: "Sign In with LinkedIn using OpenID Connect", "Share on LinkedIn", and "Community Management API". The first two are auto-approved; Community Management API requires LinkedIn review (a few days).
+- After the products show "Added", click **Reconnect LinkedIn** in Settings → Integrations. The callback will then receive the full scope set and write a `refresh_token` + `organization_ids`, and the recurring failures stop.
+
+There is no code-only path that gets past this. I will not pretend otherwise.
+
+### 2) Instagram "was scheduled but didn't publish"
+
+The most recent scheduled IG post (`35fd450e-ff2c-4641-bbf3-5d408a5a32e7`, scheduled for 2026-05-28 19:00 UTC) has:
 
 ```
-setState("tag_uploading")
-await Promise.all([ensureEvidenceRow, uploadToStorage])
-setState("ocr_running") // already done above, just relabel for clarity
-await update({ tag_scan_url, verification_state:'tag_scanned', ... })
-await assertTagEvidenceReady(evId, matchedItem.id)
-setActiveEvidenceId(evId)
-setState("tag_evidence_saved")
-setState("waiting_product")
+status         = scheduled
+neel_approved  = false
 ```
 
-Remove the 250 ms `setTimeout` to `waiting_product` — go directly after the assert resolves so the UI cannot fire a product shutter while the row write is still in flight.
+`social-cron-publish` only picks up posts where `neel_approved = true` (Neel Approval Gate HARD rule, indexed in `mem://index.md`). I will NOT bypass that gate.
 
-### 4. Product capture gate
+So the post did not publish because nobody approved it before the scheduled time. The system worked as designed; the UX did not warn loudly enough.
 
-In `handleProductCapture`:
+Code changes:
 
-1. Guard: if `!activeItemId || !activeEvidenceId` → banner "Scan and save tag first." and return without changing state.
-2. `await assertTagEvidenceReady(activeEvidenceId, activeItemId)`. On failure → banner, reset to `waiting_tag`, clear actives, return.
-3. Then upload + validate as today, but stop running the row update in parallel with validation only after the gate passes. Keep the existing "do not create a second row" behavior (already uses `activeEvidenceId`).
-4. `finalizeVerification` already re-reads both photos — keep as is. Add explicit check that `cut_plan_item_id` on the row equals `itemId`.
+1. **Stronger "unapproved + scheduled" surfacing** in `src/components/social/SocialCalendar.tsx` and `PostReviewPanel`:
+   - Add a small badge "Awaiting approval" on every scheduled card where `neel_approved=false`, instead of just a yellow tint.
+   - On the calendar header, show a count like "3 scheduled today need approval" linking to the filter.
 
-### 5. UI gating in `AutoClearanceMode.tsx`
+2. **Pre-flight nudge in `social-cron-publish`** (already partially there — overdue unapproved get marked failed at midnight): add one line so the post gets a clearer `last_error="Awaiting Neel/Sattar approval — scheduled time passed"` the moment it misses its slot, instead of waiting until the midnight sweep.
 
-- Replace the inline `stage` computation with a derived value driven by the new state:
-  - `stage = (state === 'waiting_product' || state === 'product_uploading' || state === 'product_validating') ? 'product' : 'tag'`.
-  - `tag_evidence_saved` belongs to `tag` stage until React flips to `waiting_product`.
-- Pass a `productLocked` prop to `AutoCameraStream` derived from `!(activeEvidenceId && state === 'waiting_product')`. When locked in product mode, the shutter button is disabled and shows the message "Scan and save tag first."
-- Show a small tag-photo thumbnail (signed URL of `tag_scan_url`) in the HUD as soon as `state === 'waiting_product'` so the operator has visual confirmation the tag was saved.
+3. **Stale-lock false positives** (older IG failures like `ebb9687b...`, `a711f995...` saying "Publishing timed out — recovered from stale lock"):
+   - Raise IG video/Reels stale-lock threshold from 10 min → 20 min in `_shared/publishLock.ts::recoverStaleLocks` for posts where `content_type='reel'` or media is `.mp4`.
+   - Add a single automatic retry inside `social-cron-publish` if the lock was recovered AND the previous attempt produced a 200 OK creation ID before stalling (so we don't double-post).
 
-### 6. Offline drain safety
+## Files to touch
 
-In `drainQueue`, for `kind === 'product'`:
+- New: `supabase/functions/linkedin-token-health/index.ts` + cron config entry.
+- Edit: `supabase/functions/_shared/publishLock.ts` (per-content-type threshold + recover metadata).
+- Edit: `supabase/functions/social-cron-publish/index.ts` (clearer last_error for unapproved overdue, one-shot retry on recovered lock).
+- Edit: `src/hooks/usePublishPost.ts` (inline Reconnect action on LinkedIn error).
+- Edit: `src/pages/IntegrationCallback.tsx` (LinkedIn scope-drop panel).
+- Edit: `src/components/social/SocialCalendar.tsx`, `src/components/social/PostReviewPanel.tsx` ("Awaiting approval" badge).
+- New: `tests/regression/social/linkedin-token-health.test.ts`, `tests/regression/social/awaiting-approval-badge.test.tsx`.
 
-- Look up the evidence row by `cut_plan_item_id = cap.itemId`. If `tag_scan_url` is null, leave the capture queued and skip (don't write a product photo to an unconfirmed row).
+## Verification I will run after build
 
-### 7. Manual Verify path
+- `vitest` on the two new tests + existing social tests.
+- `psql` re-check that `linkedin-token-health` (curled via `supabase--curl_edge_functions`) updates `status` + `error_message` for both rows in `integration_connections` to a precise message.
+- Confirm `35fd450e...` shows the "Awaiting approval" badge in the calendar (preview).
+- Confirm pressing **Publish Now** on a LinkedIn post with `status=error` opens the Reconnect flow inline.
 
-`ClearanceCard.tsx` Manual Verify uses its own evidence flow (already enforces both photos in `finalizeVerification`). Add the same `assertTagEvidenceReady` re-read just before flipping `cut_plan_items.phase` to `cleared`, so manual and auto share one DB-confirmation helper. Extract the helper into `src/lib/clearanceEvidenceGate.ts` and import from both.
+## What this plan does NOT do
 
-## Files touched
-
-- `src/hooks/useAutoClearance.ts` — state machine, gate helper calls, confirmPick upload, drain safety.
-- `src/components/clearance/AutoClearanceMode.tsx` — stage derivation, product shutter lock, tag thumbnail.
-- `src/components/clearance/AutoCameraStream.tsx` — accept `productLocked` / disabled-reason message on shutter.
-- `src/components/clearance/ClearanceCard.tsx` — call shared gate helper before final clear.
-- `src/lib/clearanceEvidenceGate.ts` *(new)* — `assertTagEvidenceReady(evidenceId, itemId)`.
-- `tests/regression/workflow-gate/auto-clearance-tag-gate.test.ts` *(new)* — unit test: confirmPick without tag upload throws; product capture without `tag_scan_url` is rejected; drain skips orphan product.
-
-## Non-goals
-
-- No DB migration. The existing `clearance_evidence.tag_scan_url` column and `auto_advance` trigger are unchanged.
-- No change to `validate-clearance-photo` edge function.
-- No new evidence row paths — all writes still go through `ensureEvidenceRow` + `activeEvidenceId`.
+- Does NOT bypass `neel_approved` (HARD gate).
+- Does NOT silently re-publish a post that may have already gone live (idempotency preserved via `publishing_lock_id`).
+- Does NOT and cannot grant LinkedIn scopes the App was never approved for — that step is in the LinkedIn Developer Portal, not in our code.

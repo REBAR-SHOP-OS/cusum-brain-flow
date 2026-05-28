@@ -289,6 +289,10 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const isApproved = post.neel_approved || post.qa_status === "approved";
                 const isOverdue = status === "scheduled" && isApproved
                   && post.scheduled_date && new Date(post.scheduled_date) < new Date();
+                // Approval-needed posts within 1h of their slot are surfaced as urgent (red dashed)
+                // so the operator can't miss them — they will NOT auto-publish until approved.
+                const approvalDueSoon = status === "scheduled" && !isApproved && post.scheduled_date
+                  && (new Date(post.scheduled_date).getTime() - Date.now()) < 60 * 60 * 1000;
 
                 return (
                   <button
@@ -311,6 +315,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         ? "bg-red-500/10 border-red-500/40"
                         : status === "scheduled" && isApproved
                         ? "bg-card border-green-500/30"
+                        : approvalDueSoon
+                        ? "bg-red-500/10 border-red-500/50 border-dashed"
                         : status === "scheduled"
                         ? "bg-yellow-500/10 border-yellow-500/30"
                         : status === "draft"
@@ -367,6 +373,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         status === "published" ? "text-green-600 font-medium"
                           : isOverdue ? "text-red-600 font-medium"
                           : status === "scheduled" && isApproved ? "text-green-500 font-medium"
+                          : approvalDueSoon ? "text-red-600 font-semibold"
                           : status === "scheduled" ? "text-yellow-600"
                           : status === "declined" ? "text-destructive"
                           : status === "failed" ? "text-red-600 font-medium"
@@ -375,6 +382,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       )}>
                         {isOverdue
                           ? "Overdue · Not Published"
+                          : approvalDueSoon
+                          ? "⚠ Needs Approval Soon"
                           : status === "scheduled" && !isApproved
                           ? "Pending Approval"
                           : status === "scheduled" && isApproved

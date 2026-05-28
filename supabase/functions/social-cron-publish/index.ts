@@ -74,6 +74,30 @@ Deno.serve((req) =>
 
     console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} approved posts, error: ${fetchError?.message ?? 'none'}`);
 
+    // Surface a precise last_error on any scheduled post whose slot has passed
+    // but is still missing Neel/Sattar approval. We do NOT change status — the
+    // midnight sweep below still owns the final 'failed' transition — but the
+    // operator sees "Awaiting Neel/Sattar approval — scheduled time passed" the
+    // moment the slot is missed, instead of an empty error field.
+    const { data: missedApproval } = await supabase
+      .from("social_posts")
+      .select("id, last_error")
+      .eq("status", "scheduled")
+      .eq("neel_approved", false)
+      .lte("scheduled_date", now)
+      .limit(50);
+
+    if (missedApproval && missedApproval.length > 0) {
+      const msg = "Awaiting Neel/Sattar approval — scheduled time passed. Approve to publish.";
+      for (const mp of missedApproval) {
+        if (mp.last_error === msg) continue;
+        await supabase
+          .from("social_posts")
+          .update({ last_error: msg })
+          .eq("id", mp.id);
+      }
+    }
+
     // Flag overdue unapproved posts as failed — do NOT auto-approve
     const midnightCutoff = new Date();
     midnightCutoff.setUTCHours(0, 0, 0, 0);

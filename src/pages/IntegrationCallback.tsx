@@ -145,7 +145,19 @@ export default function IntegrationCallback() {
           <>
             <XCircle className="w-16 h-16 mx-auto text-destructive" />
             <h1 className="text-xl font-semibold text-destructive">Connection Failed</h1>
-            <p className="text-muted-foreground">{message}</p>
+            <p className="text-muted-foreground text-left text-sm whitespace-pre-wrap">{message}</p>
+            {searchParams.get("integration") === "linkedin" && /scope|offline_access|w_organization_social|r_organization_social|Marketing Developer Platform|Community Management/i.test(message) && (
+              <div className="text-left text-xs bg-muted/40 border border-border rounded-lg p-3 space-y-2">
+                <p className="font-semibold">Fix this in the LinkedIn Developer Portal:</p>
+                <ol className="list-decimal pl-4 space-y-1 text-muted-foreground">
+                  <li>Open <a href="https://www.linkedin.com/developers/apps" target="_blank" rel="noreferrer" className="underline">linkedin.com/developers/apps</a> and pick your app.</li>
+                  <li>Go to the <span className="font-medium">Products</span> tab.</li>
+                  <li>Request: <span className="font-medium">Sign In with LinkedIn using OpenID Connect</span>, <span className="font-medium">Share on LinkedIn</span>, and <span className="font-medium">Community Management API</span>.</li>
+                  <li>Wait until all three show <span className="font-medium">Added</span> (Community Management API needs LinkedIn review — usually 1–3 days).</li>
+                  <li>Come back here and click <span className="font-medium">Reconnect LinkedIn</span> in Settings → Integrations.</li>
+                </ol>
+              </div>
+            )}
             <Button variant="outline" onClick={goBack}>
               Back to Integrations
             </Button>

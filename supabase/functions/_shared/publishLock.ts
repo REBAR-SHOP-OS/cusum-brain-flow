@@ -169,17 +169,42 @@ export async function recordPageResult(
 export async function recoverStaleLocks(
   supabase: ReturnType<typeof createClient>,
 ): Promise<string[]> {
-  const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  // Two thresholds: 10 min for fast (text/image) publishes, 20 min for IG videos/Reels
+  // because IG's async media processing routinely takes >10 min on first try.
+  const cutoffFast = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const cutoffVideo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
   // Find all stale candidates (both timestamped and legacy)
   const { data: staleCandidates } = await supabase
     .from("social_posts")
-    .select("id, page_results, publishing_started_at, updated_at")
+    .select("id, page_results, publishing_started_at, updated_at, platform, content_type, image_url")
     .eq("status", "publishing")
-    .or(`publishing_started_at.lt.${cutoff},and(publishing_started_at.is.null,updated_at.lt.${cutoff})`);
+    .or(`publishing_started_at.lt.${cutoffFast},and(publishing_started_at.is.null,updated_at.lt.${cutoffFast})`);
 
   const recovered: string[] = [];
-  for (const post of (staleCandidates || []) as Array<{ id: string; page_results: unknown }>) {
+  for (const post of (staleCandidates || []) as Array<{
+    id: string;
+    page_results: unknown;
+    publishing_started_at: string | null;
+    updated_at: string | null;
+    platform: string | null;
+    content_type: string | null;
+    image_url: string | null;
+  }>) {
+    // For IG videos/reels, hold off until the 20-min cutoff — the upload may still be processing.
+    const isIgVideo =
+      post.platform === "instagram" &&
+      (post.content_type === "reel" ||
+        post.content_type === "video" ||
+        /\.(mp4|mov|webm)(\?|$)/i.test(post.image_url || ""));
+    if (isIgVideo) {
+      const startedAt = post.publishing_started_at || post.updated_at;
+      if (startedAt && startedAt > cutoffVideo) {
+        console.log(`[publishLock] Holding IG video recovery for ${post.id} — still within 20-min window`);
+        continue;
+      }
+    }
+
     const pageResults: PageResult[] = Array.isArray(post.page_results)
       ? (post.page_results as PageResult[])
       : [];
