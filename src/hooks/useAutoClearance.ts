@@ -5,14 +5,25 @@ import { compressImage } from "@/lib/imageCompressor";
 import type { ClearanceItem } from "@/hooks/useClearanceData";
 import { speak, vibrate } from "@/lib/voiceFeedback";
 import * as queue from "@/lib/autoClearanceQueue";
+import {
+  assertTagEvidenceReady,
+  assertEvidenceComplete,
+  ClearanceGateError,
+} from "@/lib/clearanceEvidenceGate";
 
+// Strict sequential state machine. Any forbidden transition (e.g. waiting_tag
+// → waiting_product without tag_evidence_saved) is impossible because each
+// stage is set only inside the matching code path below.
 export type AutoState =
   | "waiting_tag"
-  | "tag_matching"
-  | "tag_matched"
-  | "tag_pick"           // medium confidence — show top 3
+  | "tag_uploading"
+  | "ocr_running"
+  | "matching"
+  | "tag_pick"              // medium confidence — show top 3 (tag blob held)
+  | "tag_evidence_saved"
   | "waiting_product"
-  | "auto_verifying"
+  | "product_uploading"
+  | "product_validating"
   | "completed"
   | "manifest_complete";
 
