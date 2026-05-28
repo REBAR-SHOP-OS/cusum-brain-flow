@@ -284,7 +284,7 @@ export function useAutoClearance({
       return;
     }
     setBusy(true);
-    setState("tag_matching");
+    setState("tag_uploading");
     try {
       // Pre-normalized candidates (rebuilt only when manifest changes).
       const candidates = candidatesRef.current;
@@ -297,6 +297,7 @@ export function useAutoClearance({
       // copy so the AI roundtrip isn't blocked on the full-size upload.
       const tOcrPrep = tNow();
       const ocrBlobPromise = buildOcrBlob(blob);
+      setState("ocr_running");
       const ocrPromise = ocrBlobPromise
         .then(blobToBase64)
         .then(async (imageBase64) => {
@@ -318,6 +319,7 @@ export function useAutoClearance({
       const ranked: RankedMatch[] = data?.ranked || [];
       const decision: "auto" | "confirm" | "none" = data?.decision || "none";
       setLastOcr(ocr);
+      setState("matching");
 
       if (decision === "none" || ranked.length === 0) {
         setLastConfidence(ranked[0]?.score ?? 0);
@@ -341,6 +343,11 @@ export function useAutoClearance({
       }
 
       if (decision === "confirm") {
+        // HOLD the captured tag blob — confirmPick will upload it after the
+        // operator confirms the candidate. Previously this branch dropped the
+        // blob entirely, leaving evidence rows without a tag_scan_url.
+        pendingTagBlobRef.current = blob;
+        pendingTagOcrRef.current = { ocr, ranked, decision };
         setPickCandidates(ranked.slice(0, 3));
         setLastConfidence(best.score);
         setState("tag_pick");
@@ -349,8 +356,8 @@ export function useAutoClearance({
       }
 
       // High confidence — upload tag photo + ensure evidence row in parallel,
-      // then write the evidence row update. Move to product mode the moment
-      // the row update succeeds; cache invalidation happens in background.
+      // then write the evidence row update. Move to product mode ONLY after
+      // the DB-confirmed gate passes (assertTagEvidenceReady).
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
       const [evId, path] = await Promise.all([
@@ -370,12 +377,15 @@ export function useAutoClearance({
         .eq("id", evId);
       perfLog("tag_row_update", tNow() - tRowUp);
       if (tagUpErr) throw tagUpErr;
+      // HARD GATE — re-read the row; do NOT trust the local update result.
+      await assertTagEvidenceReady(evId, matchedItem.id);
       setActiveEvidenceId(evId);
-      setState("tag_matched");
+      setState("tag_evidence_saved");
       speak("Tag matched");
       vibrate(60);
-      // Snap to product capture quickly — voice/animation don't block.
-      window.setTimeout(() => setState("waiting_product"), 250);
+      // Direct flip — no setTimeout. Removing the previous 250ms gap so the
+      // product shutter cannot fire while the gate is mid-flight.
+      setState("waiting_product");
       perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
     } catch (e: any) {
       console.error("tag capture failed", e);
@@ -392,30 +402,52 @@ export function useAutoClearance({
   const confirmPick = useCallback(async (candidateId: string) => {
     const match = itemsRef.current.find((i) => i.id === candidateId);
     if (!match) return;
+    const blob = pendingTagBlobRef.current;
+    if (!blob) {
+      // No held tag blob (page refresh / drain path). Cannot guarantee
+      // tag_scan_url — bounce back to waiting_tag so operator rescans.
+      showBanner({ kind: "error", text: "Tag photo lost — rescan tag." }, 2500);
+      setPickCandidates([]);
+      setState("waiting_tag");
+      return;
+    }
     setActiveItemId(candidateId);
     setPickCandidates([]);
-    setState("tag_matched");
-    // We already uploaded nothing yet for pick path — operator will rescan tag
-    // attached to this item by capturing PRODUCT photo next. Pre-create row.
+    setBusy(true);
+    setState("tag_uploading");
     try {
-      const evId = await ensureEvidenceRow(candidateId);
+      const [evId, path] = await Promise.all([
+        ensureEvidenceRow(candidateId),
+        uploadToStorage(candidateId, "tag", blob),
+      ]);
       const { error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
+          tag_scan_url: path,
           verification_state: "tag_scanned",
           verification_method: "assisted",
           ai_confidence: lastConfidence,
-          ocr_metadata: { ocr: lastOcr, picked: candidateId },
+          ocr_metadata: { ...(pendingTagOcrRef.current || { ocr: lastOcr }), picked: candidateId },
         })
         .eq("id", evId);
       if (pickUpErr) throw pickUpErr;
+      await assertTagEvidenceReady(evId, candidateId);
       setActiveEvidenceId(evId);
-    } catch (e) {
-      console.error("confirmPick row create failed", e);
+      setState("tag_evidence_saved");
+      speak("Confirmed");
+      setState("waiting_product");
+    } catch (e: any) {
+      console.error("confirmPick failed", e);
+      showBanner({ kind: "error", text: e?.message || "Tag save failed" }, 3000);
+      setState("waiting_tag");
+    } finally {
+      pendingTagBlobRef.current = null;
+      pendingTagOcrRef.current = null;
+      setBusy(false);
+      queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-    speak("Confirmed");
-    window.setTimeout(() => setState("waiting_product"), 250);
-  }, [ensureEvidenceRow, lastConfidence, lastOcr]);
+  }, [ensureEvidenceRow, lastConfidence, lastOcr, queryClient, showBanner, uploadToStorage]);
+
 
   const handleProductCapture = useCallback(async (blob: Blob) => {
     if (scanLockRef.current || busy) return;
