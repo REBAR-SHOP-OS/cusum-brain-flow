@@ -237,14 +237,13 @@ Deno.serve((req) =>
     const isMatched =
       resultData.matched_profile_id &&
       resultData.matched_profile_id !== "null" &&
-      resultData.confidence >= 75;
+      resultData.confidence >= 60;
 
     const matchedProfile = isMatched ? profileMap.get(resultData.matched_profile_id) : null;
     const enrollCount = isMatched ? (profileEnrollmentCounts.get(resultData.matched_profile_id) || 0) : 0;
 
     return {
       matched: isMatched,
-      profile_id: isMatched ? resultData.matched_profile_id : null,
       profile_id: isMatched ? resultData.matched_profile_id : null,
       name: isMatched ? resultData.matched_name : null,
       confidence: resultData.confidence,
