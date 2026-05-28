@@ -169,14 +169,17 @@ export async function recordPageResult(
 export async function recoverStaleLocks(
   supabase: ReturnType<typeof createClient>,
 ): Promise<string[]> {
-  const cutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  // Two thresholds: 10 min for fast (text/image) publishes, 20 min for IG videos/Reels
+  // because IG's async media processing routinely takes >10 min on first try.
+  const cutoffFast = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  const cutoffVideo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
   // Find all stale candidates (both timestamped and legacy)
   const { data: staleCandidates } = await supabase
     .from("social_posts")
-    .select("id, page_results, publishing_started_at, updated_at")
+    .select("id, page_results, publishing_started_at, updated_at, platform, content_type, image_url")
     .eq("status", "publishing")
-    .or(`publishing_started_at.lt.${cutoff},and(publishing_started_at.is.null,updated_at.lt.${cutoff})`);
+    .or(`publishing_started_at.lt.${cutoffFast},and(publishing_started_at.is.null,updated_at.lt.${cutoffFast})`);
 
   const recovered: string[] = [];
   for (const post of (staleCandidates || []) as Array<{ id: string; page_results: unknown }>) {
