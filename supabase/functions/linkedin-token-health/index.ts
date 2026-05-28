@@ -105,21 +105,25 @@ Deno.serve((req) =>
         }
       }
 
-      // CASE B: connection is unfixable from inside the app — flag with precise reason.
-      const reasons: string[] = [];
-      if (!cfg.access_token) reasons.push("no access token is stored");
+      // CASE B: connection has a real problem — classify by severity.
+      // FATAL: no access_token, OR expired with no refresh path → status=error.
+      // DEGRADED: only optional scopes missing (e.g. offline_access / org scopes) →
+      //   keep status=connected so personal posting keeps working; record warning.
+      const fatalReasons: string[] = [];
+      const warnReasons: string[] = [];
+      if (!cfg.access_token) fatalReasons.push("no access token is stored");
       if (expiresAt < now && !hasRefresh) {
-        reasons.push("token expired and no refresh_token (LinkedIn App missing 'Sign In with LinkedIn using OpenID Connect' / offline_access scope)");
+        fatalReasons.push("token expired and no refresh_token (LinkedIn App missing 'Sign In with LinkedIn using OpenID Connect' / offline_access scope) — Reconnect required");
       }
       if (dropped.length > 0) {
-        reasons.push(`LinkedIn App missing scope(s): ${dropped.join(", ")} — request 'Sign In with LinkedIn using OpenID Connect' + 'Community Management API' in the LinkedIn Developer Portal, then Reconnect`);
+        warnReasons.push(`LinkedIn App missing optional scope(s): ${dropped.join(", ")} — request 'Sign In with LinkedIn using OpenID Connect' + 'Community Management API' in the LinkedIn Developer Portal, then Reconnect to unlock auto-refresh and company-page publishing`);
       }
       if (dropped.includes("r_organization_social") || dropped.includes("w_organization_social")) {
-        if (orgCount === 0) reasons.push("no LinkedIn company pages discovered");
+        if (orgCount === 0) warnReasons.push("no LinkedIn company pages discovered — only personal publishing is available");
       }
 
-      if (reasons.length > 0) {
-        const msg = `Reconnect LinkedIn from Settings → Integrations (${reasons.join("; ")}).`;
+      if (fatalReasons.length > 0) {
+        const msg = `Reconnect LinkedIn from Settings → Integrations (${[...fatalReasons, ...warnReasons].join("; ")}).`;
         if (row.status !== "error" || row.error_message !== msg) {
           await supabase
             .from("integration_connections")
@@ -127,7 +131,20 @@ Deno.serve((req) =>
             .eq("user_id", row.user_id)
             .eq("integration_id", "linkedin");
         }
-        summary.push({ user_id: row.user_id, action: "flagged_error", reasons });
+        summary.push({ user_id: row.user_id, action: "flagged_error", reasons: fatalReasons.concat(warnReasons) });
+        continue;
+      }
+
+      if (warnReasons.length > 0) {
+        const warnMsg = warnReasons.join("; ");
+        if (row.status !== "connected" || row.error_message !== warnMsg) {
+          await supabase
+            .from("integration_connections")
+            .update({ status: "connected", error_message: warnMsg })
+            .eq("user_id", row.user_id)
+            .eq("integration_id", "linkedin");
+        }
+        summary.push({ user_id: row.user_id, action: "degraded_warning", reasons: warnReasons });
         continue;
       }
 

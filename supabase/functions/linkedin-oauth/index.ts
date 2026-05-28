@@ -54,14 +54,20 @@ function getLinkedInStatusError(
   return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
 }
 
-const REQUIRED_LINKEDIN_SCOPES = [
+// Minimum scopes the LinkedIn App MUST grant for personal publishing to work.
+// Without these we cannot post anything at all, so the connection must be flagged "error".
+const MIN_LINKEDIN_SCOPES = [
   "openid",
   "profile",
-  "email",
   "w_member_social",
+];
+// Optional scopes that unlock auto-refresh and company-page publishing. Missing these
+// downgrades capabilities but does NOT break personal posting, so we surface a warning
+// in error_message but keep status = "connected".
+const OPTIONAL_LINKEDIN_SCOPES = [
+  "offline_access",
   "w_organization_social",
   "r_organization_social",
-  "offline_access",
 ];
 
 // ─── Main Handler ──────────────────────────────────────────────────
@@ -217,23 +223,21 @@ async function handleCallback(
     console.warn("[linkedin-oauth] Failed to fetch organizations:", e);
   }
 
-  // Validate that LinkedIn actually granted every required scope.
-  // LinkedIn silently drops scopes the App is not approved for (e.g. offline_access,
-  // w_organization_social, r_organization_social). Without those, refresh + company
-  // page publishing cannot work — we must surface this immediately, not at publish time.
+  // Validate scopes. Two tiers:
+  //   - MIN_LINKEDIN_SCOPES missing → connection is unusable, mark as "error".
+  //   - OPTIONAL_LINKEDIN_SCOPES missing → keep "connected" but record a warning so
+  //     the UI can tell the user that auto-refresh / company-page publishing is off
+  //     until the LinkedIn App is approved for those products.
   const grantedScopes = new Set(
     String(tokens.scope || "").split(/[\s,]+/).map((s) => s.trim()).filter(
       Boolean,
     ),
   );
-  const droppedScopes = REQUIRED_LINKEDIN_SCOPES.filter((s) =>
-    !grantedScopes.has(s)
-  );
-  if (droppedScopes.length > 0) {
+  const missingRequired = MIN_LINKEDIN_SCOPES.filter((s) => !grantedScopes.has(s));
+  const missingOptional = OPTIONAL_LINKEDIN_SCOPES.filter((s) => !grantedScopes.has(s));
+  if (missingRequired.length > 0 || missingOptional.length > 0) {
     console.warn(
-      `[linkedin-oauth] Scopes dropped by provider: ${
-        droppedScopes.join(", ")
-      }. Granted: ${tokens.scope}`,
+      `[linkedin-oauth] Scopes missing — required: [${missingRequired.join(", ")}], optional: [${missingOptional.join(", ")}]. Granted: ${tokens.scope}`,
     );
   }
 
@@ -260,12 +264,17 @@ async function handleCallback(
     }
   }
 
-  const connectionStatus = droppedScopes.length > 0 ? "error" : "connected";
-  const connectionErrorMessage = droppedScopes.length > 0
-    ? `LinkedIn did not grant required scopes: ${
-      droppedScopes.join(", ")
-    }. The LinkedIn App must be approved for "Sign In with LinkedIn using OpenID Connect" (offline_access) and "Marketing Developer Platform" / "Community Management API" (w_organization_social, r_organization_social) in the LinkedIn Developer Portal. Reconnect alone will not fix this.`
-    : null;
+  const connectionStatus = missingRequired.length > 0 ? "error" : "connected";
+  let connectionErrorMessage: string | null = null;
+  if (missingRequired.length > 0) {
+    connectionErrorMessage =
+      `LinkedIn did not grant required scopes: ${missingRequired.join(", ")}. Enable "Sign In with LinkedIn using OpenID Connect" and "Share on LinkedIn" in the LinkedIn Developer Portal, then Reconnect.`;
+  } else if (missingOptional.length > 0) {
+    connectionErrorMessage =
+      `Personal publishing is enabled. Some capabilities are off because the LinkedIn App did not grant: ${missingOptional.join(", ")}. ` +
+      `Without offline_access the token expires every ~60 days and must be reconnected manually. ` +
+      `Without w_organization_social/r_organization_social, company-page publishing is disabled — enable the "Community Management API" product in the LinkedIn Developer Portal and Reconnect to unlock it.`;
+  }
 
   const { error: dbError } = await supabase
     .from("integration_connections")
@@ -293,7 +302,7 @@ async function handleCallback(
   // Redirect back to app's own callback page (same origin → popup closes reliably)
   const appBase = returnUrl || "https://erp.rebar.shop";
   const successUrl = new URL("/integrations/callback", appBase);
-  if (droppedScopes.length > 0) {
+  if (missingRequired.length > 0) {
     successUrl.searchParams.set("status", "error");
     successUrl.searchParams.set("integration", "linkedin");
     successUrl.searchParams.set("message", connectionErrorMessage!);
@@ -301,6 +310,9 @@ async function handleCallback(
     successUrl.searchParams.set("status", "success");
     successUrl.searchParams.set("integration", "linkedin");
     successUrl.searchParams.set("email", profileName);
+    if (connectionErrorMessage) {
+      successUrl.searchParams.set("warning", connectionErrorMessage);
+    }
   }
   return Response.redirect(successUrl.toString(), 302);
 }
@@ -314,9 +326,19 @@ function handleGetAuthUrl(
   body: Record<string, unknown>,
 ) {
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-oauth/callback`;
-  // offline_access is REQUIRED to receive a refresh_token (LinkedIn does not return refresh_token without it).
-  const scope =
-    "openid profile email w_member_social w_organization_social r_organization_social offline_access";
+  // scopeMode:
+  //   "full"     → request every scope (incl. offline_access + org scopes). Required for
+  //                refresh_token and company-page publishing, but fails with invalid_scope_error
+  //                when the LinkedIn App is not approved for those products.
+  //   "personal" → minimal set known to work on the most basic LinkedIn App
+  //                (Sign In with LinkedIn + Share on LinkedIn). Lets personal posting
+  //                recover even when the App is not approved for organization scopes.
+  const scopeMode = String(body.scopeMode || "full").toLowerCase() === "personal"
+    ? "personal"
+    : "full";
+  const scope = scopeMode === "personal"
+    ? "openid profile email w_member_social"
+    : "openid profile email w_member_social w_organization_social r_organization_social offline_access";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(LINKEDIN_AUTH_URL);
@@ -326,7 +348,7 @@ function handleGetAuthUrl(
   authUrl.searchParams.set("scope", scope);
   authUrl.searchParams.set("state", state);
 
-  return jsonRes({ authUrl: authUrl.toString() });
+  return jsonRes({ authUrl: authUrl.toString(), scopeMode });
 }
 
 // ─── Check Status ──────────────────────────────────────────────────
@@ -366,11 +388,14 @@ async function handleCheckStatus(
   const scopeSet = getScopeSet(
     (connection.config as { scope?: string })?.scope,
   );
-  const missingModernScopes = !scopeSet.has("offline_access") ||
-    !scopeSet.has("w_organization_social") ||
-    !scopeSet.has("r_organization_social");
+  // Only flag the connection as broken when MIN scopes are missing. Missing optional
+  // scopes (offline_access / org scopes) downgrade capabilities but personal posting
+  // still works, so we keep the connection usable.
+  const missingMinScopes = !scopeSet.has("openid") ||
+    !scopeSet.has("profile") ||
+    !scopeSet.has("w_member_social");
 
-  if (!config.access_token || missingModernScopes) {
+  if (!config.access_token || missingMinScopes) {
     await supabase
       .from("integration_connections")
       .update({ status: "error", error_message: reconnectError })
