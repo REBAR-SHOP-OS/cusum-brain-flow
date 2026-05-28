@@ -373,6 +373,7 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         status === "published" ? "text-green-600 font-medium"
                           : isOverdue ? "text-red-600 font-medium"
                           : status === "scheduled" && isApproved ? "text-green-500 font-medium"
+                          : approvalDueSoon ? "text-red-600 font-semibold"
                           : status === "scheduled" ? "text-yellow-600"
                           : status === "declined" ? "text-destructive"
                           : status === "failed" ? "text-red-600 font-medium"
@@ -381,6 +382,8 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                       )}>
                         {isOverdue
                           ? "Overdue · Not Published"
+                          : approvalDueSoon
+                          ? "⚠ Needs Approval Soon"
                           : status === "scheduled" && !isApproved
                           ? "Pending Approval"
                           : status === "scheduled" && isApproved
