@@ -61,14 +61,8 @@ function deduplicateText(texts: string[]): string {
 }
 
 Deno.serve((req) =>
-  handleRequest(req, async ({ userId, body, req: rawReq }) => {
-    // Also allow internal calls via apikey header
-    const isInternalCall = rawReq.headers.get("apikey") === Deno.env.get("SUPABASE_ANON_KEY");
-    if (!userId && !isInternalCall) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { "Content-Type": "application/json" },
-      });
-    }
+  handleRequest(req, async ({ userId, body }) => {
+
 
     const { imageUrl, imageBase64, mode = "standard", quadrants = 4 }: VisionRequest = body;
 

@@ -224,5 +224,5 @@ Keep it punchy, use emojis sparingly. No JSON, just plain text.`,
     }
 
     return { ok: true, adminsNotified: adminUserIds.length, employeesReported: employeeSummaries.length };
-  }, { functionName: "daily-team-report", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, { functionName: "daily-team-report", authMode: "optional", requireCompany: false, wrapResult: false, internalOnly: true })
 );
