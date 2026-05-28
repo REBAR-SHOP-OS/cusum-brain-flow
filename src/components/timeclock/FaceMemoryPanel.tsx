@@ -257,23 +257,37 @@ export function FaceMemoryPanel({ open, onOpenChange }: FaceMemoryPanelProps) {
   const handleDownloadAll = async (group: ProfileGroup) => {
     try {
       const base = sanitize(group.full_name) || "face";
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const folder = zip.folder(base) ?? zip;
       let i = 0;
-      for (const enrollment of group.enrollments) {
-        const storagePath = enrollment.photo_url.replace(/^.*face-enrollments\//, "");
-        const { data, error } = await supabase.storage.from("face-enrollments").download(storagePath);
-        if (error || !data) continue;
-        const ext = storagePath.split(".").pop() || "jpg";
-        const url = URL.createObjectURL(data);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `${base}_${++i}.${ext}`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
+      const results = await Promise.all(
+        group.enrollments.map(async (enrollment) => {
+          const storagePath = enrollment.photo_url.replace(/^.*face-enrollments\//, "");
+          const { data, error } = await supabase.storage.from("face-enrollments").download(storagePath);
+          if (error || !data) return null;
+          const ext = storagePath.split(".").pop() || "jpg";
+          return { blob: data, ext };
+        })
+      );
+      for (const r of results) {
+        if (!r) continue;
+        folder.file(`${base}_${++i}.${r.ext}`, r.blob);
       }
-      if (i === 0) toast.error("No photos available to download");
-      else toast.success(`Downloaded ${i} photo${i !== 1 ? "s" : ""}`);
+      if (i === 0) {
+        toast.error("No photos available to download");
+        return;
+      }
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(zipBlob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${base}_photos.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${i} photo${i !== 1 ? "s" : ""} as ZIP`);
     } catch (err) {
       console.error("Download error:", err);
       toast.error("Download failed");
