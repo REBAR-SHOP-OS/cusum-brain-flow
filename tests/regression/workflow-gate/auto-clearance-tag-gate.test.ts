@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Regression: Auto Clearance must never advance to product capture / finalize
 // when the tag photo is missing from the SAME clearance_evidence row.
 //
