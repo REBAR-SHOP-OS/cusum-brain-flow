@@ -406,140 +406,162 @@ Rules:
           }
         }
 
-        const model = isSpreadsheet
-          ? "gemini-2.5-pro"
-          : (isImage || isPdf)
-            ? "gemini-2.5-pro"
-            : "gemini-2.5-flash";
+        // Parsed payload — populated either by deterministic PDF parser or AI call below.
+        let extractedData: any;
 
-        const maxTokens = isSpreadsheet ? 65000 : 32000;
-
-        console.log(`Using model: ${model} for file: ${fileName}`);
-
-        // AI call — this is the slow part
-        await svcClient
-          .from("extract_sessions")
-          .update({ progress: 30 })
-          .eq("id", sessionId);
-
-        const aiResult = await callAI({
-          provider: "gemini",
-          model,
-          agentName: "estimating",
-          messages: [
-            { role: "system", content: systemPrompt },
-            { role: "user", content: userContent },
-          ],
-          temperature: 0.1,
-          maxTokens,
-          fallback: {
-            provider: "gpt",
-            model: "gpt-5",
-          },
-        });
-
-        await svcClient
-          .from("extract_sessions")
-          .update({ progress: 70 })
-          .eq("id", sessionId);
-
-        const rawContent = aiResult.content;
-
-        // Check finish_reason for truncation detection
-        const finishReason = aiResult.raw?.choices?.[0]?.finish_reason;
-        if (finishReason === "length" || finishReason === "MAX_TOKENS") {
-          console.warn(`AI response TRUNCATED — finish_reason: ${finishReason}, model: ${model}, maxTokens: ${maxTokens}`);
-        } else {
-          console.log(`AI response complete — finish_reason: ${finishReason}`);
-        }
-
-        // Parse the JSON from the response
-        let extractedData;
-        let jsonStr = rawContent
-          .replace(/^```json?\s*/i, "")
-          .replace(/```\s*$/, "")
-          .trim();
-
-        try {
-          extractedData = JSON.parse(jsonStr);
-        } catch {
-          console.warn("Initial JSON parse failed, attempting multi-strategy truncation repair...");
-          extractedData = null;
-
-          // Strategy 1: Close after last complete item in "items" array
-          if (!extractedData) {
-            try {
-              const lastCompleteItem = jsonStr.lastIndexOf("},");
-              if (lastCompleteItem > 0) {
-                const repaired = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
-                extractedData = JSON.parse(repaired);
-                console.log(`Repair strategy 1 succeeded: recovered ${extractedData.items?.length || 0} items`);
-              }
-            } catch { /* try next */ }
-          }
-
-          // Strategy 2: Close after last complete "}" (item without trailing comma)
-          if (!extractedData) {
-            try {
-              const lastBrace = jsonStr.lastIndexOf("}");
-              if (lastBrace > 0) {
-                // Check if we're inside the items array
-                const itemsIdx = jsonStr.indexOf('"items"');
-                if (itemsIdx > -1) {
-                  const repaired = jsonStr.substring(0, lastBrace + 1) + "]}";
-                  extractedData = JSON.parse(repaired);
-                  console.log(`Repair strategy 2 succeeded: recovered ${extractedData.items?.length || 0} items`);
-                }
-              }
-            } catch { /* try next */ }
-          }
-
-          // Strategy 3: Extract items array directly via regex
-          if (!extractedData) {
-            try {
-              const itemsMatch = jsonStr.match(/"items"\s*:\s*\[([\s\S]*)/);
-              if (itemsMatch) {
-                let arrStr = "[" + itemsMatch[1];
-                const lastBrace = arrStr.lastIndexOf("}");
-                if (lastBrace > 0) {
-                  arrStr = arrStr.substring(0, lastBrace + 1) + "]";
-                  const items = JSON.parse(arrStr);
-                  extractedData = { items };
-                  console.log(`Repair strategy 3 succeeded: recovered ${items.length} items`);
-                }
-              }
-            } catch { /* give up */ }
-          }
-
-          if (!extractedData) {
-            throw new Error("Failed to parse AI extraction results after all repair strategies");
-          }
-
-          // Log truncation warning
-          const recoveredCount = extractedData.items?.length || 0;
-          const truncationNote = finishReason === "length" || finishReason === "MAX_TOKENS"
-            ? ` (finish_reason: ${finishReason})`
-            : "";
+        if (deterministicPdfItems) {
+          // Skip the AI entirely — we have a trustworthy column-mapped table.
           await svcClient
             .from("extract_sessions")
-            .update({ error_message: `Warning: AI response was truncated${truncationNote}. Recovered ${recoveredCount} items — some rows may be missing.` })
+            .update({ progress: 70 })
             .eq("id", sessionId);
-        }
-
-        // Rebuild summary if truncated
-        if (extractedData.items && !extractedData.summary) {
-          extractedData._truncated = true;
-          const items = extractedData.items;
-          const barSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))];
-          const shapeTypes = [...new Set(items.map((i: any) => i.type).filter(Boolean))];
-          extractedData.summary = {
-            total_items: items.length,
-            total_pieces: items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
-            bar_sizes_found: barSizes,
-            shape_types_found: shapeTypes,
-            customer: items[0]?.customer || null,
-            project: items[0]?.ref || null,
+          const barSizes = [...new Set(deterministicPdfItems.map((i: any) => i.size).filter(Boolean))];
+          const shapeTypes = [...new Set(deterministicPdfItems.map((i: any) => i.type).filter(Boolean))];
+          extractedData = {
+            items: deterministicPdfItems,
+            summary: {
+              total_items: deterministicPdfItems.length,
+              total_pieces: deterministicPdfItems.reduce((s: number, i: any) => s + (i.quantity || 0), 0),
+              bar_sizes_found: barSizes,
+              shape_types_found: shapeTypes,
+              customer: manifestContext?.customer || null,
+              project: manifestContext?.name || null,
+            },
+            _source: "deterministic_pdf",
           };
+        } else {
+          const model = isSpreadsheet
+            ? "gemini-2.5-pro"
+            : (isImage || isPdf)
+              ? "gemini-2.5-pro"
+              : "gemini-2.5-flash";
+
+          const maxTokens = isSpreadsheet ? 65000 : 32000;
+
+          console.log(`Using model: ${model} for file: ${fileName}`);
+
+          // AI call — this is the slow part
+          await svcClient
+            .from("extract_sessions")
+            .update({ progress: 30 })
+            .eq("id", sessionId);
+
+          const aiResult = await callAI({
+            provider: "gemini",
+            model,
+            agentName: "estimating",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userContent },
+            ],
+            temperature: 0.1,
+            maxTokens,
+            fallback: {
+              provider: "gpt",
+              model: "gpt-5",
+            },
+          });
+
+          await svcClient
+            .from("extract_sessions")
+            .update({ progress: 70 })
+            .eq("id", sessionId);
+
+          const rawContent = aiResult.content;
+
+          // Check finish_reason for truncation detection
+          const finishReason = aiResult.raw?.choices?.[0]?.finish_reason;
+          if (finishReason === "length" || finishReason === "MAX_TOKENS") {
+            console.warn(`AI response TRUNCATED — finish_reason: ${finishReason}, model: ${model}, maxTokens: ${maxTokens}`);
+          } else {
+            console.log(`AI response complete — finish_reason: ${finishReason}`);
+          }
+
+          // Parse the JSON from the response
+          let jsonStr = rawContent
+            .replace(/^```json?\s*/i, "")
+            .replace(/```\s*$/, "")
+            .trim();
+
+          try {
+            extractedData = JSON.parse(jsonStr);
+          } catch {
+            console.warn("Initial JSON parse failed, attempting multi-strategy truncation repair...");
+            extractedData = null;
+
+            // Strategy 1: Close after last complete item in "items" array
+            if (!extractedData) {
+              try {
+                const lastCompleteItem = jsonStr.lastIndexOf("},");
+                if (lastCompleteItem > 0) {
+                  const repaired = jsonStr.substring(0, lastCompleteItem + 1) + "]}";
+                  extractedData = JSON.parse(repaired);
+                  console.log(`Repair strategy 1 succeeded: recovered ${extractedData.items?.length || 0} items`);
+                }
+              } catch { /* try next */ }
+            }
+
+            // Strategy 2: Close after last complete "}" (item without trailing comma)
+            if (!extractedData) {
+              try {
+                const lastBrace = jsonStr.lastIndexOf("}");
+                if (lastBrace > 0) {
+                  const itemsIdx = jsonStr.indexOf('"items"');
+                  if (itemsIdx > -1) {
+                    const repaired = jsonStr.substring(0, lastBrace + 1) + "]}";
+                    extractedData = JSON.parse(repaired);
+                    console.log(`Repair strategy 2 succeeded: recovered ${extractedData.items?.length || 0} items`);
+                  }
+                }
+              } catch { /* try next */ }
+            }
+
+            // Strategy 3: Extract items array directly via regex
+            if (!extractedData) {
+              try {
+                const itemsMatch = jsonStr.match(/"items"\s*:\s*\[([\s\S]*)/);
+                if (itemsMatch) {
+                  let arrStr = "[" + itemsMatch[1];
+                  const lastBrace = arrStr.lastIndexOf("}");
+                  if (lastBrace > 0) {
+                    arrStr = arrStr.substring(0, lastBrace + 1) + "]";
+                    const items = JSON.parse(arrStr);
+                    extractedData = { items };
+                    console.log(`Repair strategy 3 succeeded: recovered ${items.length} items`);
+                  }
+                }
+              } catch { /* give up */ }
+            }
+
+            if (!extractedData) {
+              throw new Error("Failed to parse AI extraction results after all repair strategies");
+            }
+
+            const recoveredCount = extractedData.items?.length || 0;
+            const truncationNote = finishReason === "length" || finishReason === "MAX_TOKENS"
+              ? ` (finish_reason: ${finishReason})`
+              : "";
+            await svcClient
+              .from("extract_sessions")
+              .update({ error_message: `Warning: AI response was truncated${truncationNote}. Recovered ${recoveredCount} items — some rows may be missing.` })
+              .eq("id", sessionId);
+          }
+
+          // Rebuild summary if truncated
+          if (extractedData.items && !extractedData.summary) {
+            extractedData._truncated = true;
+            const items = extractedData.items;
+            const barSizes = [...new Set(items.map((i: any) => i.size).filter(Boolean))];
+            const shapeTypes = [...new Set(items.map((i: any) => i.type).filter(Boolean))];
+            extractedData.summary = {
+              total_items: items.length,
+              total_pieces: items.reduce((sum: number, i: any) => sum + (i.quantity || 0), 0),
+              bar_sizes_found: barSizes,
+              shape_types_found: shapeTypes,
+              customer: items[0]?.customer || null,
+              project: items[0]?.ref || null,
+            };
+          }
         }
 
         // Save rows to DB
