@@ -62,7 +62,12 @@ function deduplicateText(texts: string[]): string {
 
 Deno.serve((req) =>
   handleRequest(req, async ({ userId, body }) => {
-
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
+    }
 
     const { imageUrl, imageBase64, mode = "standard", quadrants = 4 }: VisionRequest = body;
 
