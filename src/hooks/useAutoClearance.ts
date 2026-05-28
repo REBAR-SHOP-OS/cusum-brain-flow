@@ -238,16 +238,8 @@ export function useAutoClearance({
     confidence: number,
     ocrMeta: any,
   ) => {
-    // Re-read this specific evidence row and confirm both photos are attached.
-    const { data: ev, error: readErr } = await supabase
-      .from("clearance_evidence")
-      .select("id, tag_scan_url, material_photo_url")
-      .eq("id", evidenceId)
-      .maybeSingle();
-    if (readErr || !ev) throw readErr || new Error("Evidence row missing");
-    if (!ev.tag_scan_url || !ev.material_photo_url) {
-      throw new Error("Both tag and product photos required before auto verify");
-    }
+    // Shared gate — same definition of "complete" used by Manual Verify.
+    await assertEvidenceComplete(evidenceId, itemId);
     const { error: upErr } = await supabase
       .from("clearance_evidence")
       .update({
