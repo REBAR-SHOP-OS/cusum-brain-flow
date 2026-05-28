@@ -149,6 +149,8 @@ DECISION RUBRIC — be decisive about IGNORING noise, but STRICT about distingui
 - Set matched_profile_id="null" if: (a) no enrolled reference shares the captured face's stable features, (b) the capture is too blurry/occluded, OR (c) more than one enrolled person plausibly fits.
 - Multiple faces in captured photo → identify the center/largest face only.
 - 'reason' must be ONE short sentence stating the decision AND naming the distinguishing feature that ruled out the closest runner-up (e.g. "Matches Zahra: same nose width and jawline; ruled out Sara by wider inter-pupillary distance.").
+
+Call face_match_result with your answer.`,
       },
     ];
 
