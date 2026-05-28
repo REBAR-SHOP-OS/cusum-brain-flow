@@ -231,6 +231,9 @@ verify_jwt = false
 [functions.linkedin-oauth]
 verify_jwt = false
 
+[functions.linkedin-token-health]
+verify_jwt = false
+
 [functions.log-machine-run]
 verify_jwt = false
 
