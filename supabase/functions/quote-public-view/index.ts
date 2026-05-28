@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
     const sqStatus = sq?.status || "";
     const quoteStatus = quote.status || "";
 
-    const viewableStatuses = ["sent", "sent_to_customer", "draft", "quote_ready", "internally_approved"];
+    const viewableStatuses = ["sent", "sent_to_customer", "quote_ready", "internally_approved"];
     const acceptedStatuses = ["accepted", "customer_approved"];
     const rejectedStatuses = ["declined", "customer_rejected", "cancelled", "expired"];
 
