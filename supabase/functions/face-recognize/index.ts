@@ -32,32 +32,15 @@ Deno.serve((req) =>
       companyId = callerProfile?.company_id || null;
     }
 
-    let profileQuery = supabase
-      .from("profiles")
-      .select("id, full_name, avatar_url, company_id")
+    // Match REBAR OS Core: scope enrollments by company. Do NOT filter profiles by is_active
+    // (that flag means "currently clocked in" in this app, which would exclude everyone trying to punch in).
+    let enrollQuery = supabase
+      .from("face_enrollments")
+      .select("id, profile_id, photo_url, company_id")
       .eq("is_active", true);
     if (companyId) {
-      profileQuery = profileQuery.eq("company_id", companyId);
+      enrollQuery = enrollQuery.eq("company_id", companyId);
     }
-
-    const { data: profiles, error: profileErr } = await profileQuery;
-    if (profileErr) {
-      console.error("Error fetching active profiles:", profileErr);
-      return new Response(JSON.stringify({ error: "Failed to fetch active profiles" }), {
-        status: 500, headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const profileIds = (profiles || []).map((p: any) => p.id);
-    if (profileIds.length === 0) {
-      return { matched: false, reason: "No active enrolled profiles found", confidence: 0, enrollment_count: 0 };
-    }
-
-    const enrollQuery = supabase
-      .from("face_enrollments")
-      .select("id, profile_id, photo_url")
-      .eq("is_active", true)
-      .in("profile_id", profileIds);
 
     const { data: enrollments, error: enrollErr } = await enrollQuery;
 
@@ -67,6 +50,23 @@ Deno.serve((req) =>
         status: 500, headers: { "Content-Type": "application/json" },
       });
     }
+
+    if (!enrollments || enrollments.length === 0) {
+      return { matched: false, reason: "No enrolled faces found", confidence: 0, enrollment_count: 0 };
+    }
+
+    const profileIds = Array.from(new Set(enrollments.map((e: any) => e.profile_id)));
+    const { data: profiles, error: profileErr } = await supabase
+      .from("profiles")
+      .select("id, full_name, avatar_url, company_id")
+      .in("id", profileIds);
+    if (profileErr) {
+      console.error("Error fetching profiles:", profileErr);
+      return new Response(JSON.stringify({ error: "Failed to fetch profiles" }), {
+        status: 500, headers: { "Content-Type": "application/json" },
+      });
+    }
+
 
     if (!enrollments || enrollments.length === 0) {
       return { matched: false, reason: "No enrolled faces found" };
