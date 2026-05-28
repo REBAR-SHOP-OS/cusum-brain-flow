@@ -54,14 +54,20 @@ function getLinkedInStatusError(
   return `Reconnect LinkedIn from Settings → Integrations${detail}.`;
 }
 
-const REQUIRED_LINKEDIN_SCOPES = [
+// Minimum scopes the LinkedIn App MUST grant for personal publishing to work.
+// Without these we cannot post anything at all, so the connection must be flagged "error".
+const MIN_LINKEDIN_SCOPES = [
   "openid",
   "profile",
-  "email",
   "w_member_social",
+];
+// Optional scopes that unlock auto-refresh and company-page publishing. Missing these
+// downgrades capabilities but does NOT break personal posting, so we surface a warning
+// in error_message but keep status = "connected".
+const OPTIONAL_LINKEDIN_SCOPES = [
+  "offline_access",
   "w_organization_social",
   "r_organization_social",
-  "offline_access",
 ];
 
 // ─── Main Handler ──────────────────────────────────────────────────
