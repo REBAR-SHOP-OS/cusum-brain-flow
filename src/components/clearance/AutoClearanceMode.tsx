@@ -167,7 +167,7 @@ export function AutoClearanceMode({
           onCapture={onCapture}
           ringColor={ringColor as any}
           overlayLabel={overlayLabel}
-          disabled={busy || manifestComplete || state === "tag_pick"}
+          disabled={busy || manifestComplete || state === "tag_pick" || productLocked}
         />
       </div>
 
@@ -178,17 +178,30 @@ export function AutoClearanceMode({
         </div>
       )}
 
+      {/* PRODUCT LOCK NOTICE — shutter disabled until tag photo confirmed */}
+      {productLocked && (
+        <div className="absolute inset-x-0 bottom-32 z-30 flex justify-center pointer-events-none">
+          <div className="bg-amber-500/95 text-black rounded-xl px-4 py-2 text-xs font-bold tracking-wider uppercase shadow-2xl">
+            Scan and save tag first
+          </div>
+        </div>
+      )}
+
       {/* BUSY OVERLAY */}
-      {(state === "auto_verifying" || state === "tag_matching") && (
+      {(state === "product_validating" || state === "product_uploading" || state === "ocr_running" || state === "matching" || state === "tag_uploading") && (
         <div className="absolute inset-0 z-30 bg-black/40 pointer-events-none flex items-center justify-center">
           <div className="bg-black/80 rounded-2xl px-6 py-4 flex items-center gap-3 text-white">
             <Loader2 className="w-6 h-6 animate-spin" />
             <span className="text-sm font-bold tracking-wider uppercase">
-              {state === "auto_verifying" ? "Verifying" : "Reading tag"}
+              {state === "product_validating" ? "Verifying"
+                : state === "product_uploading" ? "Uploading"
+                : state === "tag_uploading" ? "Saving tag"
+                : "Reading tag"}
             </span>
           </div>
         </div>
       )}
+
 
       {/* PICK 3 OVERLAY */}
       {state === "tag_pick" && (
