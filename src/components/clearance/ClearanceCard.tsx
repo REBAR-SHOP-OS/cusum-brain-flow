@@ -283,7 +283,14 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
       toast({ title: "Item cleared", description: `${item.mark_number || "Item"} verified` });
     } catch (err: any) {
       const message = err?.message ?? String(err);
-      if (/WORKFLOW_GATE_/.test(message)) {
+      if (err instanceof ClearanceGateError) {
+        setGateError(message);
+        toast({
+          title: "Missing evidence",
+          description: message,
+          variant: "destructive",
+        });
+      } else if (/WORKFLOW_GATE_/.test(message)) {
         setGateError(message);
         toast({
           title: "Blocked by release gate",
