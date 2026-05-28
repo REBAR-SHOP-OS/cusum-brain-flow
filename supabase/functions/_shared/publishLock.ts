@@ -182,7 +182,29 @@ export async function recoverStaleLocks(
     .or(`publishing_started_at.lt.${cutoffFast},and(publishing_started_at.is.null,updated_at.lt.${cutoffFast})`);
 
   const recovered: string[] = [];
-  for (const post of (staleCandidates || []) as Array<{ id: string; page_results: unknown }>) {
+  for (const post of (staleCandidates || []) as Array<{
+    id: string;
+    page_results: unknown;
+    publishing_started_at: string | null;
+    updated_at: string | null;
+    platform: string | null;
+    content_type: string | null;
+    image_url: string | null;
+  }>) {
+    // For IG videos/reels, hold off until the 20-min cutoff — the upload may still be processing.
+    const isIgVideo =
+      post.platform === "instagram" &&
+      (post.content_type === "reel" ||
+        post.content_type === "video" ||
+        /\.(mp4|mov|webm)(\?|$)/i.test(post.image_url || ""));
+    if (isIgVideo) {
+      const startedAt = post.publishing_started_at || post.updated_at;
+      if (startedAt && startedAt > cutoffVideo) {
+        console.log(`[publishLock] Holding IG video recovery for ${post.id} — still within 20-min window`);
+        continue;
+      }
+    }
+
     const pageResults: PageResult[] = Array.isArray(post.page_results)
       ? (post.page_results as PageResult[])
       : [];
