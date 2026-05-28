@@ -251,7 +251,7 @@ export function useAutoClearance({
         verified_by: userId,
         verified_at: new Date().toISOString(),
       })
-      .eq("id", ev.id);
+      .eq("id", evidenceId);
     if (upErr) throw upErr;
     // The auto_advance trigger flips cut_plan_items.phase to 'complete'.
   }, [userId]);
