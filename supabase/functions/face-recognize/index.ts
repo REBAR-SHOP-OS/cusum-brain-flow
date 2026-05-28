@@ -131,26 +131,19 @@ Deno.serve((req) =>
     const contentParts: any[] = [
       {
         type: "text",
-        text: `You are a face verification system for an employee time clock. Compare the CAPTURED photo against each labeled reference set and identify which enrolled person it most likely is.
-
-Enrolled employees:
-${employeeList}
-
-DECISION RUBRIC — be decisive about IGNORING noise, but STRICT about distinguishing different people:
-- Focus on stable facial geometry: eye shape & spacing, nose shape & width, mouth shape, jawline, chin, brow ridge, ear shape, forehead, skin tone, facial proportions (inter-pupillary distance vs face width, nose-to-mouth ratio). IGNORE clothing, headwear (hijab/hat), background, lighting, expression, makeup, glasses, beard styling, and image quality.
-- Cross-reference ALL provided photos for each person — variations in angle/lighting between references and the capture are expected.
-- ANTI-FALSE-MATCH RULE (critical): two different men with beards / two people with glasses / two people with similar skin tone are NOT the same person. You MUST internally evaluate EVERY enrolled person and only declare a match if ONE person's stable geometry clearly fits AND every OTHER enrolled person can be ruled out by at least one stable feature (e.g. different nose shape, different jawline, different eye spacing, different ear shape).
-- If TWO OR MORE enrolled people plausibly fit the captured face, return matched_profile_id="null" with reason explaining the ambiguity — do NOT guess.
-- Confidence scale (only assign when the anti-false-match rule passes):
-    • 90-99 = obvious same person, all other enrollees clearly ruled out
-    • 80-89 = clearly the same person, all other enrollees ruled out despite minor differences (angle, lighting, expression)
-    • 75-79 = same person, lower-quality capture but features still align and others are ruled out
-    • below 75 = do NOT match; return "null"
-- Set matched_profile_id="null" if: (a) no enrolled reference shares the captured face's stable features, (b) the capture is too blurry/occluded, OR (c) more than one enrolled person plausibly fits.
-- Multiple faces in captured photo → identify the center/largest face only.
-- 'reason' must be ONE short sentence stating the decision AND naming the distinguishing feature that ruled out the closest runner-up (e.g. "Matches Zahra: same nose width and jawline; ruled out Sara by wider inter-pupillary distance.").
-
-Call face_match_result with your answer.`,
+        text:
+          "You are a face verification system for an employee time clock. Compare the CAPTURED photo against each labeled reference set and identify which enrolled person it most likely is.\n\n" +
+          "DECISION RUBRIC — be decisive, not overly cautious:\n" +
+          "- Focus on stable facial geometry: eye shape & spacing, nose shape, mouth, jawline, brow, ear shape, skin tone. IGNORE clothing, headwear (hijab/hat), background, lighting, expression, makeup, glasses, and image quality.\n" +
+          "- If the captured face's stable features are CONSISTENT with one reference person and clearly distinct from the others → matched=true. Set confidence:\n" +
+          "    • 90-99 = obvious same person\n" +
+          "    • 75-89 = clearly the same person despite minor differences (angle, lighting, expression)\n" +
+          "    • 60-74 = same person, lower-quality capture but features still align\n" +
+          "- Only return matched=false if (a) no enrolled reference shares the captured face's stable features, OR (b) the capture is too blurry/occluded to read facial geometry. Do NOT return false just because clothing/background/lighting differ.\n" +
+          "- 'reason' must be ONE short sentence stating the decision (e.g. 'Same eye shape, nose, and jawline as Zahra Zokaei references.').\n\n" +
+          "Respond ONLY by calling the face_match_result tool.",
+      },
+    ];
       },
     ];
 
