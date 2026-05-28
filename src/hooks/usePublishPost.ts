@@ -60,10 +60,14 @@ export function usePublishPost() {
         }
 
         if (linkedInStatus?.status === "error") {
-          // Inline Reconnect — open LinkedIn OAuth in a new tab so the operator doesn't have to bounce through Settings.
+          // Inline Reconnect — open LinkedIn OAuth in a new tab. Use scopeMode:"personal"
+          // because the current LinkedIn App is NOT approved for offline_access / org
+          // scopes, and requesting the full set returns invalid_scope_error from LinkedIn
+          // (verified in linkedin-oauth logs). Personal scope set is known-good and at
+          // least restores personal-page publishing immediately.
           try {
             const { data: authData } = await supabase.functions.invoke("linkedin-oauth", {
-              body: { action: "get-auth-url", returnUrl: window.location.origin },
+              body: { action: "get-auth-url", returnUrl: window.location.origin, scopeMode: "personal" },
             });
             if (authData?.authUrl) {
               window.open(authData.authUrl, "_blank", "noopener,noreferrer");
