@@ -314,9 +314,19 @@ function handleGetAuthUrl(
   body: Record<string, unknown>,
 ) {
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-oauth/callback`;
-  // offline_access is REQUIRED to receive a refresh_token (LinkedIn does not return refresh_token without it).
-  const scope =
-    "openid profile email w_member_social w_organization_social r_organization_social offline_access";
+  // scopeMode:
+  //   "full"     → request every scope (incl. offline_access + org scopes). Required for
+  //                refresh_token and company-page publishing, but fails with invalid_scope_error
+  //                when the LinkedIn App is not approved for those products.
+  //   "personal" → minimal set known to work on the most basic LinkedIn App
+  //                (Sign In with LinkedIn + Share on LinkedIn). Lets personal posting
+  //                recover even when the App is not approved for organization scopes.
+  const scopeMode = String(body.scopeMode || "full").toLowerCase() === "personal"
+    ? "personal"
+    : "full";
+  const scope = scopeMode === "personal"
+    ? "openid profile email w_member_social"
+    : "openid profile email w_member_social w_organization_social r_organization_social offline_access";
   const state = `${userId}|${body.returnUrl || ""}`;
 
   const authUrl = new URL(LINKEDIN_AUTH_URL);
@@ -326,7 +336,7 @@ function handleGetAuthUrl(
   authUrl.searchParams.set("scope", scope);
   authUrl.searchParams.set("state", state);
 
-  return jsonRes({ authUrl: authUrl.toString() });
+  return jsonRes({ authUrl: authUrl.toString(), scopeMode });
 }
 
 // ─── Check Status ──────────────────────────────────────────────────
