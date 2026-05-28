@@ -6,11 +6,13 @@ import { readFileSync } from "node:fs";
 describe("face recognition candidate filtering", () => {
   const source = readFileSync("supabase/functions/face-recognize/index.ts", "utf8");
 
-  it("scopes enrollments by is_active and (when present) company_id", () => {
-    // Mirrors REBAR OS Core: enrollments are the source of truth, scoped by company.
+  it("uses active enrollments but scopes company through linked profiles", () => {
+    // Enrollments are the source of truth, but this app's face_enrollments table has no company_id.
     expect(source).toContain('.from("face_enrollments")');
     expect(source).toContain('.eq("is_active", true)');
-    expect(source).toContain('.eq("company_id", companyId)');
+    expect(source).not.toContain('.select("id, profile_id, photo_url, company_id")');
+    expect(source).not.toMatch(/enrollQuery[\s\S]{0,200}\.eq\("company_id",\s*companyId\)/);
+    expect(source).toMatch(/profileQuery[\s\S]{0,300}\.eq\("company_id",\s*companyId\)/);
   });
 
   it("does NOT filter profiles by is_active (that flag means 'clocked in' here)", () => {
