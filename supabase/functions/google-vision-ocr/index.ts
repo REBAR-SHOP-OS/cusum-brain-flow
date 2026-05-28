@@ -146,5 +146,5 @@ Deno.serve((req) =>
       passes: extractedTexts.length,
       quadrants,
     };
-  }, { functionName: "google-vision-ocr", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, { functionName: "google-vision-ocr", authMode: "required", requireCompany: false, wrapResult: false })
 );
