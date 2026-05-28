@@ -327,15 +327,15 @@ function handleGetAuthUrl(
 ) {
   const redirectUri = `${supabaseUrl}/functions/v1/linkedin-oauth/callback`;
   // scopeMode:
-  //   "full"     → request every scope (incl. offline_access + org scopes). Required for
-  //                refresh_token and company-page publishing, but fails with invalid_scope_error
-  //                when the LinkedIn App is not approved for those products.
-  //   "personal" → minimal set known to work on the most basic LinkedIn App
-  //                (Sign In with LinkedIn + Share on LinkedIn). Lets personal posting
-  //                recover even when the App is not approved for organization scopes.
-  const scopeMode = String(body.scopeMode || "full").toLowerCase() === "personal"
-    ? "personal"
-    : "full";
+  //   "personal" (DEFAULT) → minimal known-good set: Sign In with LinkedIn (OIDC) +
+  //                Share on LinkedIn. Lets personal posting work even when the App
+  //                is not yet approved for Community Management API.
+  //   "full"     → adds offline_access + org scopes. ONLY use after the LinkedIn App
+  //                has Community Management API approved, otherwise LinkedIn returns
+  //                invalid_scope_error and the user sees "Bummer, something went wrong".
+  const scopeMode = String(body.scopeMode || "personal").toLowerCase() === "full"
+    ? "full"
+    : "personal";
   const scope = scopeMode === "personal"
     ? "openid profile email w_member_social"
     : "openid profile email w_member_social w_organization_social r_organization_social offline_access";
@@ -348,7 +348,19 @@ function handleGetAuthUrl(
   authUrl.searchParams.set("scope", scope);
   authUrl.searchParams.set("state", state);
 
+  // Temporary diagnostic logging — NO secrets/tokens. Safe to log:
+  //   client_id (public OAuth identifier), redirect_uri (whitelisted), scope list, scopeMode.
+  console.log("[linkedin-oauth] get-auth-url", JSON.stringify({
+    scopeMode,
+    scope,
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    authorize_host: authUrl.host,
+  }));
+
   return jsonRes({ authUrl: authUrl.toString(), scopeMode });
+}
+
 }
 
 // ─── Check Status ──────────────────────────────────────────────────
