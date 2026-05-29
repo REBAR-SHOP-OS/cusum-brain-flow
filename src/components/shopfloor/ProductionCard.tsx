@@ -9,6 +9,7 @@ import { TransferMachineDialog } from "./TransferMachineDialog";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { mapWorkflowGateError } from "@/lib/workflowGateError";
 import type { StationItem } from "@/hooks/useStationData";
 
 interface ProductionCardProps {
@@ -63,7 +64,12 @@ export function ProductionCard({
       toast({ title: "Reset", description: `${item.mark_number || "Item"} progress reset to 0` });
       queryClient.invalidateQueries({ queryKey: ["station-data"] });
     } catch (err: any) {
-      toast({ title: "Reset failed", description: err.message, variant: "destructive" });
+      const gate = mapWorkflowGateError(err);
+      if (gate) {
+        toast({ title: gate.title, description: gate.description, variant: "destructive" });
+      } else {
+        toast({ title: "Reset failed", description: err.message, variant: "destructive" });
+      }
     } finally {
       setResetting(false);
     }

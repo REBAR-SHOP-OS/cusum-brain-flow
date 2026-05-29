@@ -3342,6 +3342,51 @@ export type Database = {
           },
         ]
       }
+      cut_plan_item_phase_log: {
+        Row: {
+          actor_id: string | null
+          company_id: string
+          created_at: string
+          cut_plan_id: string | null
+          cut_plan_item_id: string
+          device: string | null
+          from_phase: string | null
+          id: string
+          metadata: Json | null
+          source: string | null
+          to_phase: string
+          work_order_id: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          company_id: string
+          created_at?: string
+          cut_plan_id?: string | null
+          cut_plan_item_id: string
+          device?: string | null
+          from_phase?: string | null
+          id?: string
+          metadata?: Json | null
+          source?: string | null
+          to_phase: string
+          work_order_id?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          company_id?: string
+          created_at?: string
+          cut_plan_id?: string | null
+          cut_plan_item_id?: string
+          device?: string | null
+          from_phase?: string | null
+          id?: string
+          metadata?: Json | null
+          source?: string | null
+          to_phase?: string
+          work_order_id?: string | null
+        }
+        Relationships: []
+      }
       cut_plan_items: {
         Row: {
           asa_shape_code: string | null
