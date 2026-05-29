@@ -1,50 +1,36 @@
-## Outcome
-Fix AI Extract for PDF barlists so values stay in the correct columns (Length, A, B, C, D, E, F, G, H, J, K, O, R) instead of being shifted/misread from the PDF table layout.
+## هدف نهایی
+مشکل پابلیش Instagram حل شود: ویدئویی که الان با پسوند `.mp4` ذخیره شده ولی واقعاً Instagram-ready نیست، قبل از پابلیش شناسایی/تبدیل شود و بعد تست شود.
 
-## Root cause
-The PDF path in `extract-manifest` sends the PDF directly to the AI model as a visual document. Unlike spreadsheets, PDFs do not currently get a deterministic table/column overlay. That means the model guesses table reading order from the rendered PDF, and in dense RebarCAD schedules it can concatenate or shift cells across columns (exactly what is visible in the screenshot).
+## علت محتمل
+- خطا از `social-publish` و helper `instagramPublish.ts` می‌آید.
+- پست فعلی: `Precision Construction in Action` با `image_url` در bucket `social-media-assets/videos/...mp4` fail شده است.
+- مسیر آپلود فعلی در `src/lib/socialMediaStorage.ts` برای هر ویدئو پسوند `.mp4` می‌گذارد، حتی اگر Blob واقعی `video/webm` باشد. یعنی WebM/MediaRecorder خروجی مرورگر با اسم `.mp4` ذخیره شده و Instagram آن را رد می‌کند.
+- `videoStitch.ts`, `videoWatermark.ts`, `videoTrim.ts` هم با `MediaRecorder` خروجی WebM می‌سازند؛ پس باید جلوی ذخیره/پابلیش اشتباه گرفته شود، نه اینکه guard اینستاگرام حذف شود.
 
-Spreadsheets already have a safer path: header-based deterministic dimension overlay. PDFs do not.
+## پلن اجرا
+1. **اصلاح ذخیره ویدئو در فرانت‌اند**
+   - در `src/lib/socialMediaStorage.ts` پسوند و `contentType` را از Blob واقعی تعیین می‌کنم.
+   - اگر خروجی WebM باشد، دیگر با پسوند `.mp4` ذخیره نمی‌شود.
+   - برای آپلود دستی Instagram فقط فایل واقعی `video/mp4` قبول شود و WebM/MOV با پیام واضح رد شود.
 
-## Plan
-1. Add a deterministic PDF text/table extraction path before the AI call.
-   - Use `pdfjs-dist` in the `extract-manifest` edge function.
-   - Read each PDF page text item with X/Y coordinates.
-   - Group text items into visual rows by Y position.
-   - Sort each row left-to-right by X position.
-   - Preserve column gaps so headers and cells remain aligned.
+2. **افزودن مسیر تبدیل امن برای پست fail شده**
+   - یک backend function کوچک برای آماده‌سازی ویدئوی Instagram اضافه/اصلاح می‌کنم که ویدئوی موجود را دانلود کند، با FFmpeg به MP4 واقعی H.264 + AAC تبدیل کند، در `social-media-assets/videos/...-instagram-ready.mp4` آپلود کند و URL جدید برگرداند.
+   - اگر محیط FFmpeg backend آماده نبود، function خطای واضح بدهد تا به جای پابلیش ناموفق، UI کاربر را راهنمایی کند.
 
-2. Add a RebarCAD-specific parser for structured PDF text.
-   - Detect the header row containing `DWG`, `#`, `GRADE`, `MARK`, `QTY`, `SIZE`, `TYPE`, `LENGTH`, `A`, `B`, `C`, `D`, `E`, `F`, `G`, `H`, `J`, `K`, `O`, `R`.
-   - Map values by header label, not by guessed position.
-   - Explicitly skip `I` so later columns never shift.
-   - Keep exact source strings in `source_total_length_text` / `source_dims_json` for lossless ft-in display.
+3. **اتصال تبدیل به جریان Publish**
+   - قبل از ارسال Instagram Reel/Post ویدئویی، اگر asset مشکوک باشد یا guard بگوید Instagram-ready نیست، به جای fail فوری، مسیر آماده‌سازی اجرا شود و پست با URL جدید retry شود.
+   - guard امنیتی Instagram حذف نمی‌شود؛ فقط به جای بن‌بست، یک repair path اضافه می‌شود.
 
-3. Wire the PDF parser as the preferred path.
-   - For PDFs: try deterministic extraction first.
-   - If it produces valid rows, save those rows directly and only use AI for summary/context fallback.
-   - If the PDF has no extractable text or parsing confidence is too low, fall back to the existing AI vision flow.
+4. **اصلاح پست فعلی در دیتابیس**
+   - ویدئوی fail شده برای `Precision Construction in Action` را تبدیل می‌کنم.
+   - `image_url` همان پست را به نسخه `-instagram-ready.mp4` تغییر می‌دهم و `last_error` را پاک می‌کنم تا آماده retry باشد.
 
-4. Keep existing spreadsheet and image behavior unchanged.
-   - Spreadsheet deterministic overlay remains as-is.
-   - Image files still use the AI vision path.
-   - No database schema changes needed.
+5. **تست و اعتبارسنجی**
+   - با `ffprobe`/metadata مسیر تبدیل را تست می‌کنم: container=`mp4`, video codec=`h264`, audio codec=`aac` یا audio track سازگار.
+   - regression test موجود `instagram-video-spec.test.ts` را گسترش می‌دهم تا WebM با پسوند fake `.mp4` دیگر قابل ذخیره/پابلیش بدون آماده‌سازی نباشد.
+   - function `social-publish` را deploy و با curl edge function تست می‌کنم تا خطای قبلی دیگر تکرار نشود.
 
-5. Add regression coverage.
-   - Add a regression test for PDF-style row text where `E/F/G` are empty but later rows contain straight-bar Length/A/B values.
-   - Assert that values stay under their exact headers and do not shift into neighboring dimensions.
-   - Add a second test for the `I` skip rule: `H`, `J`, `K` must remain correctly mapped.
-
-6. Validate with real signals.
-   - Run the targeted regression test.
-   - Re-check the touched extraction code.
-   - If backend test invocation is available, run `extract-manifest` against a PDF sample or a simulated PDF text fixture to confirm saved `extract_rows` fields are correctly mapped.
-
-## Files expected to change
-- `supabase/functions/extract-manifest/index.ts`
-- `tests/regression/units` or `tests/regression/extract` new regression test file
-
-## Risk control
-- The change is additive and narrow: deterministic PDF parsing only activates when it can confidently parse a schedule table.
-- Existing AI fallback remains in place for scanned/image-only PDFs.
-- No destructive database actions or schema changes.
+## ریسک‌ها و محدودیت‌ها
+- اگر خود ویدئو corrupt باشد، تبدیل هم fail می‌شود و باید ویدئو دوباره regenerate شود.
+- اگر Instagram بعد از تبدیل به خاطر token/page permission خطا بدهد، آن یک مشکل جدا از فرمت ویدئو است.
+- قوانین Neel approval و قفل publish دست‌نخورده می‌مانند.
