@@ -30,7 +30,7 @@ import { Zap, Hand, Archive as ArchiveIcon, ListChecks } from "lucide-react";
 import { useReleaseState } from "@/hooks/useReleaseState";
 import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
 
-const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"] as const;
+const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5", "Zone 6", "Zone 7"] as const;
 
 
 export default function ClearanceStation() {

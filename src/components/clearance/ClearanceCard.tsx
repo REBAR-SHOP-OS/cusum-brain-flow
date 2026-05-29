@@ -244,7 +244,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
       setGateError("Assign a storage zone before marking clearance complete.");
       toast({
         title: "Storage zone required",
-        description: "Pick a zone (Zone 1–5) before verifying.",
+        description: "Pick a zone (Zone 1–7) before verifying.",
         variant: "destructive",
       });
       return;
