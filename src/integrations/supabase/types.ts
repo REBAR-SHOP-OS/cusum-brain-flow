@@ -9495,6 +9495,7 @@ export type Database = {
           company_id: string
           created_at: string
           customer_id: string | null
+          final_photo_path: string | null
           id: string
           signature_data: string | null
           site_address: string
@@ -9508,6 +9509,7 @@ export type Database = {
           company_id: string
           created_at?: string
           customer_id?: string | null
+          final_photo_path?: string | null
           id?: string
           signature_data?: string | null
           site_address: string
@@ -9521,6 +9523,7 @@ export type Database = {
           company_id?: string
           created_at?: string
           customer_id?: string | null
+          final_photo_path?: string | null
           id?: string
           signature_data?: string | null
           site_address?: string
