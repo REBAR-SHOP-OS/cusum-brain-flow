@@ -17,6 +17,8 @@ import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
 import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
 import { Zap, Hand, Archive as ArchiveIcon, ListChecks } from "lucide-react";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
