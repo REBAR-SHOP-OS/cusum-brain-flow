@@ -51,7 +51,9 @@ function formatVal(val: number | null, unitSystem: string): string {
 
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
-  return unitSystem === "imperial" ? formatMmToFtIn(Math.round(val)) : String(Math.round(val));
+  // Imperial rows store INCHES in dim columns (same convention as total_length_mm
+  // in src/lib/cutMath/imperial.ts). Convert inches → mm before formatting.
+  return unitSystem === "imperial" ? formatMmToFtIn(val * 25.4) : String(Math.round(val));
 }
 
 interface RebarTagCardProps {
