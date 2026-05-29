@@ -522,7 +522,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
                 <Button
                   className="w-full gap-1.5"
                   variant={isCleared ? "secondary" : "default"}
-                  disabled={!canWrite || isCleared || verifying || !hasEvidence || validating}
+                  disabled={!canWrite || isCleared || verifying || !hasEvidence || validating || !item.storage_zone}
                   onClick={handleVerify}
                 >
                   {verifying ? (
