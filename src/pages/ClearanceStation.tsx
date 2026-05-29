@@ -267,8 +267,9 @@ export default function ClearanceStation() {
                                     </span>
                                   )}
                                   <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
-                                    {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
+                                    {manifestReleaseLabel(manifestStateById.get(key)).toUpperCase()}
                                   </Badge>
+
                                 </div>
                                 <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate">
                                   {group.items.length} item{group.items.length !== 1 ? "s" : ""}
