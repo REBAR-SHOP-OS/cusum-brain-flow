@@ -510,5 +510,5 @@ Deno.serve((req) =>
       files_linked: filesLinked || 0,
       files_unlinked_remaining: filesUnlinked || 0,
     });
-  }, { functionName: "odoo-chatter-sync", authMode: "optional", requireCompany: false, wrapResult: false })
+  }, { functionName: "odoo-chatter-sync", authMode: "optional", requireCompany: false, wrapResult: false, internalOnly: true })
 );

@@ -165,6 +165,18 @@ async function getDsmBaseUrl(synologyUrl: string): Promise<string> {
 Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient, body } = ctx;
+
+    // Admin role gate — NAS contains payroll/financial/HR files
+    const { data: adminRole } = await serviceClient
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle();
+    if (!adminRole) {
+      return json({ error: "Admin role required" }, 403);
+    }
+
     const { action, path, folderPath } = body;
 
     const SYNOLOGY_URL_RAW = Deno.env.get("SYNOLOGY_URL") || "RSI1";
