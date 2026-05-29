@@ -311,11 +311,31 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
                           )}
                         </div>
                       </button>
-                      {downloadUrl && (
+                      {(downloadUrl || meta?.storage_path) && (
                         <button
-                          onClick={(e) => {
+                          onClick={async (e) => {
                             e.stopPropagation();
-                            downloadFile(downloadUrl, fileName || item.title || "download");
+                            const name = fileName || item.title || "download";
+                            const bucket = (meta?.storage_bucket as string | undefined) || "estimation-files";
+                            const path = meta?.storage_path as string | undefined;
+                            try {
+                              if (path) {
+                                const { data, error } = await supabase.storage.from(bucket).download(path);
+                                if (error || !data) throw error || new Error("Empty");
+                                const blobUrl = URL.createObjectURL(data);
+                                const a = document.createElement("a");
+                                a.href = blobUrl;
+                                a.download = name;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(blobUrl);
+                                return;
+                              }
+                              if (downloadUrl) await downloadFile(downloadUrl, name);
+                            } catch (err: any) {
+                              toast.error("Download failed: " + (err?.message || "unknown"));
+                            }
                           }}
                           className="p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
                           title="Download"
