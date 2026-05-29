@@ -54,35 +54,28 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
 
   // Use session unit if available, otherwise fall back to company unit
   const unitSystem: UnitSystem = sessionUnit ? sessionUnitToDisplay(sessionUnit) : companyUnit;
-  // The LengthDisplayMode for converting user input back to mm
-  const editUnit: LengthDisplayMode = (sessionUnit as LengthDisplayMode) || (companyUnit === "imperial" ? "imperial" : "mm");
   const qc = useQueryClient();
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState<Record<string, any>>({});
-  // Convert mm value to display unit for edit fields
-  const mmToEditUnit = (mm: number | null | undefined): number | string => {
-    if (mm == null) return "";
-    if (editUnit === "in") return Math.round((mm / 25.4) * 100) / 100;
-    if (editUnit === "ft") return Math.round((mm / 304.8) * 100) / 100;
-    if (editUnit === "imperial") return Math.round((mm / 25.4) * 100) / 100;
-    return mm;
-  };
 
   const startEdit = (item: any) => {
     setEditingItemId(item.id);
-    // Convert DB mm values to display unit so edit fields match what user sees
-    const convertedDims: Record<string, any> = {};
+    // Edit values are the raw stored numbers — NO unit conversion.
+    // The cut_length_mm column is misnamed: for imperial rows it already holds
+    // the source unit (e.g. inches), and bend_dimensions values follow the same
+    // convention. Converting on edit would corrupt the data.
+    const rawDims: Record<string, any> = {};
     for (const [k, v] of Object.entries(item.bend_dimensions || {})) {
-      convertedDims[k] = v ? mmToEditUnit(Number(v)) : undefined;
+      rawDims[k] = v == null || v === "" ? undefined : Number(v);
     }
     setEditValues({
       mark_number: item.mark_number || "",
       total_pieces: item.total_pieces,
-      cut_length_mm: mmToEditUnit(item.cut_length_mm),
+      cut_length_mm: item.cut_length_mm ?? "",
       bend_type: item.bend_type,
       asa_shape_code: item.asa_shape_code || "",
       drawing_ref: item.drawing_ref || "",
-      bend_dimensions: convertedDims,
+      bend_dimensions: rawDims,
     });
   };
 
@@ -93,15 +86,8 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
 
   const saveEdit = async () => {
     if (!editingItemId) return;
-    const { bend_dimensions, ...rest } = editValues;
-    // Convert cut_length_mm from display unit back to mm
-    const convertedLength = displayModeToMm(rest.cut_length_mm || 0, editUnit);
-    // Convert dimension values from display unit back to mm
-    const convertedDims: Record<string, number | undefined> = {};
-    for (const [k, v] of Object.entries(bend_dimensions || {})) {
-      convertedDims[k] = v ? displayModeToMm(Number(v), editUnit) : undefined;
-    }
-    const updatePayload: Record<string, any> = { ...rest, cut_length_mm: convertedLength, bend_dimensions: convertedDims };
+    // Save raw values — NO unit conversion. See startEdit for context.
+    const updatePayload: Record<string, any> = { ...editValues };
     const { data: updated, error } = await supabase
       .from("cut_plan_items")
       .update(updatePayload)
@@ -120,6 +106,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
     setEditValues({});
     await fetchItems();
   };
+
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
