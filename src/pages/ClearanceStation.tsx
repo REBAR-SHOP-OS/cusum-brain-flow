@@ -26,6 +26,7 @@ export default function ClearanceStation() {
   const { items, byProjectKey, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
+  const { manifestStateById } = useReleaseState();
 
   // Track the active manifest by stable project key (project_id || "__unassigned__")
   // so it survives label/data changes after the last item is cleared.
