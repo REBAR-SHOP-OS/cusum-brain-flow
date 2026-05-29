@@ -48,9 +48,9 @@ describe("A8 Storage Zone — backend trigger contract", () => {
     expect(sql).toMatch(/WORKFLOW_GATE_STORAGE_ZONE_REQUIRED/);
   });
 
-  it("constrains storage_zone to Zone 1..Zone 5", () => {
+  it("constrains storage_zone to Zone 1..Zone 7", () => {
     expect(sql).toMatch(
-      /CHECK \(storage_zone IS NULL OR storage_zone IN \('Zone 1','Zone 2','Zone 3','Zone 4','Zone 5'\)\)/,
+      /CHECK \(storage_zone IS NULL OR storage_zone IN \('Zone 1','Zone 2','Zone 3','Zone 4','Zone 5','Zone 6','Zone 7'\)\)/,
     );
   });
 
