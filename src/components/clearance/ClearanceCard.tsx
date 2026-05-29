@@ -242,8 +242,45 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     }
   };
 
+  const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"] as const;
+  const [zoneSaving, setZoneSaving] = useState(false);
+
+  const handleZoneChange = async (zone: string) => {
+    if (!canWrite) return;
+    setZoneSaving(true);
+    try {
+      if (item.evidence_id) {
+        const { error } = await supabase
+          .from("clearance_evidence")
+          .update({ storage_zone: zone })
+          .eq("id", item.evidence_id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("clearance_evidence")
+          .insert({ cut_plan_item_id: item.id, storage_zone: zone });
+        if (error) throw error;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: "Storage zone assigned", description: zone });
+    } catch (err: any) {
+      toast({ title: "Zone update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setZoneSaving(false);
+    }
+  };
+
   const handleVerify = async () => {
     if (!canWrite || isCleared) return;
+    if (!item.storage_zone) {
+      setGateError("Assign a storage zone before marking clearance complete.");
+      toast({
+        title: "Storage zone required",
+        description: "Pick a zone (Zone 1–5) before verifying.",
+        variant: "destructive",
+      });
+      return;
+    }
     setVerifying(true);
     setGateError(null);
     try {
