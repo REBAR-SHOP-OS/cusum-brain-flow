@@ -282,7 +282,6 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
                   const meta = item.metadata as Record<string, unknown> | null;
                   const fileName = meta?.file_name as string | undefined;
                   const fileType = (meta?.file_type as string | undefined)?.toUpperCase();
-                  return (
                   const downloadUrl = (item.source_url || (meta?.file_url as string | undefined)) ?? null;
                   return (
                     <div
