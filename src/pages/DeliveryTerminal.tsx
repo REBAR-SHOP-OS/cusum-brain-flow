@@ -524,7 +524,7 @@ export default function DeliveryTerminal() {
           <Button
             className="w-full h-12 text-sm font-bold tracking-wider uppercase print:hidden"
             onClick={handleSubmit}
-            disabled={saving || (!photoFile && !signatureData)}
+            disabled={saving || !photoFile || !signatureData || (items.length > 0 && items.some((i) => !i.checked))}
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Confirm Delivery
