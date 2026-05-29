@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import brandLogo from "@/assets/brand-logo.png";
 import { PackingSlipPreview } from "@/components/delivery/PackingSlipPreview";
+import { mapWorkflowGateError } from "@/lib/workflowGateError";
+import { logActivity } from "@/lib/activityLogger";
 
 interface ChecklistItem {
   drawing_ref?: string;
@@ -266,7 +268,20 @@ export default function DeliveryTerminal() {
       toast.success("Delivery confirmed!");
       setCompleted(true);
     } catch (err: any) {
-      toast.error(err.message || "Failed to save");
+      const gate = mapWorkflowGateError(err);
+      if (gate) {
+        toast.error(gate.description, { description: gate.code });
+        logActivity({
+          entityType: "delivery_stop",
+          entityId: stopId,
+          eventType: "delivery_blocked",
+          description: `Delivery completion blocked: ${gate.code}`,
+          source: "workflow_gate",
+          metadata: { gate_code: gate.code, message: gate.description },
+        });
+      } else {
+        toast.error(err?.message || "Failed to save");
+      }
     } finally {
       setSaving(false);
     }

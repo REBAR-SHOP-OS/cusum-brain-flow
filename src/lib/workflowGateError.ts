@@ -18,6 +18,9 @@ const GATE_MESSAGES: Record<string, string> = {
   WORKFLOW_GATE_PICKUP_PHOTO_REQUIRED: "Pickup blocked: take a final load photo before authorizing release.",
   WORKFLOW_GATE_PICKUP_NO_ITEMS: "Pickup blocked: this order has no items to confirm.",
   WORKFLOW_GATE_PICKUP_CHECKLIST_INCOMPLETE: "Pickup blocked: confirm every item on the handover manifest first.",
+  WORKFLOW_GATE_DELIVERY_SIGNATURE_REQUIRED: "Delivery blocked: capture a customer signature before confirming delivery.",
+  WORKFLOW_GATE_DELIVERY_PHOTO_REQUIRED: "Delivery blocked: take a final delivery photo before confirming delivery.",
+  WORKFLOW_GATE_DELIVERY_CHECKLIST_INCOMPLETE: "Delivery blocked: confirm every item on the unloading checklist first.",
 };
 
 export function mapWorkflowGateError(err: unknown): { code: string; title: string; description: string } | null {
