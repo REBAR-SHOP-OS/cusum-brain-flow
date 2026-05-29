@@ -45,13 +45,28 @@ export default function KnowledgeBasePublic() {
       helpful ? { helpful_yes: (selectedArticle?.helpful_yes || 0) + 1 } : { helpful_no: (selectedArticle?.helpful_no || 0) + 1 }
     ).eq("id", articleId);
   };
-
   if (selectedArticle) {
     return (
       <div className="min-h-screen bg-background">
+        <Helmet>
+          <title>{`${selectedArticle.title} – REBAR SHOP OS Knowledge Base`}</title>
+          <meta name="description" content={(selectedArticle.excerpt || selectedArticle.content || "").slice(0, 155)} />
+          <link rel="canonical" href={`https://erp.rebar.shop/knowledge-base`} />
+          <meta property="og:title" content={selectedArticle.title} />
+          <meta property="og:description" content={(selectedArticle.excerpt || "").slice(0, 155)} />
+          <meta property="og:url" content={`https://erp.rebar.shop/knowledge-base`} />
+          <meta property="og:type" content="article" />
+          <script type="application/ld+json">{JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: selectedArticle.title,
+            description: selectedArticle.excerpt || undefined,
+          })}</script>
+        </Helmet>
         <div className="max-w-3xl mx-auto px-4 py-8">
           <Button variant="ghost" size="sm" onClick={() => setSelectedArticle(null)} className="mb-6">
             <ArrowLeft className="w-4 h-4 mr-1" /> Back to articles
+          </Button>
           </Button>
           <h1 className="text-2xl font-bold mb-4">{selectedArticle.title}</h1>
           <div className="prose prose-sm dark:prose-invert max-w-none">
