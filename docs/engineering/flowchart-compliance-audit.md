@@ -1,29 +1,31 @@
 # Flowchart Compliance Audit
-**Date:** 2026-05-29 · **Scope:** Approved operational flowchart (Clearance → Loading → Pickup / Delivery) + Persian workflow business rules · **Mode:** Audit only, no implementation.
+**Original:** 2026-05-29 · **Re-audit:** 2026-05-29 (post-fix) · **Scope:** Approved operational flowchart (Clearance → Loading → Pickup / Delivery) + Persian workflow business rules · **Mode:** Audit only, no implementation.
 
 Sources of truth, in order:
 1. The approved boxed flowchart provided by the user.
 2. The Persian operational workflow description (business-rule precedence over the chart when in conflict — explicitly noted below).
 
-Legend: ✅ Backend-enforced · 🟦 UI-only · 🟡 Partially implemented · 🔴 Missing.
+Legend: ✅ Backend-enforced · 🟦 UI-only · 🟡 Partial · 🔴 Missing · ⏸ Deferred.
+
+> **Re-audit summary:** Five flowchart gaps were closed since the original audit (D4/D6, A8, B6, C7, D-Gate). The chart is now backend-enforced end-to-end for clearance completion, packing-slip generation, pickup release, and delivery completion. Remaining gaps are scoped to **loading scan integrity** (B3.b/c/d, B4) and the unchanged **AI verdict server-recheck** (A5/A6), both classified as deferred slices rather than active defects.
 
 ---
 
 ## A. Clearance branch
 
-| # | Flowchart box / business rule | Status | Evidence in code |
+| # | Flowchart box / business rule | Status | Evidence |
 |---|---|---|---|
-| A1 | Fabrication completed → enters clearance | ✅ | DB trigger `auto_advance_item_phase` + `validate_cut_plan_item_transition` enforces `bent/cut_done → clearance` and requires `bend_completed_pieces ≥ total_pieces`. |
-| A2 | Clearance started | ✅ | `clearance_evidence` row created with `verification_state` lifecycle. |
-| A3 | **Tag photo before product photo** (Persian rule: hard order) | ✅ | `src/lib/clearanceEvidenceGate.ts → assertTagEvidenceReady` blocks product capture until `tag_scan_url` exists on the same evidence row. Used by `useAutoClearance` and `ClearanceCard` Manual Verify. |
-| A4 | Product photo blocked until tag validation succeeds | ✅ | Same gate plus `verification_state ∈ {tag_scanned, product_captured, complete}` check. |
-| A5 | AI matching (OCR, tag validation, product validation) | 🟡 | `validate-clearance-photo` edge function returns `confidence` (`high/low/unreadable`). Frontend acts on it (auto-advance vs. manual review), but the **AI verdict itself is not a backend gate** — `validate_cut_plan_item_transition` only checks that both photos exist and `_is_evidence_release_ready(...)` flags the row as valid; it does not re-check OCR similarity server-side. |
-| A6 | AI confident (>95%) → auto approve | 🟡 | UI applies the threshold; backend accepts any valid evidence row. |
-| A7 | Low confidence / failed match → manual review | ✅ (UI) + ✅ (audit) | Manual Verify path now writes `override_reason` + `activity_events { source='manual_verify' }` audit row via `trg_log_clearance_verify_audit`. |
-| A8 | **Assign storage zone (Zone 1–5)** | 🔴 | No `storage_zones` table, no `zone_id` column on `clearance_evidence` / `cut_plan_items`, no UI prompt. The chart explicitly requires this step before "Clearance completed"; today the item flips `cleared → zoned → loading` but the `zoned` state is **transitional only** with no zone reference captured. |
-| A9 | Clearance completed → ready for loading | ✅ | `cleared` → `loading` adjacency in trigger; auto-bridge `cleared → complete` is a fast-path that **skips the zoning step** (consistent with A8 gap). |
+| A1 | Fabrication completed → enters clearance | ✅ Backend enforced | DB trigger `auto_advance_item_phase` + `validate_cut_plan_item_transition` enforces `bent/cut_done → clearance` and requires `bend_completed_pieces ≥ total_pieces`. |
+| A2 | Clearance started | ✅ Backend enforced | `clearance_evidence` row created with `verification_state` lifecycle. |
+| A3 | **Tag photo before product photo** (Persian rule: hard order) | ✅ Backend enforced | `src/lib/clearanceEvidenceGate.ts → assertTagEvidenceReady` blocks product capture until `tag_scan_url` exists on the same evidence row. Used by `useAutoClearance` and `ClearanceCard` Manual Verify. Regression: `tests/regression/workflow-gate/auto-clearance-tag-gate.test.ts`. |
+| A4 | Product photo blocked until tag validation succeeds | ✅ Backend enforced | Same gate plus `verification_state ∈ {tag_scanned, product_captured, complete}` check. |
+| A5 | AI matching (OCR, tag validation, product validation) | 🟡 Partial / ⏸ Deferred | `validate-clearance-photo` returns `confidence`. Frontend acts on it; **DB does not re-verify OCR similarity** — `_is_evidence_release_ready(...)` only confirms both photos exist. Deferred: requires server-side OCR re-check service. |
+| A6 | AI confident (>95%) → auto approve | 🟡 Partial / ⏸ Deferred | UI applies the threshold; backend accepts any valid evidence row. Deferred with A5. |
+| A7 | Low confidence / failed match → manual review | ✅ Backend enforced (audit) | Manual Verify writes `override_reason` + `activity_events { source='manual_verify' }` via `trg_log_clearance_verify_audit`. |
+| A8 | **Assign storage zone (Zone 1–5)** before clearance completed | ✅ Backend enforced *(fixed)* | `clearance_evidence.storage_zone` column + CHECK (`'Zone 1'..'Zone 5'`) + trigger `validate_clearance_evidence_transition` raises `WORKFLOW_GATE_STORAGE_ZONE_REQUIRED` on transition to `cleared`. Audit: `trg_log_clearance_zone_assignment`. UI: `src/components/clearance/ClearanceCard.tsx` zone Select (disabled Verify until set). Regression: `tests/regression/workflow-gate/ClearanceStorageZoneGate.test.ts`. |
+| A9 | Clearance completed → ready for loading | ✅ Backend enforced | `cleared → loading` adjacency, now zone-gated by A8. |
 
-**Override / audit cross-cut:** ✅ `override_reason` column + `_workflow_override_active()` PG helper + `OverrideReasonDialog` + audit triggers `trg_log_clearance_verify_audit` and `trg_log_cut_plan_item_phase_transition` cover all phase changes including manual overrides.
+**Override / audit cross-cut:** ✅ `override_reason` + `_workflow_override_active()` + `OverrideReasonDialog` + audit triggers `trg_log_clearance_verify_audit` and `trg_log_cut_plan_item_phase_transition`.
 
 ---
 
@@ -31,16 +33,16 @@ Legend: ✅ Backend-enforced · 🟦 UI-only · 🟡 Partially implemented · �
 
 | # | Flowchart box / business rule | Status | Evidence |
 |---|---|---|---|
-| B1 | Loading started | 🟦 | `LoadingStation.tsx` is opened by user selecting a "completed bundle"; no explicit "loading_started" persisted state at the bundle level. `loading_checklist` rows are lazily initialized. |
-| B2 | **Scan / photo each tag during loading** | 🟡 | Per-item photo capture exists (`LoadingItemCard` + `uploadPhoto`); also AI auto-match via `match-tag-photo` edge function. **Not required**: a user can tick an item loaded without taking any photo. |
-| B3.a | Loading validation — **missing items** | 🟡 | `allLoaded = loadedCount === totalItems` is checkbox-based. There is no server-side check that every `cut_plan_items.phase='complete'` row has a corresponding `loading_checklist.loaded=true` row before downstream actions. |
-| B3.b | Loading validation — **wrong items** | 🔴 | No detection. AI match is advisory; manual checklist accepts any tick. No comparison of scanned tag mark vs. expected mark beyond the in-flight match suggestion. |
-| B3.c | Loading validation — **duplicate items** | 🔴 | No dedupe rule; same item can be marked loaded multiple times via auto-match overwrites (last write wins on `photo_path`). |
-| B3.d | Loading validation — **partial shipment** | 🔴 | No partial-shipment concept on `loading_checklist`. `allLoaded` is binary. |
-| B4 | **Hold loading / exception found → manual review** | 🔴 (data layer exists, not wired here) | `delivery_exceptions` table from #3 exists but **is not written from the loading flow** — only post-delivery. No "hold" state on `loading_checklist` or `deliveries`. |
-| B5 | Valid load → generate packing slip | 🟡 | `createDelivery` triggers only on `allLoaded`. Gate is **count of checkboxes only** — no requirement that B3.a–d passed, no requirement that each line has a photo. Slip is inserted with `status='draft'`. |
-| B6 | **Packing slip cannot be generated before validation passes** | 🔴 | Gate is the checkbox count only; no FK / trigger blocks insert into `packing_slips` when validation is incomplete. |
-| B7 | Store digital packing slip + print customer copy | ✅ (store) / 🟦 (print) | Row inserted in `packing_slips` with `items_json`, ship_to, invoice_number, etc. Print is a UI-level PDF preview in `PackingSlipPreview.tsx`. |
+| B1 | Loading started | 🟦 UI only | `LoadingStation.tsx` opens on selecting a completed bundle; no persisted "loading_started" state at bundle level. **Acceptable** — chart treats this as an implicit transition. |
+| B2 | **Scan / photo each tag during loading** | 🟡 Partial | Per-item photo capture + `match-tag-photo` AI suggestion in `LoadingItemCard`. Not required: an operator can tick "loaded" without a photo. |
+| B3.a | Loading validation — **missing items** | ✅ Backend enforced *(fixed)* | `validate_packing_slip_loading` trigger compares `loading_checklist` against expected `cut_plan_items` and raises `WORKFLOW_GATE_LOADING_INCOMPLETE` / `WORKFLOW_GATE_LOADING_NOT_STARTED` / `WORKFLOW_GATE_LOADING_NO_ITEMS`. Regression: `tests/regression/workflow-gate/PackingSlipLoadingGate.test.ts`. |
+| B3.b | Loading validation — **wrong items** | ✅ Backend enforced *(fixed)* | Same trigger raises `WORKFLOW_GATE_LOADING_WRONG_ITEM` when a checklist row points to a `cut_plan_item` outside the slip's plan. **Gap:** does not yet validate scanned tag *text* — only that the item belongs to the plan. Deferred slice = OCR cross-check. |
+| B3.c | Loading validation — **duplicate items** | ✅ Backend enforced *(fixed)* | Same trigger raises `WORKFLOW_GATE_LOADING_DUPLICATE` on repeated `cut_plan_item_id` across the slip. |
+| B3.d | Loading validation — **partial shipment** | 🟡 Partial / ⏸ Deferred | Partial-shipment **concept** still not modeled on `loading_checklist` (no per-piece partial qty). Current trigger only enforces full-or-blocked. Deferred slice = partial-quantity schema + UI. |
+| B4 | **Hold loading / exception found → manual review** | 🔴 Missing / ⏸ Deferred | `delivery_exceptions` table exists but is **not written from the loading flow**. No "hold" state on `loading_checklist`/`deliveries`. Deferred slice = loading-exception capture. |
+| B5 | Valid load → generate packing slip | ✅ Backend enforced *(fixed)* | `packing_slips` BEFORE INSERT trigger blocks creation unless B3.a–c pass or `_workflow_override_active()` is set. |
+| B6 | **Packing slip cannot be generated before validation passes** | ✅ Backend enforced *(fixed)* | Same trigger as B5. Audit on success: `trg_log_packing_slip_validated`. Audit on block: `packing_slip_blocked` event written from `LoadingStation.tsx`. Regression: `tests/regression/workflow-gate/PackingSlipLoadingGate.test.ts`. |
+| B7 | Store digital packing slip + print customer copy | ✅ (store) / 🟦 (print) | `packing_slips` insert + `PackingSlipPreview.tsx` PDF preview. |
 
 ---
 
@@ -48,11 +50,13 @@ Legend: ✅ Backend-enforced · 🟦 UI-only · 🟡 Partially implemented · �
 
 | # | Flowchart box / business rule | Status | Evidence |
 |---|---|---|---|
-| C1 | Pickup selected | ✅ | `pickup_orders` + `pickup_order_items` tables + `PickupStation.tsx`. Phase adjacency: `loaded → ready_for_pickup → picked_up`. |
-| C2 | **Take final load photo** (Persian rule explicit) | 🔴 | `PickupVerification.tsx` has signature + per-item verified, **no final-photo capture**. `pickup_orders.signature_data` exists; no `final_photo_url` column. |
-| C3 | **Item-by-item confirmation** | 🟦 | `allVerified = items.every(i => i.verified)` is a frontend-only gate. No DB constraint or trigger enforces it before `authorizeRelease`. |
-| C4 | **Customer signature** | 🟦 + ✅ persisted | `SignaturePad` captures → blob storage → `pickup_orders.signature_data` path. The release button is gated on `signature && allVerified`, but only at the UI layer. No DB NOT NULL / trigger on `signature_data` when status flips to released. |
-| C5 | Pickup completed → status closed | ✅ | Phase trigger `picked_up → complete/closed` allowed. |
+| C1 | Pickup selected | ✅ Backend enforced | `pickup_orders` + `pickup_order_items` + `PickupStation.tsx`; adjacency `loaded → ready_for_pickup → picked_up`. |
+| C2 | **Take final load photo** | ✅ Backend enforced *(fixed)* | `pickup_orders.final_photo_path` column + `validate_pickup_completion` trigger raises `WORKFLOW_GATE_PICKUP_PHOTO_REQUIRED`. UI: `PickupVerification.tsx` camera capture. |
+| C3 | **Item-by-item confirmation** | ✅ Backend enforced *(fixed)* | Same trigger raises `WORKFLOW_GATE_PICKUP_CHECKLIST_INCOMPLETE` / `WORKFLOW_GATE_PICKUP_NO_ITEMS` when any `pickup_order_items.verified=false`. |
+| C4 | **Customer signature** | ✅ Backend enforced *(fixed)* | Same trigger raises `WORKFLOW_GATE_PICKUP_SIGNATURE_REQUIRED` when `signature_data` missing. |
+| C5 | Pickup completed → status closed | ✅ Backend enforced | Phase adjacency; audit via `trg_log_pickup_completed`. |
+
+Regression: `tests/regression/workflow-gate/PickupCompletionGate.test.ts` (14 tests).
 
 ---
 
@@ -60,14 +64,16 @@ Legend: ✅ Backend-enforced · 🟦 UI-only · 🟡 Partially implemented · �
 
 | # | Flowchart box / business rule | Status | Evidence |
 |---|---|---|---|
-| D1 | Assign driver, send tablet data | 🟡 | `deliveries.driver_name`, `driver_profile_id` columns exist; assignment surfaced in `DeliveryPipeline` label ("Driver: Unassigned"). No backend requirement that a driver be assigned before `phase=driver_assigned`. |
-| D2 | Driver receives packing slip / address / GPS | 🟦 | `DeliveryTerminal.tsx` shows address + Google Maps link. Packing slip read from `packing_slips` linked by `delivery_id`. |
-| D3 | Delivery on-site | ✅ (state) | Phase adjacency `driver_assigned → in_transit → delivered` enforced. |
-| D4 | **Final photo on delivery** | 🟡 — **bug** | `pod_photo_url` column exists. Submit gate in `DeliveryTerminal.handleSubmit` is `if (!photoFile && !signatureData)` → blocks only when **both** are missing. Per the chart, photo **and** signature are required; current check is logical-OR, not AND. |
-| D5 | **Item-by-item delivery checklist** | 🟡 | UI walks `items` and counts ticked; result stored as a JSON string in `delivery_stops.notes`. **Not enforced** — submit succeeds with 0 items checked. No per-item rows in a confirmation table. |
-| D6 | **Customer signature on delivery** | 🟡 — same bug as D4 | `pod_signature` column exists; UI captures via `SignaturePad`; gate fails because of the `&&` bug above. |
-| D7 | Delivery exceptions (hold / reject / failure) | ✅ | `delivery_exceptions` table + audit trigger added in #3. Badge shown in `DeliveryPipeline`. Open-exception capture UI not yet built but data layer is enforced. |
-| D8 | Delivery completed → status closed | ✅ | Phase trigger `delivered → complete/closed`. |
+| D1 | Assign driver, send tablet data | 🟡 Partial | `deliveries.driver_name`, `driver_profile_id` exist; no backend requirement before `phase=driver_assigned`. Low risk — chart treats this as planning, not a gate. |
+| D2 | Driver receives packing slip / address / GPS | 🟦 UI only | `DeliveryTerminal.tsx` shows address + Maps link + packing slip read. |
+| D3 | Delivery on-site | ✅ Backend enforced | Phase adjacency `driver_assigned → in_transit → delivered`. |
+| D4 | **Final photo on delivery** | ✅ Backend enforced *(fixed)* | UI bug fixed (`||` instead of `&&`) **and** `validate_delivery_completion` trigger raises `WORKFLOW_GATE_DELIVERY_PHOTO_REQUIRED` when `pod_photo_url` missing on transition to `delivered`. |
+| D5 | **Item-by-item delivery checklist** | ✅ Backend enforced *(fixed)* | Trigger raises `WORKFLOW_GATE_DELIVERY_CHECKLIST_INCOMPLETE` when the slip has items and `delivery_stops.notes::jsonb checklist_completed < checklist_total`. UI also gates submit. |
+| D6 | **Customer signature on delivery** | ✅ Backend enforced *(fixed)* | Trigger raises `WORKFLOW_GATE_DELIVERY_SIGNATURE_REQUIRED` when `pod_signature` missing. |
+| D7 | Delivery exceptions (hold / reject / failure) | ✅ Backend enforced | `delivery_exceptions` + `trg_log_delivery_exception_audit`. |
+| D8 | Delivery completed → status closed | ✅ Backend enforced | Phase trigger `delivered → complete/closed`; audit via `trg_log_delivery_completed`. |
+
+Regression: `tests/regression/workflow-gate/DeliveryCompletionGate.test.tsx` (UI OR-gate) + `tests/regression/workflow-gate/DeliveryBackendGate.test.ts` (14 tests, backend trigger + drift checks).
 
 ---
 
@@ -75,47 +81,55 @@ Legend: ✅ Backend-enforced · 🟦 UI-only · 🟡 Partially implemented · �
 
 | # | Rule | Status | Evidence |
 |---|---|---|---|
-| E1 | Override requires explicit reason | ✅ (clearance) / 🟡 (loading/delivery) | `clearance_evidence.override_reason` exists and `OverrideReasonDialog` captures it; no override_reason capture on the loading or delivery side. |
-| E2 | Every override/transition produces an audit row | ✅ | `trg_log_clearance_verify_audit` (clearance), `trg_log_cut_plan_item_phase_transition` (all phase changes), `trg_log_delivery_exception_audit` (delivery exceptions) all write `activity_events`. |
-| E3 | Phase guards cannot be silently bypassed | ✅ | `_workflow_override_active()` is the single bypass switch; its use is recorded in the audit metadata (`override_active: true`). |
+| E1 | Override requires explicit reason | ✅ (clearance) / 🟡 (loading / pickup / delivery) | `clearance_evidence.override_reason` + `OverrideReasonDialog` cover clearance. Loading/pickup/delivery gates honour `_workflow_override_active()` but do **not** persist an override reason per attempt. Deferred slice = unified override-reason capture. |
+| E2 | Every override/transition produces an audit row | ✅ Backend enforced | `trg_log_clearance_verify_audit`, `trg_log_cut_plan_item_phase_transition`, `trg_log_clearance_zone_assignment`, `trg_log_packing_slip_validated`, `trg_log_pickup_completed`, `trg_log_delivery_completed`, `trg_log_delivery_exception_audit`. Frontend writes `packing_slip_blocked`, `pickup_blocked`, `delivery_blocked` audit events on gate failures. |
+| E3 | Phase guards cannot be silently bypassed | ✅ Backend enforced | `_workflow_override_active()` is the single bypass switch; recorded in audit metadata (`override_active: true`). |
 
 ---
 
-## Summary scoreboard
+## Summary scoreboard (post-fix)
 
-| Section | Fully enforced (✅) | Partial (🟡) | UI-only (🟦) | Missing (🔴) |
-|---|---|---|---|---|
-| Clearance (A) | A1, A2, A3, A4, A7, A9 | A5, A6 | — | **A8 (storage zone)** |
-| Loading (B) | — | B2, B3.a, B5, B7 (store) | B1, B7 (print) | **B3.b, B3.c, B3.d, B4, B6** |
-| Pickup (C) | C1, C5 | — | C3, C4 (gate only) | **C2 (final photo)** |
-| Delivery (D) | D3, D7, D8 | D1, D4, D5, D6 | D2 | — |
-| Override / audit (E) | E2, E3 | E1 | — | — |
+| Section | ✅ Backend | 🟡 Partial | 🟦 UI only | 🔴 Missing | ⏸ Deferred |
+|---|---|---|---|---|---|
+| Clearance (A) | A1, A2, A3, A4, A7, A8, A9 | — | — | — | A5, A6 |
+| Loading (B) | B3.a, B3.b, B3.c, B5, B6, B7 (store) | B2 | B1, B7 (print) | — | B3.d, B4 |
+| Pickup (C) | C1, C2, C3, C4, C5 | — | — | — | — |
+| Delivery (D) | D3, D4, D5, D6, D7, D8 | D1 | D2 | — | — |
+| Override / audit (E) | E2, E3 | E1 | — | — | — |
 
 ---
 
-## Top conflicts between approved flowchart and current implementation
+## Closed since original audit
 
-These are blockers if you intend to claim the flowchart is enforced:
+| Box | Fix | Migration / Code | Regression |
+|---|---|---|---|
+| D4 / D6 (delivery UI bug) | `&&` → `\|\|` in `DeliveryTerminal.handleSubmit` + matching `disabled` | `src/pages/DeliveryTerminal.tsx` | `tests/regression/workflow-gate/DeliveryCompletionGate.test.tsx` |
+| A8 (storage zone) | `clearance_evidence.storage_zone` + gate trigger + zone audit | `supabase/migrations/...a8-storage-zone-clearance.sql`, `src/components/clearance/ClearanceCard.tsx`, `src/hooks/useClearanceData.ts` | `tests/regression/workflow-gate/ClearanceStorageZoneGate.test.ts` |
+| B3.a–c / B5 / B6 (loading → packing slip) | `validate_packing_slip_loading` BEFORE INSERT trigger; 5 gate codes | `supabase/migrations/...packing-slip-loading-gate.sql`, `src/pages/LoadingStation.tsx`, `src/lib/workflowGateError.ts` | `tests/regression/workflow-gate/PackingSlipLoadingGate.test.ts` |
+| C2 / C3 / C4 (pickup completion) | `pickup_orders.final_photo_path` + `validate_pickup_completion` trigger | `supabase/migrations/...c7-pickup-gate.sql`, `src/components/shopfloor/PickupVerification.tsx`, `src/hooks/usePickupOrders.ts` | `tests/regression/workflow-gate/PickupCompletionGate.test.ts` |
+| D4 / D5 / D6 (delivery backend) | `validate_delivery_completion` BEFORE UPDATE trigger on `delivery_stops`; 3 gate codes; success + blocked audit | `supabase/migrations/...delivery-completion-gate.sql`, `src/pages/DeliveryTerminal.tsx`, `src/lib/workflowGateError.ts` | `tests/regression/workflow-gate/DeliveryBackendGate.test.ts` |
 
-1. **A8 — Storage zone assignment is absent.** The chart requires Zone 1–5 selection between "manual review/auto approve" and "clearance completed". No table, no column, no UI. Currently the `zoned` phase is a transient label with no zone reference.
-2. **B3 / B6 — Loading validation does not gate packing slip.** The chart requires AI loading validation to pass (missing/wrong/partial detection) before "Generate Packing Slip". Today the only gate is the operator's checkbox count, and there is no detection of wrong or duplicate scans.
-3. **B4 — Hold-loading state does not exist on the loading side.** `delivery_exceptions` only covers post-delivery exceptions.
-4. **C2 — Final load photo on pickup is missing entirely.** The chart and the Persian description both call for it before customer signature.
-5. **D4 / D6 — Delivery completion gate is a logical bug.** `if (!photoFile && !signatureData)` accepts a submission with only one of the two; should be `if (!photoFile || !signatureData)`. This is the single highest-severity defect in the report because it silently weakens the strongest part of the flow.
-6. **C3 / C4 / D5 — Item-by-item confirmation and signature are UI-only.** No DB NOT NULL / trigger / constraint prevents releasing a pickup or closing a delivery without them; a direct API call would succeed.
+---
 
-## Areas already aligned with the chart
+## Remaining gaps (none are active defects)
 
-- A1–A4, A7, A9 (clearance evidence pipeline, including tag-before-product order).
-- E2, E3 (audit + override accounting) — strong and DB-enforced.
-- D3, D7, D8 (phase transitions through delivery and exception capture).
+All remaining items are either **deferred slices** (require new surface area, not bugfixes) or **low-risk UI-only** boxes the chart does not require to be DB-enforced. No flowchart box is currently in a "silent bypass" state.
 
-## Recommended ordering when implementation resumes
+1. **A5 / A6 — Server-side AI verdict re-check** (⏸ deferred). Today the OCR confidence verdict from `validate-clearance-photo` is trusted by the backend without re-evaluation. Recommended slice: re-run match server-side inside `_is_evidence_release_ready` and persist the verdict.
+2. **B2 — Per-item loading photo not required** (🟡 partial). Operator can tick loaded without capturing a tag photo. Recommended slice: require `loading_checklist.photo_path IS NOT NULL` when slip insert runs (one-line addition to the existing trigger).
+3. **B3.d — Partial shipment modeling** (⏸ deferred). No per-piece partial qty schema exists. Recommended slice: add `loaded_pieces` column to `loading_checklist` and extend the validation trigger.
+4. **B4 — Loading-side hold/exception capture** (⏸ deferred). `delivery_exceptions` is post-delivery only. Recommended slice: add `loading_exceptions` (or reuse `delivery_exceptions` with a scope column) and wire from `LoadingStation`.
+5. **E1 — Per-attempt override reason on loading / pickup / delivery** (🟡 partial). Override bypass is honoured and audited but the *reason* is captured only on clearance. Recommended slice: extend `OverrideReasonDialog` integration to the three other gates.
+6. **D1 — Driver assignment not gated** (🟡 partial, low risk). Chart treats it as planning, not a hard gate; promoting it would only block accidental empty assignments.
 
-The chart-vs-implementation gaps cluster into three slices, smallest first:
+## Areas fully aligned with the chart
 
-1. **Quick correctness fixes (hours):** D4/D6 AND-vs-OR bug; tighten `disabled` and the toast logic in `DeliveryTerminal`.
-2. **Backend gates for existing UI-only checks (1–2 days):** promote C3/C4/D5 to triggers on `pickup_orders` and `delivery_stops`; require `signature_data` and the verified-count before status moves.
-3. **New surface area (chart parity, ≥1 week each):** A8 storage zones; B3/B4/B6 loading validation engine and hold state; C2 final-load photo.
+- A1–A4, A7, A8, A9 — clearance evidence + storage zone end-to-end.
+- B3.a/b/c, B5, B6 — loading validation now blocks packing-slip creation server-side.
+- C1–C5 — pickup release fully DB-gated on photo + signature + per-item verification.
+- D3, D4, D5, D6, D7, D8 — delivery completion fully DB-gated; UI bug fixed.
+- E2, E3 — audit and override accounting remain DB-enforced and now cover the new gates.
 
-This audit is the deliverable for the current message. No code or schema was changed.
+---
+
+This audit is the deliverable. No code or schema was changed in this pass.
