@@ -541,8 +541,12 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
                 </Button>
               </span>
             </TooltipTrigger>
-            {!hasEvidence && !isCleared && (
-              <TooltipContent>Upload material photo before verifying</TooltipContent>
+            {!isCleared && (!hasEvidence || !item.storage_zone) && (
+              <TooltipContent>
+                {!hasEvidence
+                  ? "Upload material photo before verifying"
+                  : "Assign a storage zone before verifying"}
+              </TooltipContent>
             )}
           </Tooltip>
           {!isCleared && (
