@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useQueryClient } from "@tanstack/react-query";
+import { mapWorkflowGateError } from "@/lib/workflowGateError";
+import { logActivity } from "@/lib/activityLogger";
 
 export interface PickupOrder {
   id: string;
