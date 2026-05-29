@@ -2198,6 +2198,7 @@ export type Database = {
           ocr_metadata: Json | null
           override_reason: string | null
           status: string
+          storage_zone: string | null
           tag_scan_url: string | null
           updated_at: string
           verification_method: string
@@ -2219,6 +2220,7 @@ export type Database = {
           ocr_metadata?: Json | null
           override_reason?: string | null
           status?: string
+          storage_zone?: string | null
           tag_scan_url?: string | null
           updated_at?: string
           verification_method?: string
@@ -2240,6 +2242,7 @@ export type Database = {
           ocr_metadata?: Json | null
           override_reason?: string | null
           status?: string
+          storage_zone?: string | null
           tag_scan_url?: string | null
           updated_at?: string
           verification_method?: string
