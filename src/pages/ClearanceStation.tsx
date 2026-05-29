@@ -125,8 +125,7 @@ export default function ClearanceStation() {
   }
 
   const displayLabel = activeGroup?.label || selectedProjectLabel;
-  const formatStatus = (status: string | null) =>
-    (status || "pending").replace(/_/g, " ").toUpperCase();
+
 
   return (
     <div className="flex flex-col h-full">
