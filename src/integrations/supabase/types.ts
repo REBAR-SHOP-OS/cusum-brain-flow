@@ -2196,6 +2196,7 @@ export type Database = {
           material_photo_url: string | null
           notes: string | null
           ocr_metadata: Json | null
+          override_reason: string | null
           status: string
           tag_scan_url: string | null
           updated_at: string
@@ -2216,6 +2217,7 @@ export type Database = {
           material_photo_url?: string | null
           notes?: string | null
           ocr_metadata?: Json | null
+          override_reason?: string | null
           status?: string
           tag_scan_url?: string | null
           updated_at?: string
@@ -2236,6 +2238,7 @@ export type Database = {
           material_photo_url?: string | null
           notes?: string | null
           ocr_metadata?: Json | null
+          override_reason?: string | null
           status?: string
           tag_scan_url?: string | null
           updated_at?: string
