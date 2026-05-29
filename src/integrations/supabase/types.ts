@@ -2252,6 +2252,13 @@ export type Database = {
             referencedRelation: "cut_plan_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "clearance_evidence_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: true
+            referencedRelation: "v_workflow_release_state"
+            referencedColumns: ["item_id"]
+          },
         ]
       }
       client_performance_memory: {
@@ -3315,6 +3322,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "cut_plan_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_output_batches_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_workflow_release_state"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "cut_output_batches_machine_run_id_fkey"
@@ -6329,6 +6343,13 @@ export type Database = {
             referencedRelation: "cut_plan_items"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inventory_reservations_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_workflow_release_state"
+            referencedColumns: ["item_id"]
+          },
         ]
       }
       inventory_scrap: {
@@ -7864,6 +7885,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "cut_plan_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loading_checklist_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_workflow_release_state"
+            referencedColumns: ["item_id"]
           },
         ]
       }
@@ -9855,6 +9883,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "cut_plan_items"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_tasks_cut_plan_item_id_fkey"
+            columns: ["cut_plan_item_id"]
+            isOneToOne: false
+            referencedRelation: "v_workflow_release_state"
+            referencedColumns: ["item_id"]
           },
           {
             foreignKeyName: "production_tasks_locked_to_machine_id_fkey"
@@ -17222,6 +17257,37 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      v_workflow_release_state: {
+        Row: {
+          bundle_release_state: string | null
+          company_id: string | null
+          delivery_id: string | null
+          evidence_complete: boolean | null
+          evidence_status_raw: string | null
+          fulfillment_channel:
+            | Database["public"]["Enums"]["fulfillment_channel"]
+            | null
+          item_id: string | null
+          item_phase: string | null
+          item_sub_state: string | null
+          loading_list_id: string | null
+          manifest_id: string | null
+          manifest_release_state: string | null
+          manifest_status_raw: string | null
+          pickup_id: string | null
+          released_items: number | null
+          total_items: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cut_plan_items_cut_plan_id_fkey"
+            columns: ["manifest_id"]
+            isOneToOne: false
+            referencedRelation: "cut_plans"
             referencedColumns: ["id"]
           },
         ]
