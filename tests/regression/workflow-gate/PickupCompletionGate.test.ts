@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression: C7 Pickup completion gate.
  *
