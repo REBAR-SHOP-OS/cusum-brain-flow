@@ -55,6 +55,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const queryClient = useQueryClient();
   const { isAdmin, isShopSupervisor } = useUserRole();
   const canOverride = isAdmin || isShopSupervisor;
+  const { itemSubStateById } = useReleaseState();
+  const subState = itemSubStateById.get(item.id);
   const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
   const [deleting, setDeleting] = useState<"material" | "tag" | null>(null);
   const [verifying, setVerifying] = useState(false);
