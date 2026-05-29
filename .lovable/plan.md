@@ -1,47 +1,51 @@
-## Goal
+## Problem
 
-On the Clearance Station, the storage zone is selected **once per manifest (project)** and applied to every item under it — instead of being picked separately on every clearance card.
+When a user edits the caption and clicks **Publish Now** before the 1.5s debounced auto-save fires, the published post goes out **without** the new caption.
 
-The existing backend gate (`storage_zone` required on `clearance_evidence` before `cleared`) stays exactly as-is; we just change *how* the value gets onto each evidence row.
+## Root cause
 
-## UX
+In `src/components/social/PostReviewPanel.tsx`, the **Publish Now** handler reads from the stale React prop `post.content` (lines 1506 and 1537) instead of the live editor state `localContent`:
 
-When a manifest is open and not complete:
+```ts
+const firstOk = await publishPost({
+  id: post.id,
+  platform: firstPlatform,
+  content: post.content,        // ← stale prop, not the just-typed caption
+  title: post.title,            // ← same problem
+  hashtags: post.hashtags,      // ← same problem
+  ...
+});
+```
 
-- A single **"Storage Zone"** selector appears in the manifest header bar (next to the `X / Y` badge and Manual/Auto toggle).
-- Selecting `Zone 1–5` immediately writes that zone onto every item in this manifest (existing `clearance_evidence` rows updated; missing rows inserted with the zone).
-- After selection, the header shows the active zone as a small badge (e.g. `Zone: Zone 3`) with a "Change" affordance.
-- If no zone is picked yet, each card shows a compact read-only `Zone required` hint instead of its own dropdown, and `Manual Verify` stays blocked by the existing pre-gate.
+The debounced auto-save (`flushSave`, line 451) only runs ~1.5s after the last keystroke. If Publish Now is clicked before that timer fires, two things happen:
+1. The DB row still holds the previous caption.
+2. `post.content` (parent-fed prop) is even further behind than the DB row.
 
-The per-card zone `<Select>` and its `handleZoneChange` write path are removed from `ClearanceCard.tsx`. The card keeps showing the resolved `item.storage_zone` value (read-only) so operators still see what was assigned.
+`usePublishPost` then strips Persian and sends that stale `content` as `message` to the `social-publish` edge function, so the platform receives the old (or empty) caption.
 
-Auto Clearance mode uses the same manifest-level zone (no per-item picker there either).
+The sibling handler `handlePlatformsSaveMulti` (line 554) already handles this correctly — it flushes local edits via `updatePost.mutateAsync` and then re-fetches before cloning.
 
-## Where the change lives (frontend only)
+## Fix
 
-- `src/pages/ClearanceStation.tsx`
-  - Add `selectedZone` state, derived from `activeItems` (if all items share the same `storage_zone`, pre-select it; otherwise empty).
-  - Render the new manifest-level `<Select>` in the manifest header row.
-  - On change, call a new helper `applyZoneToManifest(items, zone)` that batches:
-    - `update clearance_evidence set storage_zone = :zone where id in (existing evidence ids)`
-    - `insert clearance_evidence (cut_plan_item_id, storage_zone) values …` for items with no evidence row yet
-    - Invalidate `["clearance-items"]`.
-- `src/components/clearance/ClearanceCard.tsx`
-  - Delete the per-card zone `<Select>` block (the JSX after `{/* A8: Storage zone selector … */}`) and the `handleZoneChange` / `zoneSaving` / `STORAGE_ZONES` constants.
-  - Keep the existing `handleVerify` pre-gate that blocks on missing `item.storage_zone` — unchanged.
-  - Show `item.storage_zone` (when present) as a small read-only label inside the card footer so the assignment is visible.
-- `src/components/clearance/AutoClearanceMode.tsx` — if it has its own zone UI, drop it the same way and rely on the manifest-level value.
+In the Publish Now click handler (`src/components/social/PostReviewPanel.tsx`, around lines 1487–1549):
+
+1. **Flush first.** Cancel any pending debounce, build `contentToSave` exactly the way `flushSave` does (`buildPostContent(localContent, persianImageText, persianCaptionText)`), normalize `localHashtags` into the same array shape, and `await updatePost.mutateAsync({ id: post.id, title: localTitle, content: contentToSave, hashtags: hashtagArray })`. Abort publish if the flush throws.
+2. **Use live values in the publish payload.** Pass `content: contentToSave`, `title: localTitle`, `hashtags: hashtagArray` to both `publishPost(...)` calls (the first-platform call at line 1503 and the clone-platform call at line 1534). Also use `contentToSave`, `localTitle`, `hashtagArray` in the `createPost.mutateAsync` clone at line 1520 so cloned rows persist the latest caption too.
+
+`usePublishPost.stripPersian` already strips the `---PERSIAN---` / `📝 ترجمه کپشن:` block, so it's safe to pass the full `contentToSave` (which includes the Persian metadata) — the Persian block stays in DB but is removed from the published message.
+
+No backend or edge function changes. No DB migration. Single file edit.
+
+## Verification
+
+1. **Code re-read** the patched `onClick` to confirm `post.content` / `post.title` / `post.hashtags` no longer appear in the publish payload and that `updatePost.mutateAsync` is awaited before `publishPost`.
+2. **Regression test** under `tests/regression/social/publish-uses-local-caption.test.ts`: static-source assertion on `src/components/social/PostReviewPanel.tsx` checks that:
+   - the Publish Now handler does NOT read `post.content`, `post.title`, or `post.hashtags` when calling `publishPost`,
+   - it calls `updatePost.mutateAsync` (flush) before `publishPost` in the same handler.
+3. **Browser test**: open `/social-media-manager`, pick an existing draft, type a fresh sentence into the Caption box, immediately click Publish Now without waiting; then check the DB row's `content` via `read_query` to confirm it equals the new caption (the only durable, non-destructive way to prove the flush ran — we won't trigger an actual platform publish; we'll cancel before the edge function returns if needed, or use a post whose platform connection is already known-broken so the publish call exercises the flush path without going live).
 
 ## Out of scope
 
-- No DB migration. `clearance_evidence.storage_zone` stays per row.
-- No change to `validate_clearance_evidence_transition`, `log_clearance_zone_assignment`, or the `Zone 1..Zone 5` CHECK.
-- No change to backend gates, RLS, or workflow triggers.
-- No rename of `cut_length_mm`, no changes to Detailed List, Tags/Export, or mirror trigger.
-
-## Risk / notes
-
-- Items added to a manifest *after* a zone was selected won't auto-inherit the zone. The manifest header keeps the selector visible until every item has a zone, so an operator can simply re-select to backfill the new ones (cheap idempotent update).
-- Existing regression test `ClearanceStorageZoneGate.test.ts` still passes — the backend contract and the frontend pre-gate `preVerifyGate({ storage_zone })` are both unchanged.
-
-No new regression test is added; this is a pure UI relocation with no new gate or backend behavior.
+- No change to `usePublishPost`, `social-publish` edge function, or any DB schema.
+- No change to the Schedule handler (separate path, separate fix if needed — will be a follow-up if the user reports the same symptom there).
+- No change to debounce timing.

@@ -1487,6 +1487,37 @@ export function PostReviewPanel({
                       const platformEntries = Object.entries(platformGroups);
                       let allOk = true;
 
+                      // ── Flush pending caption / title / hashtag edits BEFORE publishing.
+                      //    The debounced auto-save (flushSave) may not have fired yet when
+                      //    the user clicks Publish immediately after typing, which would
+                      //    otherwise publish the stale `post.content` prop. See bugfix:
+                      //    captions missing from published posts.
+                      if (debounceRef.current) {
+                        clearTimeout(debounceRef.current);
+                        debounceRef.current = null;
+                      }
+                      const hashtagArray = localHashtags
+                        .split(/[\s,]+/)
+                        .map((h: string) => h.trim())
+                        .filter(Boolean)
+                        .map((h: string) => (h.startsWith("#") ? h : `#${h}`));
+                      const contentToSave = buildPostContent(localContent, persianImageText, persianCaptionText);
+                      try {
+                        await updatePost.mutateAsync({
+                          id: post.id,
+                          title: localTitle,
+                          content: contentToSave,
+                          hashtags: hashtagArray,
+                        } as any);
+                      } catch (err: any) {
+                        toast({
+                          title: "Could not save latest edits",
+                          description: err?.message || "Try again.",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+
                       // First platform: use original row
                       const [firstPlatform, firstPages] = platformEntries[0];
                       const firstPageName = firstPages.join(", ");
@@ -1503,9 +1534,9 @@ export function PostReviewPanel({
                       const firstOk = await publishPost({
                         id: post.id,
                         platform: firstPlatform,
-                        content: post.content,
-                        title: post.title,
-                        hashtags: post.hashtags,
+                        content: contentToSave,
+                        title: localTitle,
+                        hashtags: hashtagArray,
                         image_url: post.image_url,
                         page_name: firstPageName,
                         content_type: localContentType,
@@ -1522,10 +1553,10 @@ export function PostReviewPanel({
                           platform: platform as any,
                           status: "draft",
                           qa_status: "approved",
-                          title: post.title,
-                          content: post.content,
+                          title: localTitle,
+                          content: contentToSave,
                           image_url: post.image_url,
-                          hashtags: post.hashtags,
+                          hashtags: hashtagArray,
                           page_name: pageName,
                           content_type: localContentType,
                           scheduled_date: post.scheduled_date,
@@ -1534,9 +1565,9 @@ export function PostReviewPanel({
                           const ok = await publishPost({
                             id: cloneResult.id,
                             platform,
-                            content: post.content,
-                            title: post.title,
-                            hashtags: post.hashtags,
+                            content: contentToSave,
+                            title: localTitle,
+                            hashtags: hashtagArray,
                             image_url: post.image_url,
                             page_name: pageName,
                             content_type: localContentType,
