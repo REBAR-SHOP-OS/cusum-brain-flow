@@ -242,33 +242,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
     }
   };
 
-  const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"] as const;
-  const [zoneSaving, setZoneSaving] = useState(false);
+  // Zone is now assigned at the manifest (project) level — see ClearanceStation.
 
-  const handleZoneChange = async (zone: string) => {
-    if (!canWrite) return;
-    setZoneSaving(true);
-    try {
-      if (item.evidence_id) {
-        const { error } = await supabase
-          .from("clearance_evidence")
-          .update({ storage_zone: zone })
-          .eq("id", item.evidence_id);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase
-          .from("clearance_evidence")
-          .insert({ cut_plan_item_id: item.id, storage_zone: zone });
-        if (error) throw error;
-      }
-      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
-      toast({ title: "Storage zone assigned", description: zone });
-    } catch (err: any) {
-      toast({ title: "Zone update failed", description: err.message, variant: "destructive" });
-    } finally {
-      setZoneSaving(false);
-    }
-  };
 
   const handleVerify = async () => {
     if (!canWrite || isCleared) return;
@@ -482,31 +457,19 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           </div>
         )}
 
-        {/* A8: Storage zone selector — required before clearance complete */}
+        {/* A8: Storage zone — assigned at manifest level; shown read-only here */}
         {!isCleared && (
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
               Storage zone
             </span>
-            <Select
-              value={item.storage_zone ?? undefined}
-              onValueChange={handleZoneChange}
-              disabled={!canWrite || zoneSaving}
-            >
-              <SelectTrigger className="h-8 text-xs flex-1" aria-label="Storage zone">
-                <SelectValue placeholder="Assign zone…" />
-              </SelectTrigger>
-              <SelectContent>
-                {STORAGE_ZONES.map((z) => (
-                  <SelectItem key={z} value={z} className="text-xs">
-                    {z}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {!item.storage_zone && (
+            {item.storage_zone ? (
+              <Badge variant="outline" className="text-[10px]">
+                {item.storage_zone}
+              </Badge>
+            ) : (
               <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
-                Required
+                Assign at manifest header
               </Badge>
             )}
           </div>
@@ -514,6 +477,7 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
         {isCleared && item.storage_zone && (
           <p className="text-[10px] text-muted-foreground">Stored at {item.storage_zone}</p>
         )}
+
 
         <div className="flex gap-2 mt-1">
           <Tooltip>
