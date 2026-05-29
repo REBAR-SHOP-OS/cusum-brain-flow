@@ -42,6 +42,37 @@ export function usePublishPost() {
         toast({ title: "Already published", description: "This post has already been published.", variant: "destructive" });
         return false;
       }
+      // Pre-flight: Instagram cannot publish WebM/MOV/etc — reject early with a
+      // clear actionable message instead of relying on Meta's generic rejection.
+      if (post.platform === "instagram" && post.image_url) {
+        const url = post.image_url;
+        let badByUrl = /\.(webm|mkv|mov|avi|wmv)(\?|$)/i.test(url);
+        let badByType = false;
+        if (!badByUrl) {
+          try {
+            const head = await fetch(url, { method: "HEAD" });
+            const ct = (head.headers.get("content-type") || "").toLowerCase();
+            badByType =
+              ct.includes("webm") ||
+              ct.includes("matroska") ||
+              ct.includes("quicktime") ||
+              ct.includes("x-msvideo") ||
+              ct.includes("x-ms-wmv");
+          } catch {
+            // Network/CORS failure — let the server-side guard handle it.
+          }
+        }
+        if (badByUrl || badByType) {
+          toast({
+            title: "Video not Instagram-ready",
+            description:
+              "This file is WebM (browser-recorded). Re-render it as MP4 (H.264 + AAC) from Pro Editor, or upload an MP4, then publish again.",
+            variant: "destructive",
+            duration: 12000,
+          });
+          return false;
+        }
+      }
 
       // Strip Persian translation block — never publish Persian text
       const cleanContent = stripPersian(post.content);
@@ -49,6 +80,7 @@ export function usePublishPost() {
       const message = contentHasHashtags
         ? cleanContent
         : [cleanContent, post.hashtags.length > 0 ? "\n\n" + post.hashtags.join(" ") : ""].join("");
+
 
       if (post.platform === "linkedin") {
         const { data: linkedInStatus, error: linkedInStatusError } = await supabase.functions.invoke("linkedin-oauth", {
