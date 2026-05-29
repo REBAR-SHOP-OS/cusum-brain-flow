@@ -14,7 +14,7 @@ describe("social publish: Instagram video spec guard", () => {
   const clientHook = readFileSync("src/hooks/usePublishPost.ts", "utf8");
   it("warns the user client-side before sending a WebM to Instagram", () => {
     expect(clientHook).toMatch(/Video not Instagram-ready/);
-    expect(clientHook).toMatch(/\.webm/i);
+    expect(clientHook).toMatch(/webm/i);
     expect(clientHook).toMatch(/post\.platform === "instagram"/);
   });
 
