@@ -100,6 +100,29 @@ export default function DeliveryPipeline() {
     },
   });
 
+  // Open exception counts per delivery — drives the inline warning badge.
+  const { data: openExceptions = [] } = useQuery({
+    queryKey: ["delivery-exceptions-open", companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("delivery_exceptions")
+        .select("delivery_id, exception_type")
+        .eq("company_id", companyId!)
+        .is("resolved_at", null);
+      if (error) throw error;
+      return (data ?? []) as { delivery_id: string; exception_type: string }[];
+    },
+  });
+
+  const exceptionCountByDelivery = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of openExceptions) {
+      m.set(e.delivery_id, (m.get(e.delivery_id) ?? 0) + 1);
+    }
+    return m;
+  }, [openExceptions]);
+
   const stages = useMemo(() => {
     const groups = new Map<string, Delivery[]>();
     for (const d of deliveries) {
