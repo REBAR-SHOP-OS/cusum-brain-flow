@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, AlertTriangle, Brain, Cpu, Database, BarChart3, Layers, Eye, Gauge, ServerCog, Tablet, Radio, Cloud, Cog, ChevronRight, Check, X } from "lucide-react";
