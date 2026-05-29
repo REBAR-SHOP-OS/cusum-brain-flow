@@ -173,19 +173,41 @@ async function handleUpload(req: Request, supabase: any) {
     status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+  const ALLOWED_EXT = new Set(["png", "jpg", "jpeg", "gif", "webp"]);
+  const MAX_BYTES = 5_000_000; // 5 MB cap
+
   try {
     // Decode base64 image
     const base64 = image_data.includes(",") ? image_data.split(",")[1] : image_data;
+    // Pre-check size from base64 length (avoid decoding huge payloads)
+    const approxBytes = Math.floor((base64.length * 3) / 4);
+    if (approxBytes > MAX_BYTES) {
+      return new Response(JSON.stringify({ error: "File too large (max 5 MB)" }), {
+        status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const binaryStr = atob(base64);
+    if (binaryStr.length > MAX_BYTES) {
+      return new Response(JSON.stringify({ error: "File too large (max 5 MB)" }), {
+        status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const bytes = new Uint8Array(binaryStr.length);
     for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
 
-    const ext = (file_name || "image.png").split(".").pop() || "png";
-    const path = `${conversation_id}/${crypto.randomUUID()}.${ext}`;
+    const rawExt = ((file_name || "image.png").split(".").pop() || "png").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (!ALLOWED_EXT.has(rawExt)) {
+      return new Response(JSON.stringify({ error: "Unsupported file type" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const ext = rawExt === "jpg" ? "jpeg" : rawExt;
+    const path = `${conversation_id}/${crypto.randomUUID()}.${rawExt}`;
 
     const { error: upErr } = await supabase.storage
       .from("support-attachments").upload(path, bytes, { contentType: `image/${ext}` });
     if (upErr) throw upErr;
+
 
     const { data: urlData } = supabase.storage.from("support-attachments").getPublicUrl(path);
     const imageUrl = urlData.publicUrl;
