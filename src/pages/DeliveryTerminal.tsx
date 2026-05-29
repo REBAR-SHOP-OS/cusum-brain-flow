@@ -226,8 +226,12 @@ export default function DeliveryTerminal() {
 
   const handleSubmit = async () => {
     if (!stopId || !companyId) return;
-    if (!photoFile && !signatureData) {
+    if (!photoFile || !signatureData) {
       toast.error("Please capture a site photo and customer signature");
+      return;
+    }
+    if (items.length > 0 && items.some((i) => !i.checked)) {
+      toast.error("Please confirm all items on the unloading checklist");
       return;
     }
     setSaving(true);
