@@ -28,6 +28,9 @@ import { compressImage } from "@/lib/imageCompressor";
 import { useUserRole } from "@/hooks/useUserRole";
 import { OverrideReasonDialog } from "@/components/shopfloor/OverrideReasonDialog";
 import { assertEvidenceComplete, ClearanceGateError } from "@/lib/clearanceEvidenceGate";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { itemSubStateLabel } from "@/lib/releaseStateLabels";
+import { Badge } from "@/components/ui/badge";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
