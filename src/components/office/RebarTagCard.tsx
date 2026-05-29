@@ -30,7 +30,11 @@ function formatMmToFtIn(mm: number): string {
     0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
   };
   const frac = fractionMap[remainderEighths] || "";
-  if (feet === 0) return `${wholeInches}${frac}"`;
+  if (feet === 0) {
+    // Sub-inch values: drop the leading "0" so 0¼" renders as ¼"
+    if (wholeInches === 0 && frac) return `${frac}"`;
+    return `${wholeInches}${frac}"`;
+  }
   if (wholeInches === 0 && !frac) return `${feet}'-0"`;
   return `${feet}'-${wholeInches}${frac}"`;
 }
