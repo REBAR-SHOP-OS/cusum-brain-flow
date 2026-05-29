@@ -467,10 +467,10 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
         order={selectedOrder}
         items={items}
         onToggleVerified={toggleVerified}
-        onAuthorize={async (sig) => {
+        onAuthorize={async (sig, photoFile) => {
           if (user) {
-            await authorizeRelease(selectedOrder.id, sig, user.id);
-            setSelectedOrderId(null);
+            const ok = await authorizeRelease(selectedOrder.id, sig, user.id, photoFile);
+            if (ok) setSelectedOrderId(null);
           }
         }}
         onBack={() => setSelectedOrderId(null)}

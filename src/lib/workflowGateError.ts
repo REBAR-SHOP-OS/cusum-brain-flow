@@ -14,6 +14,10 @@ const GATE_MESSAGES: Record<string, string> = {
   WORKFLOW_GATE_LOADING_WRONG_ITEM: "Packing slip blocked: a loaded item does not belong to this cut plan.",
   WORKFLOW_GATE_LOADING_OVERLOAD: "Packing slip blocked: more items loaded than the plan expects.",
   WORKFLOW_GATE_LOADING_DUPLICATE: "Packing slip blocked: the same item appears twice on the slip.",
+  WORKFLOW_GATE_PICKUP_SIGNATURE_REQUIRED: "Pickup blocked: capture a customer signature before authorizing release.",
+  WORKFLOW_GATE_PICKUP_PHOTO_REQUIRED: "Pickup blocked: take a final load photo before authorizing release.",
+  WORKFLOW_GATE_PICKUP_NO_ITEMS: "Pickup blocked: this order has no items to confirm.",
+  WORKFLOW_GATE_PICKUP_CHECKLIST_INCOMPLETE: "Pickup blocked: confirm every item on the handover manifest first.",
 };
 
 export function mapWorkflowGateError(err: unknown): { code: string; title: string; description: string } | null {

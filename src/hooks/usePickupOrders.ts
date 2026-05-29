@@ -3,6 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { useQueryClient } from "@tanstack/react-query";
+import { mapWorkflowGateError } from "@/lib/workflowGateError";
+import { logActivity } from "@/lib/activityLogger";
 
 export interface PickupOrder {
   id: string;
@@ -71,38 +73,65 @@ export function usePickupOrders() {
     return () => { supabase.removeChannel(channel); };
   }, [companyId, fetchOrders, queryClient]);
 
-  // Fix 3: Store signature in blob storage instead of DB
-  const authorizeRelease = async (orderId: string, signatureData: string, authorizedBy: string) => {
+  // Fix 3: Store signature in blob storage instead of DB.
+  // C7: Require a final load photo; upload it and persist the path
+  //     so the DB gate trigger can enforce proof-of-pickup.
+  const authorizeRelease = async (
+    orderId: string,
+    signatureData: string,
+    authorizedBy: string,
+    finalPhoto: File,
+  ) => {
     try {
-      let signaturePath: string | null = null;
+      // Upload final load photo (REQUIRED — gate enforces non-null path).
+      const photoPath = `${companyId}/pickup-photos/${orderId}-${Date.now()}.jpg`;
+      const { error: photoErr } = await supabase.storage
+        .from("clearance-photos")
+        .upload(photoPath, finalPhoto, {
+          contentType: finalPhoto.type || "image/jpeg",
+          upsert: true,
+        });
+      if (photoErr) {
+        toast({ title: "Photo upload failed", description: photoErr.message, variant: "destructive" });
+        return false;
+      }
 
-      // Upload signature to storage
+      // Upload signature (graceful fallback to inline if upload fails).
+      let signaturePath: string = signatureData;
       const blob = await (await fetch(signatureData)).blob();
-      const path = `${companyId}/signatures/${orderId}-${Date.now()}.png`;
+      const sigPath = `${companyId}/signatures/${orderId}-${Date.now()}.png`;
       const { error: uploadErr } = await supabase.storage
         .from("clearance-photos")
-        .upload(path, blob, { contentType: "image/png", upsert: true });
-
-      if (uploadErr) {
-        console.error("Signature upload failed, storing inline:", uploadErr.message);
-        // Fallback: store inline if upload fails (graceful degradation)
-        signaturePath = signatureData;
-      } else {
-        signaturePath = path;
-      }
+        .upload(sigPath, blob, { contentType: "image/png", upsert: true });
+      if (!uploadErr) signaturePath = sigPath;
 
       const { error } = await supabase
         .from("pickup_orders")
         .update({
           status: "released",
           signature_data: signaturePath,
+          final_photo_path: photoPath,
           authorized_by: authorizedBy,
           authorized_at: new Date().toISOString(),
-        })
+        } as any)
         .eq("id", orderId);
 
       if (error) {
-        toast({ title: "Error authorizing release", description: error.message, variant: "destructive" });
+        const gate = mapWorkflowGateError(error);
+        if (gate) {
+          toast({ title: gate.title, description: gate.description, variant: "destructive" });
+          // C7: audit blocked attempt
+          logActivity({
+            entityType: "pickup_order",
+            entityId: orderId,
+            eventType: "pickup_blocked",
+            description: `Pickup completion blocked: ${gate.code}`,
+            metadata: { gate_code: gate.code, raw: error.message },
+            source: "workflow_gate",
+          });
+        } else {
+          toast({ title: "Error authorizing release", description: error.message, variant: "destructive" });
+        }
         return false;
       }
       await fetchOrders();
