@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Plus, Brain, Loader2, Paperclip, Save, FileText, ImageIcon, Upload } from "lucide-react";
+import { X, Plus, Brain, Loader2, Paperclip, Save, FileText, ImageIcon, Upload, Download } from "lucide-react";
+import { downloadFile } from "@/lib/downloadUtils";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
