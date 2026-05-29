@@ -226,8 +226,12 @@ export default function DeliveryTerminal() {
 
   const handleSubmit = async () => {
     if (!stopId || !companyId) return;
-    if (!photoFile && !signatureData) {
+    if (!photoFile || !signatureData) {
       toast.error("Please capture a site photo and customer signature");
+      return;
+    }
+    if (items.length > 0 && items.some((i) => !i.checked)) {
+      toast.error("Please confirm all items on the unloading checklist");
       return;
     }
     setSaving(true);
@@ -520,7 +524,7 @@ export default function DeliveryTerminal() {
           <Button
             className="w-full h-12 text-sm font-bold tracking-wider uppercase print:hidden"
             onClick={handleSubmit}
-            disabled={saving || (!photoFile && !signatureData)}
+            disabled={saving || !photoFile || !signatureData || (items.length > 0 && items.some((i) => !i.checked))}
           >
             {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
             Confirm Delivery
