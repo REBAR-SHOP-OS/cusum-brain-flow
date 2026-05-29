@@ -42,18 +42,17 @@ function formatMmToFtIn(mm: number): string {
 function formatVal(val: number | null, unitSystem: string): string {
   if (val == null || val === 0) return "—";
   if (unitSystem === "imperial") {
-    // Imperial rows store INCHES in `total_length_mm` (column is misnamed —
-    // see src/lib/cutMath/imperial.ts). Convert inches → mm before formatting.
-    return formatMmToFtIn(val * 25.4);
+    // Imperial rows store the raw source value (inches) in `total_length_mm`.
+    // Show as-is with inch mark — no ft-in conversion.
+    return `${val}"`;
   }
   return String(Math.round(val));
 }
 
 function formatDim(val: number | null | undefined, unitSystem: string): string {
   if (val == null || val === 0) return "";
-  // Imperial rows store INCHES in dim columns (same convention as total_length_mm
-  // in src/lib/cutMath/imperial.ts). Convert inches → mm before formatting.
-  return unitSystem === "imperial" ? formatMmToFtIn(val * 25.4) : String(Math.round(val));
+  // Imperial dim columns also store raw inches — show as-is.
+  return unitSystem === "imperial" ? `${val}"` : String(Math.round(val));
 }
 
 interface RebarTagCardProps {
