@@ -292,7 +292,27 @@ export default function LoadingStation() {
       toast.success("Delivery created successfully");
       navigate("/shopfloor/delivery-ops");
     },
-    onError: (err: any) => {
+    onError: async (err: any) => {
+      const gate = mapWorkflowGateError(err);
+      if (gate && companyId && selectedBundle?.cutPlanId) {
+        // Audit: blocked packing slip attempt (best-effort)
+        await supabase.from("activity_events").insert({
+          company_id: companyId,
+          event_type: "audit",
+          entity_type: "packing_slip",
+          entity_id: selectedBundle.cutPlanId,
+          source: "workflow_gate",
+          description: "packing_slip_blocked",
+          metadata: {
+            action: "packing_slip_blocked",
+            gate_code: gate.code,
+            cut_plan_id: selectedBundle.cutPlanId,
+            raw_message: (err && err.message) || String(err),
+          },
+        } as any);
+        toast.error(gate.title, { description: gate.description });
+        return;
+      }
       toast.error(err.message || "Failed to create delivery");
     },
   });
