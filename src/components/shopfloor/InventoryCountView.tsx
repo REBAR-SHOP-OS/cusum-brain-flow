@@ -36,12 +36,22 @@ export function InventoryCountView() {
 
   return (
     <div className="space-y-6">
+      {/* Gap notice — see docs/engineering/inventory-gap-decision.md */}
+      <div className="flex items-start gap-2 rounded-md border border-amber-400/40 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-amber-800 dark:text-amber-200">
+        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+        <div className="text-xs leading-snug">
+          <strong>Inventory counts not active yet.</strong> This worksheet records counts and variance, but
+          approving a count does <strong>not</strong> adjust system stock. Use for paper reconciliation only
+          until the adjustment flow ships.
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold flex items-center gap-2">
             <ClipboardList className="w-5 h-5 text-primary" /> Inventory Counts
           </h2>
-          <p className="text-sm text-muted-foreground">Cycle counting and stock adjustment workflow</p>
+          <p className="text-sm text-muted-foreground">Cycle counting worksheet — stock adjustment workflow not active</p>
         </div>
         <Button onClick={() => setShowCreate(true)} size="sm" className="gap-1">
           <Plus className="w-4 h-4" /> New Count
@@ -152,10 +162,15 @@ function CountDetail({ count, onBack, onUpdate }: {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
           {count.status === "draft" && <Button size="sm" onClick={handleStart}>Start Counting</Button>}
           {count.status === "in_progress" && <Button size="sm" onClick={handleComplete} disabled={uncounted > 0}>Mark Complete</Button>}
-          {count.status === "completed" && <Button size="sm" variant="default" onClick={handleApprove} className="gap-1"><CheckCircle2 className="w-4 h-4" /> Approve</Button>}
+          {count.status === "completed" && (
+            <>
+              <Badge variant="outline" className="text-[10px] border-amber-400/50 text-amber-700 dark:text-amber-300">Does not adjust stock</Badge>
+              <Button size="sm" variant="default" onClick={handleApprove} className="gap-1"><CheckCircle2 className="w-4 h-4" /> Approve (record only)</Button>
+            </>
+          )}
         </div>
       </div>
 
