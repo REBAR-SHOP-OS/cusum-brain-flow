@@ -482,6 +482,39 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
           </div>
         )}
 
+        {/* A8: Storage zone selector — required before clearance complete */}
+        {!isCleared && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
+              Storage zone
+            </span>
+            <Select
+              value={item.storage_zone ?? undefined}
+              onValueChange={handleZoneChange}
+              disabled={!canWrite || zoneSaving}
+            >
+              <SelectTrigger className="h-8 text-xs flex-1" aria-label="Storage zone">
+                <SelectValue placeholder="Assign zone…" />
+              </SelectTrigger>
+              <SelectContent>
+                {STORAGE_ZONES.map((z) => (
+                  <SelectItem key={z} value={z} className="text-xs">
+                    {z}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {!item.storage_zone && (
+              <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                Required
+              </Badge>
+            )}
+          </div>
+        )}
+        {isCleared && item.storage_zone && (
+          <p className="text-[10px] text-muted-foreground">Stored at {item.storage_zone}</p>
+        )}
+
         <div className="flex gap-2 mt-1">
           <Tooltip>
             <TooltipTrigger asChild>
