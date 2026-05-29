@@ -369,6 +369,34 @@ export default function ClearanceStation() {
               <Badge variant="secondary" className="text-[10px] shrink-0">
                 {activeClearedCount} / {activeItems.length}
               </Badge>
+              {!manifestComplete && canWrite && pendingItems.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Storage zone
+                  </span>
+                  <Select
+                    value={manifestZone || undefined}
+                    onValueChange={applyZoneToManifest}
+                    disabled={zoneSaving}
+                  >
+                    <SelectTrigger className="h-8 text-xs w-[140px]" aria-label="Manifest storage zone">
+                      <SelectValue placeholder="Assign zone…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORAGE_ZONES.map((z) => (
+                        <SelectItem key={z} value={z} className="text-xs">
+                          {z}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!allPendingHaveZone && (
+                    <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                      Required
+                    </Badge>
+                  )}
+                </div>
+              )}
               {!manifestComplete && canWrite && activeItems.some((i) => i.evidence_status !== "cleared") && (
                 <div className="ml-auto inline-flex rounded-lg border border-border overflow-hidden">
                   <button
@@ -385,6 +413,7 @@ export default function ClearanceStation() {
                   </button>
                 </div>
               )}
+
             </div>
             {manifestComplete ? (
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
