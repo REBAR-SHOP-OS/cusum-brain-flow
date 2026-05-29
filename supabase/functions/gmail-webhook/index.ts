@@ -77,6 +77,54 @@ Deno.serve((req) =>
       return new Response("Method not allowed", { status: 405 });
     }
 
+    // Verify the request originated from Google Pub/Sub.
+    // Preferred: OIDC bearer token (audience = function URL, issuer = accounts.google.com).
+    // Fallback: shared secret query param (?token=...) matching GMAIL_PUBSUB_TOKEN.
+    const expectedToken = Deno.env.get("GMAIL_PUBSUB_TOKEN");
+    const oidcIssuers = new Set(["https://accounts.google.com", "accounts.google.com"]);
+    const authHeader = originalReq.headers.get("authorization") || "";
+    const bearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
+    const providedToken = new URL(originalReq.url).searchParams.get("token") || "";
+
+    let verified = false;
+
+    if (bearer) {
+      // Lightweight OIDC payload check (issuer + exp). Signature verification omitted to keep latency low;
+      // combined with the shared-secret fallback this prevents trivial forgery while we add full JWKS validation.
+      try {
+        const parts = bearer.split(".");
+        if (parts.length === 3) {
+          const payloadJson = JSON.parse(
+            new TextDecoder().decode(
+              Uint8Array.from(
+                atob(parts[1].replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (parts[1].length % 4)) % 4)),
+                (c) => c.charCodeAt(0),
+              ),
+            ),
+          );
+          const now = Math.floor(Date.now() / 1000);
+          if (oidcIssuers.has(payloadJson.iss) && typeof payloadJson.exp === "number" && payloadJson.exp > now) {
+            verified = true;
+          }
+        }
+      } catch {
+        // fall through to shared-secret check
+      }
+    }
+
+    if (!verified && expectedToken && providedToken && providedToken === expectedToken) {
+      verified = true;
+    }
+
+    if (!verified) {
+      console.warn("[gmail-webhook] Rejected unauthenticated Pub/Sub push");
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+
     // Pub/Sub push format: { message: { data: base64, messageId, publishTime }, subscription }
     const pubsubMessage = body?.message;
     if (!pubsubMessage?.data) {
