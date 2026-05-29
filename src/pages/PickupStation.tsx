@@ -336,17 +336,19 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
           </Button>
         </header>
         <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-3">
-          {/* Manifest summary */}
+          {/* Manifest summary — manifest_release_state from v_workflow_release_state
+              is the canonical label; the legacy status badge stays for color/back-compat. */}
           <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Badge className={statusColors[manifestStatus] || statusColors.ready}>
-                {String(manifestStatus).toUpperCase()}
+                {manifestReleaseLabel(manifestStateById.get(selectedBundle.cutPlanId)).toUpperCase()}
               </Badge>
               <span className="text-sm text-foreground tabular-nums">
                 {loadedCount} loaded · {missingCount} missing · {exceptionCount} exceptions
               </span>
             </div>
           </div>
+
 
           <Collapsible defaultOpen={false}>
             <CollapsibleTrigger asChild>
