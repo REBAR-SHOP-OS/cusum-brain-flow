@@ -87,7 +87,13 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
   const saveEdit = async () => {
     if (!editingItemId) return;
     // Save raw values — NO unit conversion. See startEdit for context.
-    const updatePayload: Record<string, any> = { ...editValues };
+    // Also clear source_* fields so the display reflects the edit (the read path
+    // at render time prefers source_total_length_text / source_dims_json when set).
+    const updatePayload: Record<string, any> = {
+      ...editValues,
+      source_total_length_text: null,
+      source_dims_json: null,
+    };
     const { data: updated, error } = await supabase
       .from("cut_plan_items")
       .update(updatePayload)
