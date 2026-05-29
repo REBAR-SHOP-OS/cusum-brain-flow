@@ -67,7 +67,6 @@ export default function KnowledgeBasePublic() {
           <Button variant="ghost" size="sm" onClick={() => setSelectedArticle(null)} className="mb-6">
             <ArrowLeft className="w-4 h-4 mr-1" /> Back to articles
           </Button>
-          </Button>
           <h1 className="text-2xl font-bold mb-4">{selectedArticle.title}</h1>
           <div className="prose prose-sm dark:prose-invert max-w-none">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{selectedArticle.content}</ReactMarkdown>
