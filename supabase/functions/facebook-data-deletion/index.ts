@@ -13,11 +13,38 @@ Deno.serve((req) =>
     }
 
     const [encodedSig, payload] = signedRequest.split(".");
+    if (!encodedSig || !payload) {
+      return new Response(JSON.stringify({ error: "Malformed signed_request" }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
     const appSecret = Deno.env.get("FACEBOOK_APP_SECRET");
     if (!appSecret) {
       console.error("FACEBOOK_APP_SECRET not configured");
       return new Response(JSON.stringify({ error: "Server configuration error" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // HMAC-SHA256 verification (Facebook signed_request spec)
+    const b64urlToBytes = (s: string) =>
+      Uint8Array.from(atob(s.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (s.length % 4)) % 4)), (c) => c.charCodeAt(0));
+    try {
+      const key = await crypto.subtle.importKey(
+        "raw", new TextEncoder().encode(appSecret),
+        { name: "HMAC", hash: "SHA-256" }, false, ["sign"],
+      );
+      const computed = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload)));
+      const received = b64urlToBytes(encodedSig);
+      if (computed.length !== received.length || !computed.every((v, i) => v === received[i])) {
+        return new Response(JSON.stringify({ error: "Invalid signature" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    } catch (e) {
+      console.error("Signature verification error:", e);
+      return new Response(JSON.stringify({ error: "Invalid signature" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -34,6 +61,7 @@ Deno.serve((req) =>
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
 
     const { data: tokens } = await serviceClient
       .from("user_meta_tokens")
