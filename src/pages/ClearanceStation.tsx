@@ -3,9 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useClearanceData } from "@/hooks/useClearanceData";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -19,6 +29,9 @@ import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
 import { Zap, Hand, Archive as ArchiveIcon, ListChecks } from "lucide-react";
 import { useReleaseState } from "@/hooks/useReleaseState";
 import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
+
+const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"] as const;
+
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
@@ -34,6 +47,10 @@ export default function ClearanceStation() {
   const [selectedProjectLabel, setSelectedProjectLabel] = useState<string>("");
   const [autoMode, setAutoMode] = useState(false);
   const [listTab, setListTab] = useState<"manifests" | "archive">("manifests");
+  const [zoneSaving, setZoneSaving] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
 
   // Resolve key → label/items from the live hook.
   const activeGroup = selectedProjectKey ? byProjectKey.get(selectedProjectKey) : undefined;
@@ -45,6 +62,53 @@ export default function ClearanceStation() {
     return items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey);
   }, [items, selectedProjectKey]);
   const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
+
+  // Manifest-level storage zone: if every pending item shares the same zone, surface it.
+  const pendingItems = activeItems.filter((i) => i.evidence_status !== "cleared");
+  const manifestZone = useMemo(() => {
+    if (pendingItems.length === 0) return "";
+    const first = pendingItems[0].storage_zone || "";
+    if (!first) return "";
+    return pendingItems.every((i) => i.storage_zone === first) ? first : "";
+  }, [pendingItems]);
+  const allPendingHaveZone =
+    pendingItems.length > 0 && pendingItems.every((i) => !!i.storage_zone);
+
+  const applyZoneToManifest = async (zone: string) => {
+    if (!canWrite || !zone) return;
+    setZoneSaving(true);
+    try {
+      const targets = activeItems.filter((i) => i.evidence_status !== "cleared");
+      const withEvidence = targets.filter((i) => i.evidence_id) as Array<typeof targets[number] & { evidence_id: string }>;
+      const withoutEvidence = targets.filter((i) => !i.evidence_id);
+
+      if (withEvidence.length > 0) {
+        const { error } = await supabase
+          .from("clearance_evidence")
+          .update({ storage_zone: zone })
+          .in("id", withEvidence.map((i) => i.evidence_id));
+        if (error) throw error;
+      }
+      if (withoutEvidence.length > 0) {
+        const { error } = await supabase
+          .from("clearance_evidence")
+          .insert(
+            withoutEvidence.map((i) => ({
+              cut_plan_item_id: i.id,
+              storage_zone: zone,
+            }))
+          );
+        if (error) throw error;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: "Storage zone assigned", description: `${zone} · ${targets.length} item${targets.length !== 1 ? "s" : ""}` });
+    } catch (err: any) {
+      toast({ title: "Zone update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setZoneSaving(false);
+    }
+  };
+
 
   // Manifest is "complete" when we had items and they're all cleared (group removed
   // from byProjectKey by the auto-advance trigger), and no pending items remain in view.
@@ -305,6 +369,34 @@ export default function ClearanceStation() {
               <Badge variant="secondary" className="text-[10px] shrink-0">
                 {activeClearedCount} / {activeItems.length}
               </Badge>
+              {!manifestComplete && canWrite && pendingItems.length > 0 && (
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Storage zone
+                  </span>
+                  <Select
+                    value={manifestZone || undefined}
+                    onValueChange={applyZoneToManifest}
+                    disabled={zoneSaving}
+                  >
+                    <SelectTrigger className="h-8 text-xs w-[140px]" aria-label="Manifest storage zone">
+                      <SelectValue placeholder="Assign zone…" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORAGE_ZONES.map((z) => (
+                        <SelectItem key={z} value={z} className="text-xs">
+                          {z}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!allPendingHaveZone && (
+                    <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                      Required
+                    </Badge>
+                  )}
+                </div>
+              )}
               {!manifestComplete && canWrite && activeItems.some((i) => i.evidence_status !== "cleared") && (
                 <div className="ml-auto inline-flex rounded-lg border border-border overflow-hidden">
                   <button
@@ -321,6 +413,7 @@ export default function ClearanceStation() {
                   </button>
                 </div>
               )}
+
             </div>
             {manifestComplete ? (
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
