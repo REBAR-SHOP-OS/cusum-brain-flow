@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import brandLogo from "@/assets/brand-logo.png";
 import { PackingSlipPreview } from "@/components/delivery/PackingSlipPreview";
+import { mapWorkflowGateError } from "@/lib/workflowGateError";
+import { logActivity } from "@/lib/activityLogger";
 
 interface ChecklistItem {
   drawing_ref?: string;
