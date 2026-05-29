@@ -389,7 +389,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                     const srcDims = (item as any).source_dims_json;
                     const srcVal = srcDims?.[c];
                     return isEditing ? (
-                      <Input key={c} type="number" className="h-6 text-xs px-1 w-12" value={editValues.bend_dimensions?.[c] || ""} onChange={e => setEditValues(v => ({ ...v, bend_dimensions: { ...v.bend_dimensions, [c]: parseInt(e.target.value) || undefined } }))} />
+                      <Input key={c} type="number" step="any" className="h-6 text-xs px-1 w-12" value={editValues.bend_dimensions?.[c] || ""} onChange={e => setEditValues(v => ({ ...v, bend_dimensions: { ...v.bend_dimensions, [c]: parseFloat(e.target.value) || undefined } }))} />
                     ) : (
                       <span key={c} className="text-xs text-muted-foreground">
                         {srcVal != null && srcVal !== "" ? <span className="text-foreground">{String(srcVal)}</span> : dims[c] ? <span className="text-foreground">{dims[c]}</span> : ""}
