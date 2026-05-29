@@ -28,6 +28,9 @@ import { compressImage } from "@/lib/imageCompressor";
 import { useUserRole } from "@/hooks/useUserRole";
 import { OverrideReasonDialog } from "@/components/shopfloor/OverrideReasonDialog";
 import { assertEvidenceComplete, ClearanceGateError } from "@/lib/clearanceEvidenceGate";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { itemSubStateLabel } from "@/lib/releaseStateLabels";
+import { Badge } from "@/components/ui/badge";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -52,6 +55,8 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
   const queryClient = useQueryClient();
   const { isAdmin, isShopSupervisor } = useUserRole();
   const canOverride = isAdmin || isShopSupervisor;
+  const { itemSubStateById } = useReleaseState();
+  const subState = itemSubStateById.get(item.id);
   const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
   const [deleting, setDeleting] = useState<"material" | "tag" | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -354,9 +359,17 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
               Size: {item.bar_code} | L: {formatCutLength({ cut_length_mm: item.cut_length_mm, unit_system: (item as any).unit_system, source_total_length_text: (item as any).source_total_length_text }).value}
             </p>
           </div>
-          {isCleared && <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />}
-          {isFlagged && <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0" />}
+          <div className="flex items-center gap-2 shrink-0">
+            {subState && (
+              <Badge variant="outline" className="text-[9px] uppercase tracking-wider">
+                {itemSubStateLabel(subState)}
+              </Badge>
+            )}
+            {isCleared && <CheckCircle2 className="w-6 h-6 text-primary" />}
+            {isFlagged && <AlertTriangle className="w-6 h-6 text-amber-500" />}
+          </div>
         </div>
+
 
         {/* Photo slots */}
         <div className="grid grid-cols-2 gap-3">

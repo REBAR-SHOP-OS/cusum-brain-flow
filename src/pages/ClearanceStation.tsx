@@ -17,6 +17,8 @@ import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
 import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
 import { Zap, Hand, Archive as ArchiveIcon, ListChecks } from "lucide-react";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
@@ -24,6 +26,7 @@ export default function ClearanceStation() {
   const { items, byProjectKey, clearedCount, totalCount, isLoading, error } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
+  const { manifestStateById } = useReleaseState();
 
   // Track the active manifest by stable project key (project_id || "__unassigned__")
   // so it survives label/data changes after the last item is cleared.
@@ -122,8 +125,7 @@ export default function ClearanceStation() {
   }
 
   const displayLabel = activeGroup?.label || selectedProjectLabel;
-  const formatStatus = (status: string | null) =>
-    (status || "pending").replace(/_/g, " ").toUpperCase();
+
 
   return (
     <div className="flex flex-col h-full">
@@ -264,8 +266,9 @@ export default function ClearanceStation() {
                                     </span>
                                   )}
                                   <Badge variant="secondary" className="text-[9px] px-1.5 py-0 shrink-0">
-                                    {formatStatus(group.barlistStatus || group.cutPlanStatus || null)}
+                                    {manifestReleaseLabel(manifestStateById.get(key)).toUpperCase()}
                                   </Badge>
+
                                 </div>
                                 <span className="text-[10px] font-bold tracking-wide uppercase text-primary/70 truncate">
                                   {group.items.length} item{group.items.length !== 1 ? "s" : ""}

@@ -18,6 +18,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle, FileText, CheckCircle2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
@@ -36,6 +38,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const { companyId } = useCompanyId();
 
   const { bundles } = useCompletedBundles({ pickupOnly: true });
+  const { manifestStateById } = useReleaseState();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
@@ -333,17 +336,19 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
           </Button>
         </header>
         <div className="flex-1 overflow-auto p-4 sm:p-6 space-y-3">
-          {/* Manifest summary */}
+          {/* Manifest summary — manifest_release_state from v_workflow_release_state
+              is the canonical label; the legacy status badge stays for color/back-compat. */}
           <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
               <Badge className={statusColors[manifestStatus] || statusColors.ready}>
-                {String(manifestStatus).toUpperCase()}
+                {manifestReleaseLabel(manifestStateById.get(selectedBundle.cutPlanId)).toUpperCase()}
               </Badge>
               <span className="text-sm text-foreground tabular-nums">
                 {loadedCount} loaded · {missingCount} missing · {exceptionCount} exceptions
               </span>
             </div>
           </div>
+
 
           <Collapsible defaultOpen={false}>
             <CollapsibleTrigger asChild>
