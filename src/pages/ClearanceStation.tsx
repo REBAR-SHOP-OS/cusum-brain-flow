@@ -3,9 +3,19 @@ import { useNavigate } from "react-router-dom";
 import { useClearanceData } from "@/hooks/useClearanceData";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   ArrowLeft,
   ShieldCheck,
@@ -19,6 +29,9 @@ import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
 import { Zap, Hand, Archive as ArchiveIcon, ListChecks } from "lucide-react";
 import { useReleaseState } from "@/hooks/useReleaseState";
 import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
+
+const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5"] as const;
+
 
 export default function ClearanceStation() {
   const navigate = useNavigate();
