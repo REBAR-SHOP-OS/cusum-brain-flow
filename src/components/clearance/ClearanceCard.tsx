@@ -359,9 +359,17 @@ export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
               Size: {item.bar_code} | L: {formatCutLength({ cut_length_mm: item.cut_length_mm, unit_system: (item as any).unit_system, source_total_length_text: (item as any).source_total_length_text }).value}
             </p>
           </div>
-          {isCleared && <CheckCircle2 className="w-6 h-6 text-primary shrink-0" />}
-          {isFlagged && <AlertTriangle className="w-6 h-6 text-amber-500 shrink-0" />}
+          <div className="flex items-center gap-2 shrink-0">
+            {subState && (
+              <Badge variant="outline" className="text-[9px] uppercase tracking-wider">
+                {itemSubStateLabel(subState)}
+              </Badge>
+            )}
+            {isCleared && <CheckCircle2 className="w-6 h-6 text-primary" />}
+            {isFlagged && <AlertTriangle className="w-6 h-6 text-amber-500" />}
+          </div>
         </div>
+
 
         {/* Photo slots */}
         <div className="grid grid-cols-2 gap-3">
