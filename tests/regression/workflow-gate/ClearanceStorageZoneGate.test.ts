@@ -1,6 +1,6 @@
 // @vitest-environment node
 // Regression: A8 Storage Zone — clearance cannot be marked complete until a
-// storage zone (Zone 1–5) is assigned to the clearance_evidence row.
+// storage zone (Zone 1–7) is assigned to the clearance_evidence row.
 //
 // Two layers are pinned:
 //   1. Backend trigger validate_clearance_evidence_transition raises
