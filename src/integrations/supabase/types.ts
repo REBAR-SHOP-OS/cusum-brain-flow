@@ -3692,6 +3692,66 @@ export type Database = {
           },
         ]
       }
+      delivery_exceptions: {
+        Row: {
+          company_id: string
+          created_at: string
+          delivery_id: string
+          exception_type: string
+          id: string
+          opened_at: string
+          opened_by: string | null
+          reason: string
+          resolution_note: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          company_id: string
+          created_at?: string
+          delivery_id: string
+          exception_type: string
+          id?: string
+          opened_at?: string
+          opened_by?: string | null
+          reason: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          company_id?: string
+          created_at?: string
+          delivery_id?: string
+          exception_type?: string
+          id?: string
+          opened_at?: string
+          opened_by?: string | null
+          reason?: string
+          resolution_note?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "delivery_exceptions_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "deliveries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_exceptions_delivery_id_fkey"
+            columns: ["delivery_id"]
+            isOneToOne: false
+            referencedRelation: "v_deliveries_enriched"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       delivery_stops: {
         Row: {
           address: string | null
