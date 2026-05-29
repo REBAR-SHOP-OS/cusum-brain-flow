@@ -388,7 +388,8 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
                   {isEditing ? (
                     <Input type="number" step="any" className="h-6 text-xs px-1 w-16" value={editValues.cut_length_mm} onChange={e => setEditValues(v => ({ ...v, cut_length_mm: parseFloat(e.target.value) || 0 }))} />
                   ) : (
-                    <span className="text-xs font-bold">{(item as any).source_total_length_text || formatLength(item.cut_length_mm, unitSystem)}</span>
+                    {/* Imperial rows store INCHES in cut_length_mm (column misnamed — see src/lib/cutMath/imperial.ts). Convert inches → mm before formatLength. */}
+                    <span className="text-xs font-bold">{(item as any).source_total_length_text || formatLength(unitSystem === "imperial" ? (item.cut_length_mm || 0) * 25.4 : item.cut_length_mm, unitSystem)}</span>
                   )}
                   {/* Dim columns */}
                   {dimCols.map(c => {
