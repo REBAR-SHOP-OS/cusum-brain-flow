@@ -38,6 +38,7 @@ const PickupStation = forwardRef<HTMLDivElement>(function PickupStation(_props, 
   const { companyId } = useCompanyId();
 
   const { bundles } = useCompletedBundles({ pickupOnly: true });
+  const { manifestStateById } = useReleaseState();
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const [selectedBundle, setSelectedBundle] = useState<CompletedBundle | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
