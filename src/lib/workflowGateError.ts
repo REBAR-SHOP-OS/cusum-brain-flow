@@ -7,6 +7,13 @@ const GATE_MESSAGES: Record<string, string> = {
   WORKFLOW_GATE_CUTTER_NO_MACHINE_RUN: "Cutting can't start: no active machine run linked to this work order.",
   WORKFLOW_GATE_BEND_INCOMPLETE: "Bend isn't complete yet — finish all pieces before moving to clearance.",
   WORKFLOW_GATE_CLEARANCE_EVIDENCE: "Clearance evidence (tag scan + material photo) is missing or invalid.",
+  WORKFLOW_GATE_STORAGE_ZONE_REQUIRED: "Assign a storage zone (Zone 1–5) before completing clearance.",
+  WORKFLOW_GATE_LOADING_NO_ITEMS: "Packing slip blocked: this cut plan has no items to load.",
+  WORKFLOW_GATE_LOADING_NOT_STARTED: "Packing slip blocked: no items have been marked loaded yet.",
+  WORKFLOW_GATE_LOADING_INCOMPLETE: "Packing slip blocked: loading is incomplete — some items are still missing.",
+  WORKFLOW_GATE_LOADING_WRONG_ITEM: "Packing slip blocked: a loaded item does not belong to this cut plan.",
+  WORKFLOW_GATE_LOADING_OVERLOAD: "Packing slip blocked: more items loaded than the plan expects.",
+  WORKFLOW_GATE_LOADING_DUPLICATE: "Packing slip blocked: the same item appears twice on the slip.",
 };
 
 export function mapWorkflowGateError(err: unknown): { code: string; title: string; description: string } | null {
