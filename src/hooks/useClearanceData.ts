@@ -28,6 +28,7 @@ export interface ClearanceItem {
   material_photo_url: string | null;
   tag_scan_url: string | null;
   evidence_status: string;
+  storage_zone: string | null;
   verified_at: string | null;
   verified_by_name: string | null;
   created_at: string | null;
@@ -112,6 +113,7 @@ export function useClearanceData() {
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
           evidence_status: ev?.status || "pending",
+          storage_zone: ev?.storage_zone ?? null,
           verified_at: ev?.verified_at || null,
           verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
           created_at: item.created_at || null,
