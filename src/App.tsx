@@ -144,6 +144,7 @@ function GlobalErrorWatcher({ children }: { children: React.ReactNode }) {
 const App = () => (
   <SmartErrorBoundary level="app" maxAutoRetries={3}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
