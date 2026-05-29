@@ -283,30 +283,49 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
                   const fileName = meta?.file_name as string | undefined;
                   const fileType = (meta?.file_type as string | undefined)?.toUpperCase();
                   return (
-                    <button
+                  const downloadUrl = (item.source_url || (meta?.file_url as string | undefined)) ?? null;
+                  return (
+                    <div
                       key={item.id}
-                      onClick={() => setSelectedItem(item)}
-                      className="w-full flex items-start gap-3 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-colors text-left"
+                      className="w-full flex items-start gap-2 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-colors"
                     >
-                      <span className="text-lg mt-0.5">{categoryIcons[item.category] || "📝"}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{item.title}</p>
-                        {fileName && (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                            <span className="text-xs text-muted-foreground truncate">{fileName}</span>
-                            {fileType && (
-                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
-                                {fileType}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {!fileName && item.content && (
-                          <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{item.content}</p>
-                        )}
-                      </div>
-                    </button>
+                      <button
+                        onClick={() => setSelectedItem(item)}
+                        className="flex items-start gap-3 flex-1 min-w-0 text-left"
+                      >
+                        <span className="text-lg mt-0.5">{categoryIcons[item.category] || "📝"}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{item.title}</p>
+                          {fileName && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                              <span className="text-xs text-muted-foreground truncate">{fileName}</span>
+                              {fileType && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
+                                  {fileType}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {!fileName && item.content && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{item.content}</p>
+                          )}
+                        </div>
+                      </button>
+                      {downloadUrl && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            downloadFile(downloadUrl, fileName || item.title || "download");
+                          }}
+                          className="p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+                          title="Download"
+                          aria-label="Download file"
+                        >
+                          <Download className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      )}
+                    </div>
                   );
                 })
               )}
