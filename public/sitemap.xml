@@ -1,33 +1,63 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://cusum-brain-flow.lovable.app/</loc>
-    <lastmod>2026-02-08</lastmod>
+    <loc>https://erp.rebar.shop/</loc>
+    <lastmod>2026-05-29</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://cusum-brain-flow.lovable.app/login</loc>
-    <lastmod>2026-02-08</lastmod>
+    <loc>https://erp.rebar.shop/login</loc>
+    <lastmod>2026-05-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.6</priority>
   </url>
   <url>
-    <loc>https://cusum-brain-flow.lovable.app/signup</loc>
-    <lastmod>2026-02-08</lastmod>
+    <loc>https://erp.rebar.shop/signup</loc>
+    <lastmod>2026-05-29</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://cusum-brain-flow.lovable.app/privacy</loc>
-    <lastmod>2026-02-08</lastmod>
+    <loc>https://erp.rebar.shop/knowledge-base</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://erp.rebar.shop/privacy</loc>
+    <lastmod>2026-05-29</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://cusum-brain-flow.lovable.app/terms</loc>
-    <lastmod>2026-02-08</lastmod>
+    <loc>https://erp.rebar.shop/terms</loc>
+    <lastmod>2026-05-29</lastmod>
     <changefreq>yearly</changefreq>
     <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://erp.rebar.shop/data-deletion</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+  <url>
+    <loc>https://erp.rebar.shop/portal</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://erp.rebar.shop/vendor-portal</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+  <url>
+    <loc>https://erp.rebar.shop/install</loc>
+    <lastmod>2026-05-29</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.4</priority>
   </url>
 </urlset>
