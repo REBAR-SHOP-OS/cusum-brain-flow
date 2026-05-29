@@ -63,6 +63,53 @@ export default function ClearanceStation() {
   }, [items, selectedProjectKey]);
   const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
 
+  // Manifest-level storage zone: if every pending item shares the same zone, surface it.
+  const pendingItems = activeItems.filter((i) => i.evidence_status !== "cleared");
+  const manifestZone = useMemo(() => {
+    if (pendingItems.length === 0) return "";
+    const first = pendingItems[0].storage_zone || "";
+    if (!first) return "";
+    return pendingItems.every((i) => i.storage_zone === first) ? first : "";
+  }, [pendingItems]);
+  const allPendingHaveZone =
+    pendingItems.length > 0 && pendingItems.every((i) => !!i.storage_zone);
+
+  const applyZoneToManifest = async (zone: string) => {
+    if (!canWrite || !zone) return;
+    setZoneSaving(true);
+    try {
+      const targets = activeItems.filter((i) => i.evidence_status !== "cleared");
+      const withEvidence = targets.filter((i) => i.evidence_id) as Array<typeof targets[number] & { evidence_id: string }>;
+      const withoutEvidence = targets.filter((i) => !i.evidence_id);
+
+      if (withEvidence.length > 0) {
+        const { error } = await supabase
+          .from("clearance_evidence")
+          .update({ storage_zone: zone })
+          .in("id", withEvidence.map((i) => i.evidence_id));
+        if (error) throw error;
+      }
+      if (withoutEvidence.length > 0) {
+        const { error } = await supabase
+          .from("clearance_evidence")
+          .insert(
+            withoutEvidence.map((i) => ({
+              cut_plan_item_id: i.id,
+              storage_zone: zone,
+            }))
+          );
+        if (error) throw error;
+      }
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: "Storage zone assigned", description: `${zone} · ${targets.length} item${targets.length !== 1 ? "s" : ""}` });
+    } catch (err: any) {
+      toast({ title: "Zone update failed", description: err.message, variant: "destructive" });
+    } finally {
+      setZoneSaving(false);
+    }
+  };
+
+
   // Manifest is "complete" when we had items and they're all cleared (group removed
   // from byProjectKey by the auto-advance trigger), and no pending items remain in view.
   const manifestComplete =
