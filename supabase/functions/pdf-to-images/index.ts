@@ -17,7 +17,6 @@ async function convertPdfToImages(pdfData: Uint8Array, maxPages: number, dpi: nu
 }
 
 Deno.serve((req) =>
-Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, body } = ctx;
     if (!userId) {
