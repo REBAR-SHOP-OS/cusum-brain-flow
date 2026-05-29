@@ -123,7 +123,7 @@ Deno.serve((req) =>
         const { data: existing } = await supabaseAdmin
           .from("social_posts")
           .select(
-            "status, neel_approved, declined_by, title, platform, page_name, scheduled_date, content, image_url",
+            "status, neel_approved, declined_by, title, platform, page_name, scheduled_date, content, image_url, publishing_started_at, publishing_lock_id",
           )
           .eq("id", post_id)
           .maybeSingle();
@@ -140,16 +140,43 @@ Deno.serve((req) =>
         }
 
         if (existing?.status === "publishing") {
-          return new Response(
-            JSON.stringify({
-              error: "This post is currently being published. Please wait.",
-            }),
-            {
-              status: 409,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            },
-          );
+          // Auto-recover stale lock (>10 min old) so a crashed/aborted publish
+          // doesn't permanently block manual retries.
+          const startedAt = existing.publishing_started_at
+            ? new Date(existing.publishing_started_at).getTime()
+            : 0;
+          const ageMs = startedAt ? Date.now() - startedAt : Number.MAX_SAFE_INTEGER;
+          const STALE_MS = 10 * 60 * 1000;
+
+          if (ageMs > STALE_MS) {
+            console.warn(
+              `[social-publish] Clearing stale publishing lock for post ${post_id} (age=${Math.round(ageMs / 1000)}s, lockId=${existing.publishing_lock_id})`,
+            );
+            await supabaseAdmin
+              .from("social_posts")
+              .update({
+                status: "scheduled",
+                publishing_lock_id: null,
+                publishing_started_at: null,
+                last_error: "Recovered from stale publishing lock before retry.",
+              })
+              .eq("id", post_id)
+              .eq("status", "publishing");
+            // Refresh postRecord so downstream logic sees the cleared state
+            postRecord = { ...existing, status: "scheduled" };
+          } else {
+            return new Response(
+              JSON.stringify({
+                error: "This post is currently being published. Please wait.",
+              }),
+              {
+                status: 409,
+                headers: { ...corsHeaders, "Content-Type": "application/json" },
+              },
+            );
+          }
         }
+
 
         // HARD GATE: declined posts can NEVER be published
         if (existing?.status === "declined") {
