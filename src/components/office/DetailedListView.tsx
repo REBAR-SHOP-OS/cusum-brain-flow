@@ -13,7 +13,7 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useUnitSystem, formatLength, barSizeLabel, sessionUnitToDisplay, displayModeToMm, type UnitSystem, type LengthDisplayMode } from "@/lib/unitSystem";
+import { useUnitSystem, formatLength, barSizeLabel, sessionUnitToDisplay, type UnitSystem } from "@/lib/unitSystem";
 
 export function DetailedListView({ initialPlanId }: { initialPlanId?: string | null }) {
   const { plans, loading: plansLoading } = useCutPlans();
