@@ -89,11 +89,28 @@ export default function KnowledgeBasePublic() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>Knowledge Base – REBAR SHOP OS</title>
+        <meta name="description" content="Public help articles and FAQs about rebar fabrication, estimating, shop floor, deliveries, and the REBAR SHOP OS platform." />
+        <link rel="canonical" href="https://erp.rebar.shop/knowledge-base" />
+        <meta property="og:title" content="REBAR SHOP OS Knowledge Base" />
+        <meta property="og:description" content="Public help articles and FAQs about rebar fabrication and REBAR SHOP OS." />
+        <meta property="og:url" content="https://erp.rebar.shop/knowledge-base" />
+        {articles.length > 0 && (
+          <script type="application/ld+json">{JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: articles.slice(0, 50).map((a) => ({
+              "@type": "Question",
+              name: a.title,
+              acceptedAnswer: { "@type": "Answer", text: (a.excerpt || a.content || "").slice(0, 500) },
+            })),
+          })}</script>
+        )}
+      </Helmet>
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
           <BookOpen className="w-10 h-10 mx-auto mb-3 text-primary" />
-          <h1 className="text-3xl font-bold mb-2">Knowledge Base</h1>
-          <p className="text-muted-foreground">Find answers to common questions</p>
         </div>
 
         <div className="relative mb-8 max-w-lg mx-auto">
