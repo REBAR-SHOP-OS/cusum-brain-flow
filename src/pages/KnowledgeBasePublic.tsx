@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Search, BookOpen, ArrowLeft, ThumbsUp, ThumbsDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Helmet } from "react-helmet-async";
 
 type Category = { id: string; name: string; slug: string; description: string | null };
 type Article = { id: string; title: string; slug: string; content: string; excerpt: string | null; category_id: string | null; views: number; helpful_yes: number; helpful_no: number };
@@ -44,10 +45,24 @@ export default function KnowledgeBasePublic() {
       helpful ? { helpful_yes: (selectedArticle?.helpful_yes || 0) + 1 } : { helpful_no: (selectedArticle?.helpful_no || 0) + 1 }
     ).eq("id", articleId);
   };
-
   if (selectedArticle) {
     return (
       <div className="min-h-screen bg-background">
+        <Helmet>
+          <title>{`${selectedArticle.title} – REBAR SHOP OS Knowledge Base`}</title>
+          <meta name="description" content={(selectedArticle.excerpt || selectedArticle.content || "").slice(0, 155)} />
+          <link rel="canonical" href={`https://erp.rebar.shop/knowledge-base`} />
+          <meta property="og:title" content={selectedArticle.title} />
+          <meta property="og:description" content={(selectedArticle.excerpt || "").slice(0, 155)} />
+          <meta property="og:url" content={`https://erp.rebar.shop/knowledge-base`} />
+          <meta property="og:type" content="article" />
+          <script type="application/ld+json">{JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "Article",
+            headline: selectedArticle.title,
+            description: selectedArticle.excerpt || undefined,
+          })}</script>
+        </Helmet>
         <div className="max-w-3xl mx-auto px-4 py-8">
           <Button variant="ghost" size="sm" onClick={() => setSelectedArticle(null)} className="mb-6">
             <ArrowLeft className="w-4 h-4 mr-1" /> Back to articles
@@ -74,11 +89,28 @@ export default function KnowledgeBasePublic() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>Knowledge Base – REBAR SHOP OS</title>
+        <meta name="description" content="Public help articles and FAQs about rebar fabrication, estimating, shop floor, deliveries, and the REBAR SHOP OS platform." />
+        <link rel="canonical" href="https://erp.rebar.shop/knowledge-base" />
+        <meta property="og:title" content="REBAR SHOP OS Knowledge Base" />
+        <meta property="og:description" content="Public help articles and FAQs about rebar fabrication and REBAR SHOP OS." />
+        <meta property="og:url" content="https://erp.rebar.shop/knowledge-base" />
+        {articles.length > 0 && (
+          <script type="application/ld+json">{JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            mainEntity: articles.slice(0, 50).map((a) => ({
+              "@type": "Question",
+              name: a.title,
+              acceptedAnswer: { "@type": "Answer", text: (a.excerpt || a.content || "").slice(0, 500) },
+            })),
+          })}</script>
+        )}
+      </Helmet>
       <div className="max-w-4xl mx-auto px-4 py-12">
         <div className="text-center mb-10">
           <BookOpen className="w-10 h-10 mx-auto mb-3 text-primary" />
-          <h1 className="text-3xl font-bold mb-2">Knowledge Base</h1>
-          <p className="text-muted-foreground">Find answers to common questions</p>
         </div>
 
         <div className="relative mb-8 max-w-lg mx-auto">

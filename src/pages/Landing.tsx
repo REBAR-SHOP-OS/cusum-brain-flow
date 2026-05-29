@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, Navigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, AlertTriangle, Brain, Cpu, Database, BarChart3, Layers, Eye, Gauge, ServerCog, Tablet, Radio, Cloud, Cog, ChevronRight, Check, X } from "lucide-react";
@@ -119,6 +120,14 @@ export default function Landing() {
 
   return (
     <div className="min-h-screen bg-background">
+      <Helmet>
+        <title>REBAR SHOP OS – AI Rebar Fabrication Software</title>
+        <meta name="description" content="AI-powered rebar fabrication management: estimating, shop floor, deliveries & CRM for reinforcing steel contractors in Ontario, Canada." />
+        <link rel="canonical" href="https://erp.rebar.shop/" />
+        <meta property="og:title" content="REBAR SHOP OS – AI Rebar Fabrication" />
+        <meta property="og:description" content="All-in-one AI platform for rebar fabricators: estimating, shop floor, deliveries, CRM & accounting." />
+        <meta property="og:url" content="https://erp.rebar.shop/" />
+      </Helmet>
       {/* Header */}
       <header className="border-b border-border sticky top-0 z-50 bg-background/95 backdrop-blur" role="banner">
         <nav className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between" aria-label="Main navigation">

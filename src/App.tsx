@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import React, { Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "next-themes";
+import { HelmetProvider } from "react-helmet-async";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceProvider } from "@/contexts/WorkspaceContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
@@ -143,6 +144,7 @@ function GlobalErrorWatcher({ children }: { children: React.ReactNode }) {
 const App = () => (
   <SmartErrorBoundary level="app" maxAutoRetries={3}>
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+      <HelmetProvider>
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <Toaster />
@@ -318,6 +320,7 @@ const App = () => (
           </BrowserRouter>
         </TooltipProvider>
       </QueryClientProvider>
+      </HelmetProvider>
     </ThemeProvider>
   </SmartErrorBoundary>
 );
