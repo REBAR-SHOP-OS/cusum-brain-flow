@@ -316,8 +316,20 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
                           onClick={async (e) => {
                             e.stopPropagation();
                             const name = fileName || item.title || "download";
-                            const bucket = (meta?.storage_bucket as string | undefined) || "estimation-files";
-                            const path = meta?.storage_path as string | undefined;
+                            let bucket = (meta?.storage_bucket as string | undefined) || "estimation-files";
+                            let path = meta?.storage_path as string | undefined;
+
+                            // If no explicit storage path, try parsing it out of a Supabase storage URL
+                            // (covers both signed `/object/sign/<bucket>/<path>` and public `/object/public/<bucket>/<path>`).
+                            // This avoids relying on expired signed URLs.
+                            if (!path && downloadUrl) {
+                              const m = downloadUrl.match(/\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^/]+)\/([^?]+)/);
+                              if (m) {
+                                bucket = decodeURIComponent(m[1]);
+                                path = decodeURIComponent(m[2]);
+                              }
+                            }
+
                             try {
                               if (path) {
                                 const { data, error } = await supabase.storage.from(bucket).download(path);
@@ -344,6 +356,7 @@ export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) 
                           <Download className="w-4 h-4 text-muted-foreground" />
                         </button>
                       )}
+
                     </div>
                   );
                 })
