@@ -18,6 +18,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Loader2, Package, MapPin, ArrowLeft, AlertTriangle, FileText, CheckCircle2 } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { toast } from "sonner";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { manifestReleaseLabel } from "@/lib/releaseStateLabels";
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
