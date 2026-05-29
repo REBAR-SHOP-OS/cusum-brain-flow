@@ -30,6 +30,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { toast } from "sonner";
+import { mapWorkflowGateError } from "@/lib/workflowGateError";
 
 export default function LoadingStation() {
   const navigate = useNavigate();
