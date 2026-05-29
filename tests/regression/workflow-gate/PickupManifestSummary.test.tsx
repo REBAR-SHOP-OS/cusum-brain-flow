@@ -83,9 +83,12 @@ describe("PickupStation drift check", () => {
     expect(src).toContain("{loadedCount} loaded · {missingCount} missing · {exceptionCount} exceptions");
   });
 
-  it("still renders the status badge with the ready fallback", () => {
-    expect(src).toContain('(selectedBundle as any).status || "ready"');
-    expect(src).toContain("String(manifestStatus).toUpperCase()");
+  it("derives the manifest badge label from the unified release-state view", () => {
+    // Phase-2 #1: manifest_release_state from v_workflow_release_state is the
+    // single source of truth — Pickup must read it via manifestStateById, not
+    // the raw selectedBundle.status.
+    expect(src).toContain("manifestReleaseLabel(manifestStateById.get(selectedBundle.cutPlanId))");
+    expect(src).toContain('from "@/hooks/useReleaseState"');
   });
 
   it("still renders the collapsible Details affordance", () => {
@@ -93,3 +96,4 @@ describe("PickupStation drift check", () => {
     expect(src).toMatch(/<Collapsible[^>]*defaultOpen=\{false\}/);
   });
 });
+
