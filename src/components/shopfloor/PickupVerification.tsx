@@ -1,17 +1,17 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SignaturePad } from "./SignaturePad";
-import { Check, ShieldCheck, ArrowLeft } from "lucide-react";
+import { Check, ShieldCheck, ArrowLeft, Camera } from "lucide-react";
 import type { PickupOrder, PickupOrderItem } from "@/hooks/usePickupOrders";
 
 interface PickupVerificationProps {
   order: PickupOrder;
   items: PickupOrderItem[];
   onToggleVerified: (itemId: string, verified: boolean) => void;
-  onAuthorize: (signatureData: string) => void;
+  onAuthorize: (signatureData: string, photoFile: File) => void;
   onBack: () => void;
   canWrite: boolean;
 }
@@ -25,7 +25,18 @@ export function PickupVerification({
   canWrite,
 }: PickupVerificationProps) {
   const [signature, setSignature] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+
   const allVerified = items.length > 0 && items.every((i) => i.verified);
+  const canAuthorize = canWrite && !!signature && !!photoFile && allVerified;
+
+  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null;
+    setPhotoFile(file);
+    setPhotoPreview(file ? URL.createObjectURL(file) : null);
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -91,6 +102,47 @@ export function PickupVerification({
             Collection Authentication
           </p>
 
+          {/* Final load photo */}
+          <div className="space-y-2">
+            <p className="text-xs font-semibold tracking-wide">Final Load Photo</p>
+            <input
+              ref={photoInputRef}
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            {photoPreview ? (
+              <div className="relative">
+                <img
+                  src={photoPreview}
+                  alt="Final load"
+                  className="w-full h-32 object-cover rounded border border-border"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="absolute top-2 right-2"
+                  onClick={() => photoInputRef.current?.click()}
+                  disabled={!canWrite}
+                >
+                  Retake
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                className="w-full gap-2 h-20 border-dashed"
+                onClick={() => photoInputRef.current?.click()}
+                disabled={!canWrite}
+              >
+                <Camera className="w-5 h-5" />
+                Capture Final Load Photo
+              </Button>
+            )}
+          </div>
+
           <SignaturePad
             onSignatureChange={setSignature}
             className="flex-1"
@@ -99,16 +151,22 @@ export function PickupVerification({
           <Button
             size="lg"
             className="w-full gap-2 font-bold bg-warning text-warning-foreground hover:bg-warning/90"
-            disabled={!canWrite || !signature || !allVerified}
-            onClick={() => signature && onAuthorize(signature)}
+            disabled={!canAuthorize}
+            onClick={() => signature && photoFile && onAuthorize(signature, photoFile)}
           >
             <ShieldCheck className="w-5 h-5" />
             Authorize Release
           </Button>
 
-          {!allVerified && (
+          {!canAuthorize && (
             <p className="text-xs text-muted-foreground text-center">
-              Verify all manifest items before authorizing
+              {!allVerified
+                ? "Verify all manifest items before authorizing"
+                : !photoFile
+                ? "Capture the final load photo before authorizing"
+                : !signature
+                ? "Capture the customer signature before authorizing"
+                : "Ready"}
             </p>
           )}
         </div>
