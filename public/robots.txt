@@ -13,4 +13,4 @@ Allow: /
 User-agent: *
 Allow: /
 
-Sitemap: https://cusum-brain-flow.lovable.app/sitemap.xml
+Sitemap: https://erp.rebar.shop/sitemap.xml
