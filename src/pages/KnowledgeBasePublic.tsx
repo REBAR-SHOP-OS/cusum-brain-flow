@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Search, BookOpen, ArrowLeft, ThumbsUp, ThumbsDown } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Helmet } from "react-helmet-async";
 
 type Category = { id: string; name: string; slug: string; description: string | null };
 type Article = { id: string; title: string; slug: string; content: string; excerpt: string | null; category_id: string | null; views: number; helpful_yes: number; helpful_no: number };
