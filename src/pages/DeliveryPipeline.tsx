@@ -15,6 +15,7 @@ import {
   XCircle,
   Clock,
   CircleDot,
+  AlertTriangle,
 } from "lucide-react";
 
 type Delivery = {
@@ -99,6 +100,29 @@ export default function DeliveryPipeline() {
     },
   });
 
+  // Open exception counts per delivery — drives the inline warning badge.
+  const { data: openExceptions = [] } = useQuery({
+    queryKey: ["delivery-exceptions-open", companyId],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("delivery_exceptions")
+        .select("delivery_id, exception_type")
+        .eq("company_id", companyId!)
+        .is("resolved_at", null);
+      if (error) throw error;
+      return (data ?? []) as { delivery_id: string; exception_type: string }[];
+    },
+  });
+
+  const exceptionCountByDelivery = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const e of openExceptions) {
+      m.set(e.delivery_id, (m.get(e.delivery_id) ?? 0) + 1);
+    }
+    return m;
+  }, [openExceptions]);
+
   const stages = useMemo(() => {
     const groups = new Map<string, Delivery[]>();
     for (const d of deliveries) {
@@ -167,7 +191,9 @@ export default function DeliveryPipeline() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-2">
-                    {items.map((d) => (
+                    {items.map((d) => {
+                      const openExc = exceptionCountByDelivery.get(d.id) ?? 0;
+                      return (
                       <button
                         key={d.id}
                         onClick={() => navigate(`/shopfloor/delivery/${d.id}`)}
@@ -176,16 +202,24 @@ export default function DeliveryPipeline() {
                         <span className="font-medium tabular-nums">
                           {d.delivery_number ?? d.id.slice(0, 8)}
                         </span>
+                        {openExc > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="gap-1 border-destructive/40 text-destructive"
+                            title={`${openExc} open exception${openExc === 1 ? "" : "s"}`}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            {openExc} exception{openExc === 1 ? "" : "s"}
+                          </Badge>
+                        )}
                         {d.scheduled_date && (
                           <span className="text-xs text-muted-foreground">
                             {format(new Date(d.scheduled_date), "MMM d, yyyy")}
                           </span>
                         )}
-                        {d.driver_name && (
-                          <span className="text-xs text-muted-foreground">
-                            Driver: {d.driver_name}
-                          </span>
-                        )}
+                        <span className="text-xs text-muted-foreground">
+                          Driver: {d.driver_name ?? "Unassigned"}
+                        </span>
                         {d.vehicle && (
                           <span className="text-xs text-muted-foreground">
                             Vehicle: {d.vehicle}
@@ -196,7 +230,8 @@ export default function DeliveryPipeline() {
                           {format(new Date(d.created_at), "MMM d")}
                         </span>
                       </button>
-                    ))}
+                      );
+                    })}
                   </CardContent>
                 </Card>
               </li>
