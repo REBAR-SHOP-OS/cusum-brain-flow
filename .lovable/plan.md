@@ -1,37 +1,35 @@
-## Goal
-Make the Bending Station's Bending Schematic display imperial dimensions as `3'-9"` (the same source string the tag uses) instead of `45"`. Tags already show ft-in correctly — no change there.
+# Add "5 Stories" quick-create button
 
-## Root cause
-- **Tags** read `cut_plan_items.source_dims_json` (raw strings like `3'-9"`).
-- **Bending Station** reads `cut_plan_items.bend_dimensions` (numeric inches: `45`) and appends `"`.
+## Where
+`src/pages/SocialMediaManager.tsx`, in the Quick Actions row right after the existing `Add Card` Popover (lines 372–400) — matches the circled spot in the screenshot.
 
-Both columns exist on the same row. The station simply isn't reading the source column.
+## UI
+- New icon-only button in a `Popover`, styled like the other quick actions but compact (square, same height ~h-12).
+- Icon: `Clapperboard` from lucide-react (story/reel feel), with a small "5" badge or tooltip "Add 5 Story cards".
+- Gradient: pink → orange (`from-pink-600 to-orange-500`) to distinguish from Add Card.
+- Tooltip / `title="Create 5 Story cards on a date"`.
 
-## Changes (frontend only, surgical)
-
-1. **`src/hooks/useStationData.ts`**
-   - Add `source_dims: Record<string, string> | null` to `StationItem`.
-   - In both `map(...)` blocks (bender + cutter), pass through `source_dims: (item as any).source_dims_json ?? null`.
-
-2. **`src/components/shopfloor/BendingSchematic.tsx`**
-   - Accept new optional prop `sourceDims?: Record<string, string> | null`.
-   - For each dimension key, if `sourceDims?.[key]` is a non-empty string, render it verbatim (no unit suffix — string already contains `'` / `"`).
-   - Otherwise fall back to current behavior: numeric value + `unitLabel`.
-
-3. **`src/components/shopfloor/BenderStationView.tsx`** (both BendingSchematic usages at lines 296 + 343)
-   - Pass `sourceDims={currentItem.source_dims}` alongside existing `dimensions` and `unitSystem` props.
-
-## Regression test
-Add `tests/regression/shopfloor/bending-schematic-source-dims.test.ts`:
-- When `sourceDims = { B: "3'-9\"", C: "5\"" }` and `dimensions = { B: 45, C: 5 }`, rendered output must contain `3'-9"` (not `45"`).
-- When `sourceDims` is null, falls back to numeric inches with `"` suffix.
+## Behavior
+1. Click icon → Popover opens with `<Calendar mode="single" />` (same component used by Add Card).
+2. On date select:
+   - Resolve `user_id` from `posts[0]?.user_id` (same fallback as Add Card).
+   - Build `scheduled = format(date, "yyyy-MM-dd'T'10:00:00")`.
+   - Loop 5 times, calling `createPost.mutate(...)` with:
+     - `platform: "unassigned"`
+     - `status: "draft"`
+     - `qa_status: "needs_review"`
+     - `content_type: "story"`
+     - `title: ""`, `content: ""`, `hashtags: []`, `neel_approved: false`
+     - `scheduled_date: scheduled`
+     - `user_id: user`
+   - After the first successful insert: `setWeekStart(startOfWeek(date, { weekStartsOn: 1 }))` so the week jumps to the chosen date. Do NOT auto-open any of them (`setSelectedPostId` not called — 5 would conflict).
+   - Close the popover (controlled `open` state).
+3. Toast feedback already comes from `createPost` (one per insert). Acceptable; no extra toast added.
 
 ## Out of scope
-- No DB changes (column already exists).
-- No metric path change (metric items have no `source_dims_json`, fallback path unchanged).
-- No tag changes (already correct).
-- Cutter station's schematic (line 296) gets the same fix automatically — desired, since same data model.
+- No backend/schema changes — `content_type: "story"` already exists (`PostReviewPanel.tsx:1031, 1726`).
+- No changes to Add Card behavior.
+- No content generation — cards are blank drafts, just like Add Card.
 
-## Verification
-- `vitest run tests/regression/shopfloor/bending-schematic-source-dims.test.ts`
-- Reload `/shopfloor/station/...` for mark C1513 → B/C/D should read `3'-9"`, `5"`, `3'-9"` (matching the printed tag).
+## Files touched
+- `src/pages/SocialMediaManager.tsx` — add controlled `Popover` + button + handler (~25 lines).
