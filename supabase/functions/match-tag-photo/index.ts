@@ -7,11 +7,16 @@ interface Candidate {
   cut_length_mm: number;
   total_pieces: number;
   asa_shape_code: string | null;
+  drawing_ref: string | null;
+  ref_no: string | null;
+  storage_zone?: string | null;
 }
 
 interface ExtractedTag {
   tag_number?: string;
   mark?: string;
+  dwg?: string;
+  ref?: string;
   bar_size?: string;
   length_text?: string;
   length_mm?: number;
