@@ -1,31 +1,30 @@
-# Story Icon → 9:16 Image + 9:16 Card
+## هدف
+وقتی آیکون Story زده می‌شود، خروجی واقعی عکس‌ها باید 9:16 باشد؛ نه اینکه فقط داخل قاب 9:16 نمایش داده شوند. اگر مدل عکس مربع/اشتباه برگرداند، سیستم باید آن را server-side به PNG واقعی 1080×1920 تبدیل کند و همان فایل را ذخیره کند.
 
-The pink/orange Story icon (the "5" Clapperboard button next to Add Card on `/social-media-manager`) triggers `generatePosts({ mode: "story", ... })`, which calls `auto-generate-post`. Server-side strict 9:16 enforcement already exists (memory rule + `cropToAspectRatioStrict`), but two surfaces still display Story images as square. This plan fixes both display surfaces and adds a regression test to lock the icon→9:16 contract.
+## پلن اجرا
+1. **قفل کردن مسیر آیکون Story**
+   - در `auto-generate-post` مسیر `mode === "story"` را سخت‌تر می‌کنم تا هر خروجی قبل از ذخیره حتماً با `cropToAspectRatioStrict(..., "9:16")` تبدیل و اعتبارسنجی شود.
+   - بعد از تبدیل، ابعاد نهایی را decode می‌کنم و اگر دقیقاً 1080×1920 نبود، آن تصویر reject می‌شود و همان slot دوباره تلاش می‌کند.
 
-## Scope (frontend display only — no business logic changes)
+2. **جلوگیری از ذخیره کارت Story بدون عکس معتبر**
+   - الان اگر تولید تصویر fail شود، ممکن است کارت با `image_url: null` یا خروجی نامعتبر باقی بماند.
+   - تغییر می‌دهم تا برای Story فقط وقتی کارت آپدیت شود که عکس معتبر 9:16 تولید شده باشد؛ در غیر این صورت خطای واضح برگردد.
 
-### 1. `src/components/social/PixelPostCard.tsx`
-Image is hardcoded to `aspect-square` on line 112. Add Story awareness:
-- Read `post.content_type` and switch the wrapper to `aspect-[9/16]` when `content_type === "story"`, else keep `aspect-square`.
-- Use `max-w-[280px] mx-auto` on the image container in Story mode so the tall 9:16 frame doesn't blow out the card width.
-- `object-cover` stays (image already strictly 1080×1920 from the server).
+3. **هم‌راستا کردن مسیرهای جایگزین**
+   - مسیرهای `Regenerate image` و `AI Image` برای Story را بررسی/قفل می‌کنم تا خروجی Story هم قبل از استفاده به 1080×1920 واقعی تبدیل شود، نه صرفاً در UI قاب شود.
+   - در صورت نیاز، برای عکس‌های upload/edit شده در Story هم همین enforcement حفظ می‌شود.
 
-### 2. `src/components/social/SocialCalendar.tsx` (calendar grid cards)
-Cards currently show no image thumbnail. Leave structure untouched — only add a small 9:16 badge/indicator? **No.** Out of scope; user's screenshot 2 is the *output* requirement, not a calendar tile change. Skip this file.
+4. **تست رگرسیون**
+   - تست موجود `story-icon-output-9x16.test.ts` را سخت‌تر می‌کنم تا فقط وجود کلاس UI را چک نکند؛ بلکه قرارداد واقعی را enforce کند:
+     - `auto-generate-post` باید بعد از crop، ابعاد واقعی 1080×1920 را validate کند.
+     - Story card نباید با تصویر null/نامعتبر به عنوان موفق گزارش شود.
+     - مسیر Story icon همچنان `mode: "story"` بفرستد.
 
-### 3. Regression test `tests/regression/social/story-icon-output-9x16.test.ts`
-Static asserts to lock the contract for the Story icon path:
-- `SocialMediaManager.tsx` Story popover still calls `generatePosts({ mode: "story" })`.
-- `auto-generate-post/index.ts` still uses `cropToAspectRatioStrict(bytes, "9:16")` and `size: "1024x1792"` (already covered, but re-assert the icon path specifically).
-- `PixelPostCard.tsx` switches to `aspect-[9/16]` when `content_type === "story"` and stays `aspect-square` otherwise.
-- `PostReviewPanel.tsx` already wraps Story preview in `aspect-[9/16]` (verified at lines 845 and 1758) — re-assert.
+## خارج از محدوده
+- تغییر Gate تایید Neel یا publish flow.
+- تغییر طراحی کلی تقویم یا کارت‌ها.
+- تغییر نسبت نمایش پست‌های معمولی غیر Story.
 
-## Out of scope (already correct or unrelated)
-- Server image generation (`generate-image`, `auto-generate-post`, `regenerate-post`) — already strict 9:16, covered by `story-images-strict-9x16.test.ts`.
-- `ensurePortrait` last-mile resampling to 1080×1920 — already in `imageWatermark.ts`.
-- `PostReviewPanel` Story preview frame — already 9:16.
-- Calendar tile layout, RLS, Neel Approval Gate, publish flow.
-
-## Verification
-1. Run `vitest run tests/regression/social/story-icon-output-9x16.test.ts` — passes.
-2. Open `/social-media-manager`, click the Story "5" icon, pick date + product → newly created Story cards render in `PixelPostCard` (Pixel chat / approval panel) with a true 9:16 frame matching the reference image proportions.
+## اعتبارسنجی
+- اجرای تست رگرسیون Story 9:16.
+- بررسی کد مسیر Story تا مطمئن شویم فایل ذخیره‌شده واقعی، PNG با نسبت 9:16 و اندازه 1080×1920 است.

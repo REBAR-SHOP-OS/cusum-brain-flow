@@ -3,6 +3,15 @@ import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+
+/** Hard-validate the encoded PNG bytes are exactly 1080x1920 (true 9:16 Story). */
+async function assertStoryDimensions(bytes: Uint8Array): Promise<void> {
+  const img = await Image.decode(bytes);
+  if (img.width !== 1080 || img.height !== 1920) {
+    throw new Error(`Story image must be exactly 1080x1920, got ${img.width}x${img.height}`);
+  }
+}
 
 // buildEventPromptBlock removed — events are opt-in via chat only
 
@@ -412,6 +421,9 @@ Deno.serve((req) =>
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
             // Enforce exact 9:16 portrait (never square, never 2:3)
             bytes = await cropToAspectRatioStrict(bytes, "9:16");
+            // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
+            // If anything upstream lied about the canvas, reject and retry.
+            await assertStoryDimensions(bytes);
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
@@ -454,6 +466,14 @@ Deno.serve((req) =>
           const imageUrl = results[k];
           const phId = placeholderIds[idx];
           if (!phId) continue;
+          // HARD GATE: never save a Story card with a null/invalid image. If the
+          // 9:16 generation failed for this slot, leave the placeholder untouched
+          // (or delete it) instead of overwriting a previously valid image with null.
+          if (!imageUrl) {
+            console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
+            await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
+            continue;
+          }
           // Update image only; keep title=product, content="", content_type="story"
           await supabaseAdmin
             .from("social_posts")
