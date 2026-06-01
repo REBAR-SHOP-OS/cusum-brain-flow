@@ -19,6 +19,7 @@ export interface PixelPostData {
   captionTranslation?: string;
   persianTranslation?: string; // kept for backward compat
   platform?: string;
+  content_type?: string;
   status: "published" | "scheduled" | "draft";
 }
 
