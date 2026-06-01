@@ -87,10 +87,14 @@ export function useAutoClearance({
   items,
   manifestKey,
   userId,
+  selectedZone,
 }: {
   items: ClearanceItem[];
   manifestKey: string;
   userId?: string;
+  /** Required for clearance — when null/empty, auto-match is blocked and only
+   *  zone-scoped candidates are considered. */
+  selectedZone?: string | null;
 }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<AutoState>("waiting_tag");
