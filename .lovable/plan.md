@@ -1,51 +1,62 @@
-## Goal
+## Bug
 
-The "5" icon next to **Add Card** must produce **stories only**:
-- 5 cards on the picked date for the picked product
-- Each card flagged as a Story (`content_type = "story"`)
-- Each card has **only an image** in 9:16 portrait, **no caption / no hashtags / no slogan overlay**
-- Image must depict **only the chosen product** (no generic construction scenes)
+Clicking the 5-Stories icon → picking a date → picking a product creates the 5 cards on the **previous day** (e.g. picking Jun 1 inserts them on May 31). Because the calendar shows the current week starting Monday, the cards appear "missing" and their images appear "not displayed".
 
-The existing 2-step popover (calendar → product list) stays. Only the generation pipeline changes.
+Verified in DB: every recent `content_type = 'story'` row has `scheduled_date = 2026-05-31`, even though they were generated today (Jun 1) and the user picked Jun 1+. Image URLs are populated correctly — the only defect is the date.
 
-## Changes
+## Root cause
 
-### 1. `src/hooks/useAutoGenerate.ts`
-- Add optional params: `mode?: "story" | "post"` (default `"post"`), `product?: string`.
-- When `mode === "story"`:
-  - Placeholder rows insert with `content_type: "story"`, `title: product`, `content: ""`, `hashtags: []`.
-  - Forward `mode` and `product` in the `auto-generate-post` invoke body.
+`src/hooks/useAutoGenerate.ts` → `buildScheduledDate(baseDate, hour, minute)`:
 
-### 2. `supabase/functions/auto-generate-post/index.ts`
-- Read `mode` and `product` from body.
-- When `mode === "story"`:
-  - Skip the full Pixel system prompt / JSON caption generation entirely.
-  - Build 5 image prompts locally (one per `TIME_SLOTS` slot) — each prompt:
-    - Pins the subject to the single chosen `product` only (no city/skyline/crane filler).
-    - Requests **9:16 vertical / portrait framing**, full-bleed Instagram/Facebook Story composition, safe top/bottom margins.
-    - Uses 5 different camera angles / lighting setups from `VISUAL_STYLES` filtered to product-centric ones (macro, warehouse product shot, workshop close-up, dramatic lighting, blueprint-on-bench).
-    - Keeps the existing logo watermark rule (logo image attached as reference).
-    - Adds: "No text overlay, no slogan, no caption inside the image."
-  - Update the 5 placeholder rows with `image_url` only — do **not** overwrite `title`, `content`, `hashtags`, or `content_type`.
-  - Skip approval-record creation block (stories stay as drafts owned by user) — same path as current placeholder-only flow.
+```ts
+const d = new Date(baseDate);          // baseDate = "2026-06-01"
+const year  = d.getFullYear();         // parsed as UTC midnight
+const month = d.getMonth() + 1;        // → in EDT becomes 2026-05-31 20:00
+const day   = d.getDate();             // → returns 2026 / 5 / 31  ❌
+```
 
-### 3. `src/pages/SocialMediaManager.tsx`
-- In the "5 stories" popover product-button `onClick`, change the `generatePosts` call to:
-  ```ts
-  generatePosts({
-    mode: "story",
-    product,
-    platforms: ["unassigned"],
-    scheduledDate: format(storyPickedDate, "yyyy-MM-dd"),
-  });
-  ```
-- Drop the previous `customInstructions` / `themes` payload — the edge function owns the story prompt now.
+The Stories flow passes `scheduledDate: format(date, "yyyy-MM-dd")`. A bare `YYYY-MM-DD` string is parsed as UTC by the JS `Date` constructor, then `getFullYear/Month/Date` reads it in the browser's local timezone (Eastern), shifting it back one day.
 
-## Out of scope
-- No DB migration (`content_type` column already exists on `social_posts`).
-- No new edge function.
-- Image API still Gemini 2.5 flash image via chat-completions (9:16 framing is conveyed in the prompt — Gemini image doesn't accept a `size` param).
-- No change to "Add Card", "Generating…", approvals, or the rest of the page.
+The regular "auto-generate today" path passes `new Date().toISOString()` (a full timestamp with a current local time embedded), which usually keeps the same calendar date in Eastern time, so the bug is most visible on the Stories path.
+
+## Fix (single file, surgical)
+
+Edit `src/hooks/useAutoGenerate.ts`:
+
+1. Make `buildScheduledDate` accept either a `YYYY-MM-DD` string or a full ISO timestamp.
+2. When the input matches `/^\d{4}-\d{2}-\d{2}$/`, split the string and use the components directly (no `Date` parsing) — so "2026-06-01" stays Jun 1.
+3. Otherwise fall back to the existing `new Date(baseDate)` path for full ISO strings.
+
+Resulting builder (sketch):
+
+```ts
+function buildScheduledDate(baseDate: string, hour: number, minute: number): string {
+  let year: number, month: number, day: number;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(baseDate);
+  if (dateOnly) {
+    year = +dateOnly[1]; month = +dateOnly[2]; day = +dateOnly[3];
+  } else {
+    const d = new Date(baseDate);
+    year = d.getFullYear(); month = d.getMonth() + 1; day = d.getDate();
+  }
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  const hh = String(hour).padStart(2, "0");
+  const mi = String(minute).padStart(2, "0");
+  return new Date(`${year}-${mm}-${dd}T${hh}:${mi}:00-04:00`).toISOString();
+}
+```
+
+No other files change. The edge function, the placeholder insert path, and the Stories popover stay as-is.
 
 ## Verification
-- Click "5" → pick date → pick "Rebar Stirrups" → 5 cards appear at the 5 placeholder times on that date, each card empty caption, image is a vertical 9:16 stirrups close-up with logo watermark, `content_type = 'story'` in DB.
+
+1. Open Social Media Manager → click the pink 5-Stories icon → pick e.g. Jun 3 → pick "Rebar Cages".
+2. Confirm 5 placeholder cards appear in the **Wed Jun 3** column (Eastern time slots 06:30 / 07:30 / 08:00 / 12:30 / 14:30).
+3. After generation completes, confirm each card shows a 9:16 image (no caption).
+4. DB check: `select scheduled_date from social_posts where content_type='story' order by created_at desc limit 5;` — all five rows should be `2026-06-03 ...`.
+
+## Out of scope
+
+- Cleaning up the already-misplaced May 31 story rows (can be done separately if the user wants).
+- Any change to image generation, the edge function, the Stories prompt, or the popover UI — those are working.
