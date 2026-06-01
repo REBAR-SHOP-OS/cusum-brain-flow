@@ -999,6 +999,30 @@ export function PostReviewPanel({
                          <Smartphone className="w-3.5 h-3.5" />
                          Auto Generate Story
                        </Button>
+                       {isStory && (
+                         <Button
+                           variant="outline"
+                           size="sm"
+                           className="gap-1.5"
+                           disabled={regeneratingStory}
+                           onClick={async () => {
+                             setRegeneratingStory(true);
+                             try {
+                               await invokeEdgeFunction("regenerate-post", { post_id: post.id, image_only: true }, { timeoutMs: 120000 });
+                               queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                               toast({ title: "Story image regenerated", description: "New 9:16 image generated — caption preserved." });
+                             } catch (err: any) {
+                               console.error("Regenerate story error:", err);
+                               toast({ title: "Regeneration failed", description: err?.message || "Could not regenerate story image", variant: "destructive" });
+                             } finally {
+                               setRegeneratingStory(false);
+                             }
+                           }}
+                         >
+                           {regeneratingStory ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                           {regeneratingStory ? "Regenerating..." : "Regenerate Story"}
+                         </Button>
+                       )}
                        <Popover open={repostPopoverOpen} onOpenChange={setRepostPopoverOpen}>
                          <PopoverTrigger asChild>
                            <Button variant="outline" size="sm" className="gap-1.5">
