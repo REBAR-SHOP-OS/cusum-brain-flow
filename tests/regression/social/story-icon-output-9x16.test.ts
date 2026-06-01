@@ -30,6 +30,18 @@ describe("Story icon → 9:16 image generation + 9:16 card display", () => {
     expect(autoGenSrc).toMatch(/size:\s*"1024x1792"/);
   });
 
+  it("auto-generate-post hard-validates encoded Story bytes are exactly 1080x1920", () => {
+    // Decoded PNG dimensions must be asserted after the strict crop, so a model
+    // that lies about its canvas can never persist as a Story image.
+    expect(autoGenSrc).toMatch(/assertStoryDimensions\(bytes\)/);
+    expect(autoGenSrc).toMatch(/img\.width !== 1080 \|\| img\.height !== 1920/);
+  });
+
+  it("auto-generate-post never saves a Story card with a null image", () => {
+    // If generation fails, the placeholder is deleted — NOT overwritten with null.
+    expect(autoGenSrc).toMatch(/if \(!imageUrl\)[\s\S]{0,200}social_posts[\s\S]{0,80}\.delete\(\)/);
+  });
+
   it("PixelPostCard renders Story posts as aspect-[9/16], others as aspect-square", () => {
     expect(pixelCardSrc).toMatch(/content_type\?:\s*string/);
     expect(pixelCardSrc).toMatch(/isStory\s*=\s*post\.content_type\s*===\s*"story"/);
