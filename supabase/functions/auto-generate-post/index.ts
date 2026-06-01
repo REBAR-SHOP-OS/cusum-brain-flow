@@ -365,7 +365,7 @@ Deno.serve((req) =>
           ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
           : "";
         return (
-          `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait STORY BANNER (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. ` +
+          `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. ` +
           `PHOTOREALISTIC vertical portrait composition only. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
           styleBlock +
@@ -393,7 +393,7 @@ Deno.serve((req) =>
               body: JSON.stringify({
                 model: "openai/gpt-image-2",
                 prompt,
-                size: "1024x1536",
+                size: "1024x1792",
                 quality: "medium",
                 n: 1,
               }),
