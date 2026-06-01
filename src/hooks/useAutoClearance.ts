@@ -147,11 +147,15 @@ export function useAutoClearance({
   const manifestComplete = totalCount > 0 && pendingItems.length === 0;
 
   // Pre-normalize manifest candidates once; reused on every scan so we don't
-  // rebuild this list per capture.
+  // rebuild this list per capture. When a zone is selected, restrict matching
+  // candidates to items whose evidence is already tagged with that zone OR
+  // items with no zone yet (so the operator can still onboard them).
   const candidatesRef = useRef<any[]>([]);
   useEffect(() => {
+    const z = (selectedZone || "").trim();
     candidatesRef.current = items
       .filter((i) => i.evidence_status !== "cleared")
+      .filter((i) => !z || !i.storage_zone || i.storage_zone === z)
       .map((i) => ({
         id: i.id,
         mark_number: i.mark_number,
@@ -159,8 +163,11 @@ export function useAutoClearance({
         cut_length_mm: i.cut_length_mm,
         total_pieces: i.total_pieces,
         asa_shape_code: i.asa_shape_code,
+        drawing_ref: i.drawing_ref,
+        ref_no: i.ref_no,
+        storage_zone: i.storage_zone,
       }));
-  }, [items]);
+  }, [items, selectedZone]);
 
   useEffect(() => {
     if (manifestComplete && state !== "manifest_complete") {
