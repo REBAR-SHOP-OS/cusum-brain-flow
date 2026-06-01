@@ -1,61 +1,64 @@
-## Plan: enforce 9:16 for the Story icon path
+# Fix: "Zone update failed — column 'payload' of relation 'activity_events' does not exist"
 
-### Goal
-When the user clicks **Auto Generate Story** / the Story icon in Social Media Manager, the generated image must always be **vertical 9:16 portrait**. Square 1:1 images must never be accepted or saved.
+## Root cause
 
-### Root cause
-There are two different story-generation paths:
+When an operator picks a Storage Zone on a Clearance card, the update to `clearance_evidence.storage_zone` fires the trigger `public.log_clearance_zone_assignment()`. That function inserts into `public.activity_events` using a column called `payload`, but the table's JSONB column is actually named `metadata`. Every zone assignment therefore aborts with the Postgres error shown in the toast, and no zone is saved.
 
-1. **Batch story generation** via `auto-generate-post` already asks for 9:16, but its crop helper is lenient and can silently return the original square image if processing fails.
-2. **The right-panel Story icon** uses `ImageGeneratorDialog` -> `generate-image`. This path can still produce square images because:
-   - the fallback OpenAI branch hardcodes `size: "1024x1024"`
-   - server-side crop only runs for data URLs in one branch
-   - client-side `ensurePortrait()` can fail due remote/CORS issues and then falls back to the original square
-   - failures are treated as warnings instead of hard blocks
+No frontend/edge code references `activity_events`, so this is purely a DB-side fix.
 
-### Changes to implement
+## Change
 
-#### 1. Add strict image ratio enforcement
-File: `supabase/functions/_shared/imageResize.ts`
-- Add `cropToAspectRatioStrict(bytes, "9:16")`.
-- It will decode, crop/resize, then verify the final ratio.
-- If decoding/cropping/verification fails, it throws instead of returning original bytes.
-- Keep existing `cropToAspectRatio()` unchanged for other non-critical paths.
+One migration that replaces the trigger function with the correct column name. No table changes, no policy changes, no data migration.
 
-#### 2. Make Story batch generation strict
-File: `supabase/functions/auto-generate-post/index.ts`
-- Import and use `cropToAspectRatioStrict` for story images.
-- Strengthen the story prompt to say **9:16 vertical portrait only, never square, never landscape**.
-- If strict crop fails, do not upload the image; retry once.
-- If both attempts fail, leave no image instead of saving a square.
+```sql
+CREATE OR REPLACE FUNCTION public.log_clearance_zone_assignment()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _company_id uuid;
+BEGIN
+  IF NEW.storage_zone IS DISTINCT FROM COALESCE(OLD.storage_zone, NULL)
+     AND NEW.storage_zone IS NOT NULL THEN
+    SELECT cp.company_id INTO _company_id
+      FROM public.cut_plan_items ci
+      JOIN public.cut_plans cp ON cp.id = ci.cut_plan_id
+     WHERE ci.id = NEW.cut_plan_item_id
+     LIMIT 1;
 
-#### 3. Make regenerate image strict for Social posts/stories
-File: `supabase/functions/regenerate-post/index.ts`
-- Use `cropToAspectRatioStrict` in image-generation upload paths.
-- Any square/invalid image will be rejected before upload.
+    INSERT INTO public.activity_events (
+      company_id, event_type, entity_type, entity_id, actor_id, metadata
+    ) VALUES (
+      _company_id,
+      'audit',
+      'clearance_evidence',
+      NEW.id,
+      auth.uid(),
+      jsonb_build_object(
+        'action', 'storage_zone_assigned',
+        'cut_plan_item_id', NEW.cut_plan_item_id,
+        'previous_zone', OLD.storage_zone,
+        'new_zone', NEW.storage_zone
+      )
+    );
+  END IF;
+  RETURN NEW;
+END;
+$$;
+```
 
-#### 4. Fix the actual Story icon path
-File: `supabase/functions/generate-image/index.ts`
-- When `aspectRatio === "9:16"`, prepend a hard mandatory 9:16 instruction to the prompt.
-- In the Gemini path, run strict server-side 9:16 crop/validation for generated image bytes.
-- In the OpenAI fallback path, use portrait size (`1024x1536`) instead of `1024x1024`, then strict crop/validation before returning.
-- If strict validation fails, return an error; never return a square image.
+## Regression test
 
-#### 5. Stop client-side silent fallback for Story mode
-File: `src/components/social/ImageGeneratorDialog.tsx`
-- For `storyMode`, if `ensurePortrait()` fails, show an error and do not let the user use/save the image.
-- Keep non-story image generation behavior unchanged.
+Add `tests/regression/shopfloor/clearance-zone-trigger-column.test.ts` that greps the migration files to assert no `log_clearance_zone_assignment` definition references `payload`, so this typo cannot return.
 
-#### 6. Add regression coverage
-Add a regression test under `tests/regression/social/` that checks:
-- `generate-image` no longer has `size: "1024x1024"` for the 9:16/OpenAI story path.
-- Story/generate paths use strict crop enforcement for `9:16`.
-- The Story dialog sends `aspectRatio: "9:16"` and does not silently accept failed portrait enforcement.
+## Verification
 
-### Validation
-- Run the targeted regression test.
-- Re-read touched files to confirm there is one clear story 9:16 enforcement path and no leftover square fallback.
+1. Reload `/shopfloor/clearance`, pick a Storage Zone on any pending card → no error toast, zone persists.
+2. `select metadata from public.activity_events where event_type='audit' and entity_type='clearance_evidence' order by created_at desc limit 1;` shows the `storage_zone_assigned` payload.
+3. `vitest tests/regression/shopfloor/clearance-zone-trigger-column.test.ts` passes.
 
-### Out of scope
-- Existing already-saved square images will not be retroactively changed.
-- Regular non-story feed/ad image generation can remain square where intentionally requested.
+## Out of scope
+
+No changes to other `log_*` triggers, RLS, or the clearance UI — those are working and unaffected.
