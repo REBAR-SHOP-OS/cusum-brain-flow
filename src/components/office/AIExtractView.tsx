@@ -1210,7 +1210,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                     </label>
                     {!createNewProject ? (
                       <div className="flex items-center gap-2">
-                        <Popover>
+                        <Popover open={projectOpen} onOpenChange={setProjectOpen}>
                           <PopoverTrigger asChild>
                             <Button variant="outline" role="combobox" className="flex-1 justify-between bg-card border-border text-left font-normal h-10">
                               {selectedProjectId
