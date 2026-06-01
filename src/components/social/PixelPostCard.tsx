@@ -99,6 +99,8 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
     // Strip hashtags from caption to avoid duplication with hashtags field
     const cleanCaption = (post.caption || "").replace(/#[a-zA-Z]\w*/g, "").replace(/\s{2,}/g, " ").trim();
 
+    const isStory = post.content_type === "story";
+
     return (
       <div
         ref={ref}
@@ -109,7 +111,10 @@ const PixelPostCard = React.forwardRef<HTMLDivElement, PixelPostCardProps>(
           <img
             src={currentImageUrl}
             alt="Post preview"
-            className="w-full aspect-square object-cover"
+            className={cn(
+              "object-cover",
+              isStory ? "mx-auto aspect-[9/16] max-w-[280px] w-full" : "w-full aspect-square",
+            )}
           />
           <div className="absolute top-2 right-2 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
