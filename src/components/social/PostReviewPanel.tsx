@@ -155,6 +155,7 @@ export function PostReviewPanel({
   const { user } = useAuth();
   const canPublish = user?.email === "radin@rebar.shop" || user?.email === "zahra@rebar.shop";
   const [regenerating, setRegenerating] = useState(false);
+  const [regeneratingStory, setRegeneratingStory] = useState(false);
   const [regeneratingCaption, setRegeneratingCaption] = useState(false);
   const [approvingNeel, setApprovingNeel] = useState(false);
   // Always-editable local state for auto-save
