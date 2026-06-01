@@ -33,6 +33,7 @@ import { useStrategyChecklist } from "@/hooks/useStrategyChecklist";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
 import { ApprovalsPanel } from "@/components/social/ApprovalsPanel";
 import { DeclineReasonDialog } from "@/components/social/DeclineReasonDialog";
+import { StoryBannerReferences } from "@/components/social/StoryBannerReferences";
 
 const platformFilters = [
   { id: "all", label: "All" },
