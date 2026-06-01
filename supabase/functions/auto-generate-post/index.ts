@@ -719,7 +719,7 @@ Return an array of 5 objects:
             console.log(`Generating image for post ${idx + 1}/${generatedPosts.length}...`);
 
             // Build multimodal content with logo + brain refs
-            const ASPECT_9_16 = "MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n";
+            const ASPECT_9_16 = "ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n\n";
             const fullPrompt = ASPECT_9_16 + brainInstructionsText + post.image_prompt;
             const contentParts: any[] = [{ type: "text", text: fullPrompt }];
 
