@@ -231,14 +231,37 @@ Deno.serve((req) =>
       .single();
     const sessionCompanyId = sessionData?.company_id || null;
 
-    // Update session to extracting immediately
+    // Atomically claim the session to prevent concurrent extract-manifest invocations
+    // racing each other and producing duplicate-key violations on extract_rows
+    // (unique index on session_id,row_index). A run is considered stale and may be
+    // reclaimed if updated_at is older than 5 minutes.
     console.log(`Starting extraction for session ${sessionId}`);
-    const { error: statusErr } = await svcClient
+    const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: claimed, error: statusErr } = await svcClient
       .from("extract_sessions")
-      .update({ status: "extracting", progress: 0, error_message: null })
-      .eq("id", sessionId);
+      .update({ status: "extracting", progress: 0, error_message: null, updated_at: new Date().toISOString() })
+      .eq("id", sessionId)
+      .or(`status.neq.extracting,updated_at.lt.${staleCutoff}`)
+      .select("id");
     if (statusErr) console.error("Failed to update session status:", statusErr);
-    else console.log(`Session ${sessionId} marked as extracting`);
+    if (!claimed || claimed.length === 0) {
+      console.log(`Session ${sessionId} already being extracted by another invocation — exiting`);
+      return new Response(
+        JSON.stringify({ status: "already_running", sessionId }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    console.log(`Session ${sessionId} claimed for extraction`);
+
+    // Clear any rows left over from a previous (failed or stale) extraction run.
+    // Without this, a retry can collide with existing rows on the
+    // (session_id,row_index) unique index when the new row set has a different
+    // count/ordering than the old one.
+    const { error: clearErr } = await svcClient
+      .from("extract_rows")
+      .delete()
+      .eq("session_id", sessionId);
+    if (clearErr) console.error(`Failed to clear prior extract_rows for ${sessionId}:`, clearErr);
 
     // Run extraction synchronously — edge function stays alive up to 150s
     try {
