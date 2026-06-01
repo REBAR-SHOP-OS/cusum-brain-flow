@@ -731,10 +731,11 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 
     const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
       realismRule +
+      `THIS IS A COMPANY ADVERTISING BANNER for REBAR.SHOP — NOT a plain photo. It MUST look like a finished promotional ad with baked-in advertising text.\n\n` +
       `ABSOLUTELY NO DUPLICATES — every image must be unique in composition, angle, color palette, and scene.\n\n` +
       `VISUAL STYLE: ${effectiveStyle}. ` +
       `PRODUCT/TOPIC FOCUS: ${userProductFocus || newContent.title || post.title} for REBAR.SHOP. THEME: ${newContent.caption?.slice(0, 100)}. ` +
-      `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${newContent.imageText}"` +
+      `BAKED-IN ADVERTISING TEXT (MANDATORY, perfectly legible, bold sans-serif, spelled exactly, ENGLISH ONLY, no Persian/Arabic, no lorem ipsum, no gibberish): 1) HEADLINE / advertising slogan in the upper third over a darkened gradient strip: "${newContent.imageText}". 2) WORDMARK strip in the lower third: "REBAR.SHOP". 3) Small CALL-TO-ACTION line: "Call 647-260-9403  •  rebar.shop". An image without ALL THREE baked-in text elements is a FAILURE.` +
       brainImageHint +
       dedupHint +
       forbiddenHint +
