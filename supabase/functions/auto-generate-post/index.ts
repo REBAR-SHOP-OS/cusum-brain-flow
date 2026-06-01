@@ -386,6 +386,16 @@ Deno.serve((req) =>
       }
 
 
+      const ORIENTATION_BLOCK: Record<StoryAspect, string> = {
+        "9:16": `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. `,
+        "1:1":  `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 1:1 SQUARE: Generate a square image with width:height ratio exactly 1:1. Portrait or landscape output is FORBIDDEN. `,
+        "4:5":  `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 4:5 PORTRAIT: Generate a vertical portrait image with width:height ratio exactly 4:5. Square or landscape output is FORBIDDEN. `,
+        "16:9": `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 16:9 LANDSCAPE: Generate a horizontal landscape image with width:height ratio exactly 16:9. Portrait or square output is FORBIDDEN. `,
+      };
+      const COMPOSITION_WORD: Record<StoryAspect, string> = {
+        "9:16": "vertical portrait", "1:1": "square", "4:5": "vertical portrait", "16:9": "horizontal landscape",
+      };
+
       const buildStoryPrompt = (
         angle: string, lighting: string, palette: string, headline: string,
       ): string => {
@@ -394,9 +404,9 @@ Deno.serve((req) =>
           ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
           : "";
         return (
-          `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. ` +
-          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook story ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
-          `PHOTOREALISTIC vertical portrait composition only. ` +
+          ORIENTATION_BLOCK[storyAspect] +
+          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
+          `PHOTOREALISTIC ${COMPOSITION_WORD[storyAspect]} composition only. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
           styleBlock +
           `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
@@ -410,6 +420,7 @@ Deno.serve((req) =>
           `Variation seed: ${seed}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`
         );
       };
+
 
 
       const generateStoryImage = async (
