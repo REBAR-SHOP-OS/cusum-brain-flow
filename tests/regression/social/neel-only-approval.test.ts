@@ -1,5 +1,7 @@
+// @vitest-environment node
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { join } from "node:path";
 
 const root = process.cwd();
