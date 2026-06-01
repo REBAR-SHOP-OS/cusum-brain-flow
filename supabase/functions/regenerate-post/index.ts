@@ -717,9 +717,9 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n`;
 
     const qualitySuffix = userWantsNonRealistic
-      ? `- Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram\n` +
+      ? `- Ultra high resolution, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels — NEVER square\n` +
         `- Follow the "${effectiveStyle}" style with professional quality`
-      : `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
+      : `- Ultra high resolution, PHOTOREALISTIC ONLY, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels — NEVER square\n` +
         `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
     const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
