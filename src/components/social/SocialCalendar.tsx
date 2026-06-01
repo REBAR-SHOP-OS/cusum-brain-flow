@@ -350,6 +350,15 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                         </div>
                       </div>
                     )}
+                    {post.content_type === "story" && (
+                      <div className="mb-1.5 w-full aspect-[9/16] rounded-md overflow-hidden bg-muted flex items-center justify-center">
+                        {post.image_url
+                          ? (post.image_url.match(/\.(mp4|mov|webm)(\?|$)/i)
+                              ? <video src={post.image_url} muted className="w-full h-full object-cover" />
+                              : <img src={post.image_url} alt="Story preview" className="w-full h-full object-cover" loading="lazy" />)
+                          : <span className="text-[10px] text-muted-foreground">9:16</span>}
+                      </div>
+                    )}
                     <div className="flex items-center gap-1.5 mb-1">
                       <div className={cn("w-5 h-5 rounded flex items-center justify-center", pIcon.bg)}>
                         {pIcon.icon}
