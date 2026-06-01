@@ -170,6 +170,11 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
         try {
           setStatus("branding");
           finalImageUrl = await applyLogoToImage(finalImageUrl, brandKit.logo_url);
+          // Logo overlay redraws on a fresh canvas — re-enforce portrait so a
+          // Story can never slip through as a square after watermarking.
+          if (storyMode) {
+            finalImageUrl = await ensurePortrait(finalImageUrl);
+          }
         } catch (logoErr) {
           console.warn("Logo overlay failed, using image without logo:", logoErr);
         }

@@ -413,7 +413,23 @@ export function PostReviewPanel({
     if (!post) return;
     setUploading(true);
     try {
-      const permanentUrl = await uploadSocialMediaAsset(tempUrl, type);
+      let sourceUrl = tempUrl;
+      // Hard 9:16 gate for Story posts: never let a square/landscape image be
+      // persisted on a Story row. The dialogs already enforce portrait, this
+      // is the last-mile safety net before the file hits storage.
+      const postIsStory = (post.content_type === "story") || localContentType === "story";
+      if (type === "image" && postIsStory) {
+        try {
+          const { ensurePortrait } = await import("@/lib/imageWatermark");
+          sourceUrl = await ensurePortrait(tempUrl);
+        } catch (portraitErr) {
+          console.error("Story portrait enforcement failed:", portraitErr);
+          toast({ title: "Story image rejected", description: "Image was not valid 9:16 portrait.", variant: "destructive" });
+          setUploading(false);
+          return;
+        }
+      }
+      const permanentUrl = await uploadSocialMediaAsset(sourceUrl, type);
       updatePost.mutate({ id: post.id, image_url: permanentUrl });
       toast({
         title: type === "image" ? "Image attached" : "Video attached",
@@ -1703,6 +1719,7 @@ export function PostReviewPanel({
       <ImageGeneratorDialog
         open={showImageGen}
         onOpenChange={setShowImageGen}
+        storyMode={isStory}
         onImageReady={(url) => {
           setShowImageGen(false);
           handleMediaReady(url, "image");
