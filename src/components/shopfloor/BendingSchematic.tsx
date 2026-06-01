@@ -9,6 +9,12 @@ interface BendingSchematicProps {
    * inches (values are already stored as inches for imperial rows).
    */
   unitSystem?: string | null;
+  /**
+   * Raw source dimension strings (from cut_plan_items.source_dims_json).
+   * When present for a key, render verbatim (e.g. `3'-9"`) — matches the
+   * tag so operators see the exact value from the import.
+   */
+  sourceDims?: Record<string, string> | null;
 }
 
 function unitLabelFor(unitSystem: string | null | undefined): string {
