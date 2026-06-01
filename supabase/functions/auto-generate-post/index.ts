@@ -510,10 +510,10 @@ Deno.serve((req) =>
             await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
             continue;
           }
-          // Update image only; keep title=product, content="", content_type="story"
+          // Update image; content_type = "story" only for 9:16, else regular feed post.
           await supabaseAdmin
             .from("social_posts")
-            .update({ image_url: imageUrl, content_type: "story", title: product, content: "", hashtags: [] })
+            .update({ image_url: imageUrl, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
             .eq("id", phId);
           updateResults.push({ id: phId, image_url: imageUrl });
         }
