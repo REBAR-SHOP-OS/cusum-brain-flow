@@ -9,6 +9,12 @@ interface BendingSchematicProps {
    * inches (values are already stored as inches for imperial rows).
    */
   unitSystem?: string | null;
+  /**
+   * Raw source dimension strings (from cut_plan_items.source_dims_json).
+   * When present for a key, render verbatim (e.g. `3'-9"`) — matches the
+   * tag so operators see the exact value from the import.
+   */
+  sourceDims?: Record<string, string> | null;
 }
 
 function unitLabelFor(unitSystem: string | null | undefined): string {
@@ -20,7 +26,7 @@ function unitLabelFor(unitSystem: string | null | undefined): string {
   return "";
 }
 
-export function BendingSchematic({ dimensions, unitSystem }: BendingSchematicProps) {
+export function BendingSchematic({ dimensions, unitSystem, sourceDims }: BendingSchematicProps) {
   const unitLabel = unitLabelFor(unitSystem);
 
   if (!dimensions || Object.keys(dimensions).length === 0) {
@@ -43,22 +49,26 @@ export function BendingSchematic({ dimensions, unitSystem }: BendingSchematicPro
       
       <Card className="bg-card border border-border">
         <CardContent className="p-4 space-y-3">
-          {entries.map(([key, value]) => (
-            <div 
-              key={key} 
-              className="flex items-center justify-between py-2 border-b border-border last:border-b-0"
-            >
-              <span className={`text-xl font-bold ${getColorForDimension(key)}`}>
-                {key}
-              </span>
-              <span className="text-3xl font-black font-mono tabular-nums text-foreground">
-                {value}
-                {unitLabel && (
-                  <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
-                )}
-              </span>
-            </div>
-          ))}
+          {entries.map(([key, value]) => {
+            const raw = sourceDims?.[key];
+            const hasRaw = typeof raw === "string" && raw.trim() !== "";
+            return (
+              <div 
+                key={key} 
+                className="flex items-center justify-between py-2 border-b border-border last:border-b-0"
+              >
+                <span className={`text-xl font-bold ${getColorForDimension(key)}`}>
+                  {key}
+                </span>
+                <span className="text-3xl font-black font-mono tabular-nums text-foreground">
+                  {hasRaw ? raw : value}
+                  {!hasRaw && unitLabel && (
+                    <span className="text-sm text-muted-foreground ml-1 font-normal">{unitLabel}</span>
+                  )}
+                </span>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </div>
