@@ -114,6 +114,7 @@ export function useAutoGenerate() {
           placeholderIds,
           mode: options?.mode ?? "post",
           product: storyProduct,
+          aspectRatio,
         },
       });
       clearTimeout(timeout);
