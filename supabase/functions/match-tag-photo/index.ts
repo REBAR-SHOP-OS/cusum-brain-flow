@@ -239,12 +239,12 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields.',
+            content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG, REF. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields. MARK, DWG and REF are critical identifiers; never skip them when visible.',
           },
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear.' },
+              { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- dwg: the DWG / DRAWING cell content, e.g. "SD14", "S-14", "DWG-3"\n- ref: the REF / REFERENCE cell content (distinct from DWG), e.g. "R7", "REF-12"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear. MARK, DWG and REF are mandatory whenever readable.' },
               { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
@@ -253,12 +253,14 @@ Deno.serve(async (req) => {
           type: 'function',
           function: {
             name: 'extract_tag',
-            description: 'Return the extracted tag fields. Always include raw_text if any text is visible.',
+            description: 'Return the extracted tag fields. MARK, DWG and REF are mandatory whenever they are visible on the tag.',
             parameters: {
               type: 'object',
               properties: {
                 tag_number: { type: 'string' },
                 mark: { type: 'string' },
+                dwg: { type: 'string' },
+                ref: { type: 'string' },
                 bar_size: { type: 'string' },
                 grade: { type: 'string' },
                 length_text: { type: 'string' },
