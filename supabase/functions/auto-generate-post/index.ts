@@ -405,8 +405,10 @@ Deno.serve((req) =>
             const b64 = imgData.data?.[0]?.b64_json;
             if (!b64) return null;
             const binaryStr = atob(b64);
-            const bytes = new Uint8Array(binaryStr.length);
+            let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            // Enforce exact 9:16 portrait (never square, never 2:3)
+            bytes = await cropToAspectRatio(bytes, "9:16");
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
