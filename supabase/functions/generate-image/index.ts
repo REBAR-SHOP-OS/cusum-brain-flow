@@ -96,24 +96,24 @@ function buildAdPrompt(
   if (brandContext?.description) parts.push(`About: ${brandContext.description}`);
 
   parts.push("");
-  parts.push("TEXT & BRANDING INSTRUCTIONS:");
-  if (brandContext?.business_name) {
-    parts.push(`- Include the brand name "${brandContext.business_name}" as professional typography text on the image.`);
-  }
+  parts.push("MANDATORY ADVERTISING BANNER FORMAT — THIS IMAGE IS A COMPANY AD, NOT A PLAIN PHOTO:");
+  parts.push(`- The image MUST be designed as a professional ADVERTISING BANNER for ${brandName} — like a billboard, magazine ad, or social media promo card.`);
+  parts.push("- It MUST contain BAKED-IN, perfectly legible TEXT directly on the image (rendered by the model, not added later).");
+  parts.push("- REQUIRED text elements on the image:");
+  parts.push(`    1) A bold HEADLINE / advertising slogan (max 6 words) in the upper third or over a darkened gradient strip — short, catchy, emotional, billboard-style.`);
   if (brandContext?.tagline) {
-    parts.push(`- Include the advertising slogan: "${brandContext.tagline}" — render it as stylish, readable text overlay.`);
+    parts.push(`       Preferred headline text: "${brandContext.tagline}".`);
   }
+  parts.push(`    2) A clear WORDMARK strip with the brand name "${brandName}" in clean bold sans-serif typography.`);
+  parts.push(`    3) A short CALL-TO-ACTION line (e.g. "Call 647-260-9403", "Visit rebar.shop", "Order Today").`);
   if (brandContext?.value_prop) {
-    parts.push(`- Optionally include a short call-to-action or value phrase: "${brandContext.value_prop}".`);
+    parts.push(`       Preferred CTA / value phrase: "${brandContext.value_prop}".`);
   }
-  parts.push("- Place text with clean, bold, professional typography — suitable for social media ads.");
-  parts.push("- Text should be legible, well-contrasted against the background, and positioned in the lower third or a clean area.");
-  parts.push("- Do NOT include watermarks from stock sites.");
-  parts.push("- ALL text on the image MUST be in ENGLISH ONLY. ABSOLUTELY NO Persian, Farsi, Arabic, or any non-Latin script text anywhere in the image.");
-  parts.push("");
-  parts.push("MANDATORY BRANDING RULE:");
-  parts.push("- The final image MUST contain: 1) The company logo rendered clearly and prominently, 2) At least one line of advertising text (brand name, tagline, or CTA).");
-  parts.push("- If a logo image is provided, render it as a visible, professional part of the design — NOT a tiny watermark.");
+  parts.push("- Typography rules: clean bold sans-serif, high contrast over a darkened gradient bar or clean area, professionally kerned, perfectly spelled, NO lorem ipsum, NO gibberish, NO duplicated words.");
+  parts.push("- ALL text on the image MUST be in ENGLISH ONLY. ABSOLUTELY NO Persian, Farsi, Arabic, Cyrillic, or non-Latin script anywhere on the image.");
+  parts.push("- Do NOT include stock-site watermarks, photographer credits, or random captions.");
+  parts.push("- A photorealistic photo with NO baked-in advertising text is a FAILURE — the output MUST look like a finished company ad banner.");
+  parts.push("- If a logo image is provided, render it EXACTLY as-is as a visible part of the ad design — NOT a tiny corner watermark.");
 
   return parts.join("\n");
 }
