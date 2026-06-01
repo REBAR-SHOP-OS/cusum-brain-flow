@@ -113,3 +113,52 @@ export async function cropToAspectRatio(
     return imageBytes;
   }
 }
+
+/**
+ * Strict variant for hard requirements like Story 9:16.
+ * Throws instead of returning the original bytes if processing or final validation fails.
+ */
+export async function cropToAspectRatioStrict(
+  imageBytes: Uint8Array,
+  ratio: string
+): Promise<Uint8Array> {
+  const target = resolveTargetDimensions(ratio);
+  if (!target) {
+    throw new Error(`[imageResize] Cannot parse required ratio "${ratio}"`);
+  }
+
+  const img = await Image.decode(imageBytes);
+  const srcW = img.width;
+  const srcH = img.height;
+  const targetRatio = target.w / target.h;
+  const srcRatio = srcW / srcH;
+
+  let cropX = 0;
+  let cropY = 0;
+  let cropW = srcW;
+  let cropH = srcH;
+
+  if (srcRatio > targetRatio) {
+    cropW = Math.round(srcH * targetRatio);
+    cropX = Math.round((srcW - cropW) / 2);
+  } else if (srcRatio < targetRatio) {
+    cropH = Math.round(srcW / targetRatio);
+    cropY = Math.round((srcH - cropH) / 2);
+  }
+
+  const cropped = img.crop(cropX, cropY, cropW, cropH);
+  const resized = cropped.resize(target.w, target.h);
+  const actualRatio = resized.width / resized.height;
+  const ratioDelta = Math.abs(actualRatio - targetRatio) / targetRatio;
+  if (ratioDelta > 0.02) {
+    throw new Error(
+      `[imageResize] Strict ratio validation failed: got ${resized.width}x${resized.height}, expected ${ratio}`
+    );
+  }
+
+  const pngBytes = await resized.encode();
+  console.log(
+    `[imageResize] Strict cropped ${srcW}x${srcH} → ${cropW}x${cropH} → resized to ${target.w}x${target.h} (ratio: ${ratio})`
+  );
+  return new Uint8Array(pngBytes);
+}

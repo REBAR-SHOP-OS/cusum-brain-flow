@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { cropToAspectRatio } from "../_shared/imageResize.ts";
+import { cropToAspectRatio, cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 
 /** Search Pexels for a reference photo matching the prompt keywords */
 async function searchPexelsReference(query: string): Promise<string | null> {
@@ -116,6 +116,25 @@ function buildAdPrompt(
   parts.push("- If a logo image is provided, render it as a visible, professional part of the design — NOT a tiny watermark.");
 
   return parts.join("\n");
+}
+
+async function imageUrlToBytes(imageUrl: string): Promise<Uint8Array> {
+  if (imageUrl.startsWith("data:")) {
+    const b64 = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  }
+  const resp = await fetch(imageUrl);
+  if (!resp.ok) throw new Error(`Failed to download generated image: ${resp.status}`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+function bytesToPngDataUrl(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
+  return `data:image/png;base64,${btoa(binary)}`;
 }
 
 Deno.serve((req) =>
@@ -299,6 +318,9 @@ Instructions:
 
       // Step 2: Build advertising-optimized prompt with Pixel Brain context
       let adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl, aspectRatio);
+      if (aspectRatio === "9:16") {
+        adPrompt = `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n${adPrompt}`;
+      }
       if (brainInstructions) {
         adPrompt = `PRIORITY BRAND INSTRUCTIONS (from Pixel Brain):\n${brainInstructions}\n\n${adPrompt}`;
       }
@@ -379,14 +401,22 @@ Instructions:
       }
 
       // Enforce aspect ratio via server-side crop/resize if requested
-      if (aspectRatio && aspectRatio !== "1:1" && imageUrl.startsWith("data:")) {
+      if (aspectRatio && aspectRatio !== "1:1") {
         try {
-          const b64 = imageUrl.replace(/^data:image\/\w+;base64,/, "");
-          let imageBytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-          imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
-          imageUrl = `data:image/png;base64,${btoa(String.fromCharCode(...imageBytes))}`;
+          let imageBytes = await imageUrlToBytes(imageUrl);
+          imageBytes = aspectRatio === "9:16"
+            ? await cropToAspectRatioStrict(imageBytes, aspectRatio)
+            : await cropToAspectRatio(imageBytes, aspectRatio);
+          imageUrl = bytesToPngDataUrl(imageBytes);
           console.log(`[generate-image] Applied ${aspectRatio} crop to output`);
         } catch (cropErr) {
+          if (aspectRatio === "9:16") {
+            console.error("[generate-image] Strict 9:16 crop failed:", cropErr);
+            return new Response(
+              JSON.stringify({ error: "Generated image was not valid 9:16 portrait. Please try again." }),
+              { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+            );
+          }
           console.warn("[generate-image] Crop failed, returning uncropped:", cropErr);
         }
       }
@@ -406,6 +436,10 @@ Instructions:
       );
     }
 
+    const openAiPrompt = aspectRatio === "9:16"
+      ? `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n${prompt}`
+      : prompt;
+
     const resp = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
@@ -414,8 +448,8 @@ Instructions:
       },
       body: JSON.stringify({
         model: selectedModel === "gpt-image-1" ? "gpt-image-1" : "dall-e-3",
-        prompt,
-        size: "1024x1024",
+        prompt: openAiPrompt,
+        size: aspectRatio === "9:16" ? "1024x1536" : "1024x1024",
         quality: selectedModel === "gpt-image-1" ? "high" : "hd",
         n: 1,
       }),
@@ -441,7 +475,19 @@ Instructions:
       );
     }
     const imageData = data.data?.[0];
-    const imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : null);
+    let imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : null);
+    if (imageUrl && aspectRatio === "9:16") {
+      try {
+        const imageBytes = await cropToAspectRatioStrict(await imageUrlToBytes(imageUrl), "9:16");
+        imageUrl = bytesToPngDataUrl(imageBytes);
+      } catch (cropErr) {
+        console.error("[generate-image] OpenAI strict 9:16 crop failed:", cropErr);
+        return new Response(
+          JSON.stringify({ error: "Generated image was not valid 9:16 portrait. Please try again." }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     return new Response(
       JSON.stringify({ imageUrl, revisedPrompt: imageData?.revised_prompt || null, pexelsInspired: false }),

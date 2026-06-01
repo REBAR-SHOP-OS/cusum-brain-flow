@@ -156,6 +156,12 @@ export function ImageGeneratorDialog({ open, onOpenChange, onImageReady, storyMo
       try {
         finalImageUrl = storyMode ? await ensurePortrait(finalImageUrl) : await ensureSquare(finalImageUrl);
       } catch (e) {
+        if (storyMode) {
+          console.error("Story portrait enforcement failed:", e);
+          setError("Story images must be 9:16 portrait. This image was rejected because it could not be validated.");
+          setStatus("failed");
+          return;
+        }
         console.warn("Aspect ratio crop failed, using original:", e);
       }
 
