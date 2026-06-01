@@ -523,8 +523,7 @@ export function PostReviewPanel({
     if (!window.confirm("Are you sure you want to delete this post?")) return;
     setDeleting(true);
     try {
-      // Delete ONLY the current post. Never cascade to siblings — that was a bug
-      // that wiped unrelated cards sharing the same title/platform/day.
+      // Delete ONLY the current post. Never cascade to other cards.
       await deletePost.mutateAsync(post.id);
       toast({ title: "Deleted", description: "Post deleted." });
     } finally {
