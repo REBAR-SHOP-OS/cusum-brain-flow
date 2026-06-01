@@ -78,6 +78,7 @@ export default function SocialMediaManager() {
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [storyPopoverOpen, setStoryPopoverOpen] = useState(false);
   const [storyPickedDate, setStoryPickedDate] = useState<Date | null>(null);
+  const [storyProduct, setStoryProduct] = useState<string | null>(null);
    const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
   // Derive selectedPost from fresh query data so it updates after mutations
@@ -431,7 +432,11 @@ export default function SocialMediaManager() {
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0" align="start">
-              <StoryBannerReferences />
+              <StoryBannerReferences
+                products={STORY_PRODUCTS}
+                product={storyProduct}
+                onProductChange={setStoryProduct}
+              />
               {!storyPickedDate ? (
                 <div className="p-0">
                   <div className="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground">Step 1 · Pick a date</div>
@@ -465,6 +470,7 @@ export default function SocialMediaManager() {
                           const date = storyPickedDate;
                           setStoryPopoverOpen(false);
                           setStoryPickedDate(null);
+                          setStoryProduct(product);
                           setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
                           generatePosts({
                             mode: "story",

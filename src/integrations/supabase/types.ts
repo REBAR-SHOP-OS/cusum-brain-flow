@@ -14207,6 +14207,7 @@ export type Database = {
           created_at: string
           id: string
           image_url: string
+          product: string
           storage_path: string
           user_id: string
         }
@@ -14214,6 +14215,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url: string
+          product?: string
           storage_path: string
           user_id: string
         }
@@ -14221,6 +14223,7 @@ export type Database = {
           created_at?: string
           id?: string
           image_url?: string
+          product?: string
           storage_path?: string
           user_id?: string
         }

@@ -300,6 +300,7 @@ Deno.serve((req) =>
           .from("story_banner_references")
           .select("image_url")
           .eq("user_id", userId)
+          .eq("product", product)
           .order("created_at", { ascending: true })
           .limit(5);
         referenceImageUrls = (refs ?? []).map((r: any) => r.image_url).filter(Boolean);
