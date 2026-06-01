@@ -102,12 +102,14 @@ async function generatePixelImage(
 
   // Inject aspect ratio instruction at the START of prompt for maximum priority
   const aspectRatio = options?.imageAspectRatio || "9:16";
-  const dimensionMap: Record<string, string> = { "16:9": "1536×1024", "9:16": "1024×1536", "1:1": "1024×1024" };
+  const dimensionMap: Record<string, string> = { "16:9": "1920×1080", "9:16": "1080×1920", "1:1": "1536×1536" };
   const orientationMap: Record<string, string> = { "16:9": "LANDSCAPE (wider than tall)", "9:16": "PORTRAIT/VERTICAL (taller than wide)", "1:1": "SQUARE (equal width and height)" };
-  const aspectInstruction = `MANDATORY IMAGE DIMENSIONS: Generate in ${orientationMap[aspectRatio] || orientationMap["1:1"]} format (${dimensionMap[aspectRatio] || dimensionMap["1:1"]} pixels, ${aspectRatio} ratio). The output MUST strictly follow this aspect ratio.`;
+  const aspectInstruction = aspectRatio === "9:16"
+    ? `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.`
+    : `MANDATORY IMAGE DIMENSIONS: Generate in ${orientationMap[aspectRatio] || orientationMap["1:1"]} format (${dimensionMap[aspectRatio] || dimensionMap["1:1"]} pixels, ${aspectRatio} ratio). The output MUST strictly follow this aspect ratio.`;
   const finalPrompt = aspectInstruction + "\n\n" + fullPrompt;
 
-  const openaiSizeMap: Record<string, string> = { "16:9": "1536x1024", "9:16": "1024x1536", "1:1": "1024x1024" };
+  const openaiSizeMap: Record<string, string> = { "16:9": "1792x1024", "9:16": "1024x1792", "1:1": "1024x1024" };
 
   // ─── OpenAI gpt-image-1 path (when user selects ChatGPT) ───
   if (options?.preferredModel === "chatgpt") {
@@ -455,7 +457,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         `PRODUCT/TOPIC FOCUS: ${userProductFocus} for REBAR.SHOP. ` +
         `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${existingImageText}"` +
         ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}\n\n` +
-        `Ultra high resolution, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels. NEVER square.`;
+        `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.`;
 
       console.log("[regenerate-post] IMAGE-ONLY mode — caption preserved");
       const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, {
@@ -717,9 +719,9 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n`;
 
     const qualitySuffix = userWantsNonRealistic
-      ? `- Ultra high resolution, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels — NEVER square\n` +
+      ? `- ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n` +
         `- Follow the "${effectiveStyle}" style with professional quality`
-      : `- Ultra high resolution, PHOTOREALISTIC ONLY, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels — NEVER square\n` +
+      : `- ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n` +
         `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
     const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
