@@ -13,6 +13,23 @@ async function assertStoryDimensions(bytes: Uint8Array): Promise<void> {
   }
 }
 
+/** Generic dimension assertion for non-Story aspect ratios. */
+async function assertImageDimensions(bytes: Uint8Array, expectedW: number, expectedH: number): Promise<void> {
+  const img = await Image.decode(bytes);
+  if (img.width !== expectedW || img.height !== expectedH) {
+    throw new Error(`Image must be exactly ${expectedW}x${expectedH}, got ${img.width}x${img.height}`);
+  }
+}
+
+type StoryAspect = "9:16" | "1:1" | "4:5" | "16:9";
+const ASPECT_SIZE: Record<StoryAspect, { gpt: string; w: number; h: number }> = {
+  "9:16": { gpt: "1024x1792", w: 1080, h: 1920 },
+  "1:1":  { gpt: "1024x1024", w: 1536, h: 1536 },
+  "4:5":  { gpt: "1024x1280", w: 1228, h: 1536 },
+  "16:9": { gpt: "1792x1024", w: 1920, h: 1080 },
+};
+
+
 // buildEventPromptBlock removed — events are opt-in via chat only
 
 /** Resolve company logo URL from storage (same as Pixel agent) */
