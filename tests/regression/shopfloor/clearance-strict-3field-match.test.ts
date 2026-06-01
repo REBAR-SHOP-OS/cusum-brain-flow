@@ -1,12 +1,8 @@
 /**
+ * @vitest-environment node
+ *
  * Regression: Clearance Station must enforce strict MARK + DWG + Ref matching
  * and zone gating in the camera/match pipeline.
- *
- * - match-tag-photo edge function must score DWG and Ref alongside MARK, and
- *   must NOT auto-clear on MARK alone.
- * - useAutoClearance must pass drawing_ref / ref_no / storage_zone in the
- *   candidate payload and must read selectedZone.
- * - ClearanceStation must block Auto/Manual buttons until a zone is selected.
  */
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
