@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { cropToAspectRatio } from "../_shared/imageResize.ts";
 
 // buildEventPromptBlock removed — events are opt-in via chat only
 
