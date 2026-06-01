@@ -466,6 +466,14 @@ Deno.serve((req) =>
           const imageUrl = results[k];
           const phId = placeholderIds[idx];
           if (!phId) continue;
+          // HARD GATE: never save a Story card with a null/invalid image. If the
+          // 9:16 generation failed for this slot, leave the placeholder untouched
+          // (or delete it) instead of overwriting a previously valid image with null.
+          if (!imageUrl) {
+            console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
+            await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
+            continue;
+          }
           // Update image only; keep title=product, content="", content_type="story"
           await supabaseAdmin
             .from("social_posts")
