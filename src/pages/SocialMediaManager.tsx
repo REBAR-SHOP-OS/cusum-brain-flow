@@ -470,6 +470,7 @@ export default function SocialMediaManager() {
                           const date = storyPickedDate;
                           setStoryPopoverOpen(false);
                           setStoryPickedDate(null);
+                          setStoryProduct(product);
                           setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
                           generatePosts({
                             mode: "story",
