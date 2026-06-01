@@ -430,7 +430,8 @@ export default function SocialMediaManager() {
                 <span className="absolute -top-1 -right-1 text-[10px] font-bold bg-white text-pink-600 rounded-full w-5 h-5 flex items-center justify-center shadow">5</span>
               </button>
             </PopoverTrigger>
-            <PopoverContent className="w-auto p-0" align="start">
+            <PopoverContent className="w-72 p-0" align="start">
+              <StoryBannerReferences />
               {!storyPickedDate ? (
                 <div className="p-0">
                   <div className="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground">Step 1 · Pick a date</div>
