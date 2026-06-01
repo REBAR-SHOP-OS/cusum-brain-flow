@@ -435,7 +435,8 @@ Deno.serve((req) =>
               body: JSON.stringify({
                 model: "openai/gpt-image-2",
                 prompt,
-                size: "1024x1792",
+                // 9:16 → "1024x1792" (locked Story size); other ratios use ASPECT_SIZE map.
+                size: isStoryRatio ? "1024x1792" : aspectCfg.gpt,
                 quality: "medium",
                 n: 1,
               }),
@@ -450,11 +451,15 @@ Deno.serve((req) =>
             const binaryStr = atob(b64);
             let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
-            // Enforce exact 9:16 portrait (never square, never 2:3)
-            bytes = await cropToAspectRatioStrict(bytes, "9:16");
-            // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
-            // If anything upstream lied about the canvas, reject and retry.
-            await assertStoryDimensions(bytes);
+            if (isStoryRatio) {
+              // Enforce exact 9:16 portrait (never square, never 2:3)
+              bytes = await cropToAspectRatioStrict(bytes, "9:16");
+              // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
+              await assertStoryDimensions(bytes);
+            } else {
+              bytes = await cropToAspectRatioStrict(bytes, storyAspect);
+              await assertImageDimensions(bytes, aspectCfg.w, aspectCfg.h);
+            }
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
