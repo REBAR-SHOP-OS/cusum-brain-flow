@@ -135,8 +135,8 @@ export function useStationData(machineId: string | null, machineType?: string, p
           project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
           optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
         }))
-        .filter((item: StationItem) => allowedBarCodes.includes(item.bar_code))
-        .filter((item: StationItem) => {
+        .filter((item: any) => allowedBarCodes.includes(item.bar_code))
+        .filter((item: any) => {
           const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
           const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
           const ALLOWED_ON_CUTTER_01 = new Set(["10M", "15M"]);
