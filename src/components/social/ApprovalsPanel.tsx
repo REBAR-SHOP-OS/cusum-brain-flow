@@ -149,9 +149,10 @@ export function ApprovalsPanel() {
                         <Button
                           onClick={() => handleApprove(approval.id, approval.post_id)}
                           className="flex-1 gap-1.5"
-                          disabled={approvePost.isPending}
+                          disabled={approvePost.isPending || !canApprove}
+                          title={canApprove ? undefined : "Only neel@rebar.shop can approve posts"}
                         >
-                          <CheckCircle className="w-4 h-4" /> Approve
+                          <CheckCircle className="w-4 h-4" /> {canApprove ? "Approve" : "Approve (Neel only)"}
                         </Button>
                         <Button
                           onClick={() => handleReject(approval.id, approval.post_id)}
