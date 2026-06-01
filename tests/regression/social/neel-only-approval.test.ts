@@ -29,7 +29,6 @@ describe("HARD RULE: only neel@rebar.shop may approve social posts", () => {
   });
 
   it("DB trigger enforce_neel_only_approval is present in migrations", () => {
-    const { execSync } = require("node:child_process") as typeof import("node:child_process");
     const out = execSync(
       "grep -rl enforce_neel_only_approval supabase/migrations || true",
       { encoding: "utf8" },
