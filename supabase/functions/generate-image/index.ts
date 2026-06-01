@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { handleRequest } from "../_shared/requestHandler.ts";
 import { corsHeaders } from "../_shared/auth.ts";
-import { cropToAspectRatio } from "../_shared/imageResize.ts";
+import { cropToAspectRatio, cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 
 /** Search Pexels for a reference photo matching the prompt keywords */
 async function searchPexelsReference(query: string): Promise<string | null> {
@@ -116,6 +116,25 @@ function buildAdPrompt(
   parts.push("- If a logo image is provided, render it as a visible, professional part of the design — NOT a tiny watermark.");
 
   return parts.join("\n");
+}
+
+async function imageUrlToBytes(imageUrl: string): Promise<Uint8Array> {
+  if (imageUrl.startsWith("data:")) {
+    const b64 = imageUrl.replace(/^data:image\/\w+;base64,/, "");
+    return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+  }
+  const resp = await fetch(imageUrl);
+  if (!resp.ok) throw new Error(`Failed to download generated image: ${resp.status}`);
+  return new Uint8Array(await resp.arrayBuffer());
+}
+
+function bytesToPngDataUrl(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.slice(i, i + chunkSize));
+  }
+  return `data:image/png;base64,${btoa(binary)}`;
 }
 
 Deno.serve((req) =>
