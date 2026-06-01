@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
-import { cropToAspectRatio } from "../_shared/imageResize.ts";
+import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 
 // buildEventPromptBlock removed — events are opt-in via chat only
 
@@ -365,7 +365,8 @@ Deno.serve((req) =>
           ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
           : "";
         return (
-          `PHOTOREALISTIC vertical portrait STORY BANNER, 2:3 / 9:16 aspect, taller than wide. ` +
+          `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait STORY BANNER (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. ` +
+          `PHOTOREALISTIC vertical portrait composition only. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
           styleBlock +
           `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
@@ -408,7 +409,7 @@ Deno.serve((req) =>
             let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
             // Enforce exact 9:16 portrait (never square, never 2:3)
-            bytes = await cropToAspectRatio(bytes, "9:16");
+            bytes = await cropToAspectRatioStrict(bytes, "9:16");
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
@@ -427,6 +428,7 @@ Deno.serve((req) =>
             return pubUrl.publicUrl;
           } catch (e) {
             console.error("Story image error:", e);
+            if (attempt === 0) continue;
             return null;
           }
         }
@@ -787,7 +789,7 @@ Return an array of 5 objects:
             let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
             // Enforce exact 9:16 portrait — Gemini ignores size, so crop server-side
-            bytes = await cropToAspectRatio(bytes, "9:16");
+            bytes = await cropToAspectRatioStrict(bytes, "9:16");
             const blob = new Blob([bytes], { type: "image/png" });
 
             const fileName = `images/${crypto.randomUUID()}.png`;
