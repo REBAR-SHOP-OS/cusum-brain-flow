@@ -807,11 +807,16 @@ Rules:
           savedCount = dedupedRows.length;
           console.log(`Rows to insert: ${savedCount}`);
 
-          // Batch insert rows (50 at a time) to avoid edge function timeout
+          // Batch upsert rows (50 at a time). Upsert on (session_id,row_index)
+          // makes a retried extract-manifest invocation idempotent: a second
+          // run for the same session updates rows in place instead of
+          // double-inserting them (the source of the /office duplicate bug).
           const BATCH_SIZE = 50;
           for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
             const batch = dedupedRows.slice(i, i + BATCH_SIZE);
-            const { error: insertErr } = await svcClient.from("extract_rows").insert(batch);
+            const { error: insertErr } = await svcClient
+              .from("extract_rows")
+              .upsert(batch, { onConflict: "session_id,row_index", ignoreDuplicates: false });
             if (insertErr) throw new Error(`Failed to save rows batch ${i}: ${insertErr.message}`);
             const pct = 85 + Math.round(((i + batch.length) / dedupedRows.length) * 14);
             await svcClient.from("extract_sessions").update({ progress: pct }).eq("id", sessionId);
