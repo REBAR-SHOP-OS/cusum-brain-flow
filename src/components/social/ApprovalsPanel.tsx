@@ -23,6 +23,7 @@ export function ApprovalsPanel() {
   const { posts } = useSocialPosts();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState<Record<string, string>>({});
+  const [showHistory, setShowHistory] = useState(false);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
 
   useEffect(() => {
