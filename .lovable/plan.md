@@ -1,34 +1,31 @@
-## Goal
-Make every image generated from the Story icon/request path a true 9:16 vertical story image, not square. The fix will prioritize instructing the image model itself with an explicit 9:16 requirement and prevent square output settings from being sent.
+## هدف
+بنرهایی که LLM می‌سازد باید مثل تبلیغ شرکت باشند و حتماً متن خوانا روی خود تصویر داشته باشند، نه فقط عکس محصول.
 
-## Plan
-1. **Strengthen the LLM prompt for Story generation**
-   - Update the Story prompt sent to the image model so the first instruction is an explicit hard contract:
-     - output must be vertical portrait
-     - exact story aspect ratio 9:16
-     - target dimensions 1080×1920 or equivalent 9:16
-     - square 1:1 output is forbidden
-   - Apply this to the manual Story icon flow and the automated story generation flow.
+## پلن اجرا
+1. **تقویت prompt تولید تصویر بنر/استوری**
+   - در همه مسیرهای تولید تصویر اجتماعی، یک قانون اجباری اضافه می‌کنم که تصویر باید شامل متن تبلیغاتی روی خود تصویر باشد.
+   - متن باید کوتاه، انگلیسی، خوانا، بولد، تبلیغاتی و مناسب REBAR.SHOP باشد.
+   - مدل باید متن را مثل بنر تبلیغاتی واقعی در upper/lower third یا فضای تمیز تصویر قرار دهد.
 
-2. **Fix the actual model request dimensions**
-   - Replace the current 2:3-ish request size (`1024x1536`) in Story image calls with a real 9:16-compatible size where the model/API supports it, such as `1024x1792`.
-   - Ensure no Story path sends `1024x1024`.
+2. **هماهنگ‌سازی مسیرهای مختلف تولید**
+   - `generate-image` برای تولید دستی بنر/استوری.
+   - `auto-generate-post` برای ساخت خودکار بنرهای تقویم و استوری.
+   - `regenerate-post` برای regenerate image و full regeneration.
+   - `ai-agent` برای مسیر Pixel/social agent.
 
-3. **Keep server-side enforcement as the safety net**
-   - Keep the existing strict server crop/validation so even if the model returns the wrong shape, the stored/displayed result is forced to 9:16 or rejected.
-   - Update the resize target so strict 9:16 output is stored as a true 9:16 portrait size, not 2:3.
+3. **حفظ قانون قبلی 9:16 برای Story**
+   - هیچ تغییری که enforcement ابعاد 9:16 را ضعیف کند انجام نمی‌شود.
+   - prompt جدید متن تبلیغاتی، بعد از دستور قطعی 9:16 اضافه می‌شود تا نسبت تصویر همچنان اولویت اول بماند.
 
-4. **Fix display paths that visually make stories look square**
-   - Adjust the story preview/zoom/card rendering so Story posts use a portrait `aspect-[9/16]` container instead of square `aspect-square` where applicable.
-   - This avoids a correct 9:16 image being displayed inside a square crop.
+4. **جلوگیری از خروجی‌های بدون متن یا غیرتبلیغاتی**
+   - برای هر image prompt الزام می‌شود که حداقل یک headline/tagline/CTA روی تصویر باشد.
+   - متن‌های generic، gibberish، lorem ipsum، متن فارسی/عربی روی خود تصویر، watermark اشتباه، و لوگوی بازطراحی‌شده ممنوع می‌شود.
 
-5. **Regression coverage**
-   - Update the existing regression test to assert:
-     - Story prompts contain mandatory 9:16 wording.
-     - Story request size is 9:16-compatible.
-     - Story UI passes `aspectRatio: "9:16"`.
-     - Story display paths do not force story images into square presentation.
+5. **تست رگرسیون**
+   - تست موجود social image generation را گسترش می‌دهم تا بررسی کند promptها شامل الزام متن تبلیغاتی روی تصویر هستند.
+   - تست همچنان بررسی می‌کند 9:16 با `1024x1792` و خروجی `1080x1920` حفظ شده است.
 
-## Validation
-- Run the targeted regression test for story images.
-- Verify the relevant source now contains no square request size in Story paths and that Story UI displays portrait images.
+## معیار پایان کار
+- هر مسیر تولید تصویر اجتماعی به LLM دستور صریح می‌دهد که بنر تبلیغاتی شرکت با متن خوانای روی تصویر بسازد.
+- Story همچنان 9:16 واقعی می‌ماند.
+- regression test این دو قانون را پوشش می‌دهد.

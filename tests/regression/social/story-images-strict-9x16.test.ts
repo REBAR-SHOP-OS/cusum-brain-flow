@@ -61,4 +61,22 @@ describe("Social story images are strictly 9:16", () => {
     expect(regenerateSrc).toMatch(/"9:16": "1024x1792"/);
     expect(postReviewPanelSrc).toMatch(/isStory[\s\S]*aspect-\[9\/16\]/);
   });
+
+  it("forces LLM to bake advertising text onto every generated banner", () => {
+    // Story prompt requires headline + wordmark + CTA
+    expect(autoGenerateSrc).toMatch(/BAKED-IN ADVERTISING TEXT \(MANDATORY/);
+    expect(autoGenerateSrc).toMatch(/Call 647-260-9403/);
+    expect(autoGenerateSrc).toMatch(/COMPANY ADVERTISING BANNER/);
+
+    // Calendar post system prompt requires baked-in ad text
+    expect(autoGenerateSrc).toMatch(/BAKED-IN ADVERTISING TEXT IS MANDATORY/);
+
+    // Manual generate-image dialog enforces banner format with text
+    expect(generateImageSrc).toMatch(/MANDATORY ADVERTISING BANNER FORMAT/);
+    expect(generateImageSrc).toMatch(/BAKED-IN, perfectly legible TEXT/);
+
+    // Regenerate (image-only + full) require baked-in advertising text
+    expect(regenerateSrc).toMatch(/COMPANY ADVERTISING BANNER for REBAR\.SHOP/);
+    expect(regenerateSrc).toMatch(/BAKED-IN ADVERTISING TEXT \(MANDATORY/);
+  });
 });
