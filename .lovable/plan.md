@@ -1,60 +1,47 @@
-# Plan — Let user pick image aspect ratio before generating Story cards
+## Goal
+Restrict post approval to **only** `neel@rebar.shop`. Currently `sattar@rebar.shop` and `radin@rebar.shop` can also approve (via the "Approve Post" button in `PostReviewPanel`) and any `social_approvals` row can be flipped to `approved` by the marketing team via `ApprovalsPanel`. Both paths must be locked to Neel.
 
-## Scope
-The popover in the screenshot (pink/orange Clapperboard button, "5" badge) on `/social-media-manager`. Today it has two steps:
-1. Pick a date
-2. Pick a product → immediately generates 5 cards at hard‑locked 9:16
+## Changes
 
-The user wants an extra step where they choose the dimensions of the image that the LLM will generate.
+### 1. Frontend — `src/components/social/PostReviewPanel.tsx` (line 1412)
+Tighten the gate from a 3-email allowlist to a single email:
+- `currentUserEmail === "neel@rebar.shop"` only.
+- Sattar / Radin fall through to the disabled **"Awaiting Approval"** button.
 
-## UX change (only this popover)
-New 3‑step flow inside `StoryBannerReferences` popover in `src/pages/SocialMediaManager.tsx`:
+### 2. Frontend — `src/components/social/ApprovalsPanel.tsx`
+Hide / disable the **Approve** button (line 139-145) unless `currentUserEmail === "neel@rebar.shop"`. Read the email from the existing auth hook used elsewhere. Reject remains available for all reviewers (only approval is locked).
 
-```text
-Step 1 · Pick a date      (unchanged)
-Step 2 · Pick image size  ← NEW
-Step 3 · Pick a product   (was Step 2)
+### 3. Server-side hard gate — new migration
+Add a DB trigger on `public.social_posts` that **rejects any update** flipping `neel_approved` from `false`→`true` unless the acting user's email is `neel@rebar.shop`. This is the real enforcement — frontend changes alone can be bypassed via direct API calls.
+
+```sql
+CREATE OR REPLACE FUNCTION public.enforce_neel_only_approval()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+DECLARE acting_email text;
+BEGIN
+  IF NEW.neel_approved IS DISTINCT FROM OLD.neel_approved AND NEW.neel_approved = true THEN
+    SELECT lower(email) INTO acting_email FROM auth.users WHERE id = auth.uid();
+    IF acting_email <> 'neel@rebar.shop' THEN
+      RAISE EXCEPTION 'Only neel@rebar.shop can approve social posts';
+    END IF;
+  END IF;
+  RETURN NEW;
+END $$;
+
+CREATE TRIGGER trg_enforce_neel_only_approval
+  BEFORE UPDATE ON public.social_posts
+  FOR EACH ROW EXECUTE FUNCTION public.enforce_neel_only_approval();
 ```
 
-Step 2 options (vertical list, same visual style as Step 2 today):
-- 9:16 — Story / Reel (default, pre-selected)
-- 1:1  — Square (Feed)
-- 4:5  — Portrait (Feed)
-- 16:9 — Landscape
+Service-role / cron paths are unaffected because `auth.uid()` is null there — the trigger will block those too, so cron publish (which reads `neel_approved`, doesn't flip it) is fine. Auto-generate inserts with `neel_approved=false` so INSERTs are not gated.
 
-"← Back" returns to the previous step. Selecting an option advances to the next step; the product list only triggers generation on click as it does today.
+### 4. Regression test — `tests/regression/social/neel-only-approval.test.ts`
+Static check: assert `PostReviewPanel.tsx` only references `neel@rebar.shop` in the approve gate (no `sattar`, no `radin` in that conditional), and `ApprovalsPanel` guards `handleApprove` by email.
 
-No changes to: Add Card (blue), Approved posts, Brand Kit, calendar grid, post cards, PostReviewPanel, publish flow, Neel approval gate.
+### 5. Memory update
+Update the existing **Neel Approval Gate (HARD)** core rule in `mem://index.md` to add: "Only `neel@rebar.shop` may set `neel_approved=true`. No other admin/marketing user, ever. Enforced by DB trigger + frontend gate."
 
-## Data flow
-1. `useAutoGenerate.generatePosts` gains an optional `aspectRatio?: "9:16" | "1:1" | "4:5" | "16:9"` (default `"9:16"` when `mode === "story"`, else unchanged).
-2. It is forwarded in the edge-function body as `aspectRatio`.
-3. `supabase/functions/auto-generate-post/index.ts`:
-   - Map ratio → image size for the gateway call:
-     - 9:16 → `1024x1792`
-     - 1:1  → `1024x1024`
-     - 4:5  → `1024x1280`
-     - 16:9 → `1792x1024`
-   - Pass that ratio into `cropToAspectRatioStrict(..., aspectRatio)`.
-   - `assertStoryDimensions` is renamed to `assertImageDimensions(bytes, expectedWxH)` and validates against the chosen ratio's exact pixel size; on mismatch the slot still fails (null images are still deleted, per existing hard gate).
-4. `content_type` stays `"story"` only when the chosen ratio is `9:16` (preserves the Story display + publish path). For 1:1 / 4:5 / 16:9 the placeholder rows are inserted with `content_type: null` (regular post) so `PixelPostCard` / `PostReviewPanel` render them as standard square/landscape cards — no UI changes needed there.
-
-## Hard-rule check
-- HARD: "AI Video Director videos must be silent." — unaffected, this is image generation only.
-- HARD: Story 9:16 enforcement — preserved: when the user picks 9:16 the existing strict crop + dimension assertion + Story rendering path runs unchanged. Other ratios are treated as regular posts, not Stories, so the Story contract is not loosened.
-- HARD: Neel approval gate — unaffected.
-
-## Regression test
-Update `tests/regression/social/story-icon-output-9x16.test.ts` (or add a sibling `story-icon-aspect-ratio.test.ts`) to lock:
-- Popover exposes the 4 ratio options.
-- `generatePosts` forwards `aspectRatio` to the edge function.
-- Edge function maps ratio → size and calls `cropToAspectRatioStrict` + `assertImageDimensions` with the matching dimensions.
-- Picking 9:16 still writes `content_type: "story"`; other ratios write `content_type: null`.
-
-## Files touched
-- `src/pages/SocialMediaManager.tsx` — add Step 2 ratio picker, thread `aspectRatio` into `generatePosts`.
-- `src/hooks/useAutoGenerate.ts` — accept + forward `aspectRatio`, set `content_type` based on ratio.
-- `supabase/functions/auto-generate-post/index.ts` — generalize size + strict-crop + dimension assertion to the chosen ratio.
-- `tests/regression/social/story-icon-output-9x16.test.ts` — extend coverage.
-
-Out of scope: Add Card (blue) flow, manual `AI Image` regenerate dialog, video aspect handling, calendar layout.
+## Out of scope
+- Reject flow stays open to the marketing team.
+- Auto-generate / Vizzy paths unchanged (they never set `neel_approved=true`).
+- No changes to publish gate logic itself (it already requires `neel_approved=true`).
