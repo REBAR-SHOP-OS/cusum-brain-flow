@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Clock, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { getCurrentUser } from "@/lib/auth";
 import { formatDistanceToNow } from "date-fns";
 
 const platformColors: Record<string, string> = {
@@ -23,6 +24,15 @@ export function ApprovalsPanel() {
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState<Record<string, string>>({});
   const [showHistory, setShowHistory] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCurrentUser().then((u) => setCurrentUserEmail(u?.email ?? null));
+  }, []);
+
+  // HARD RULE: only neel@rebar.shop may approve. All other reviewers can reject only.
+  const canApprove = currentUserEmail === "neel@rebar.shop";
+
 
   const getPost = (postId: string): SocialPost | undefined =>
     posts.find((p) => p.id === postId);
@@ -139,9 +149,10 @@ export function ApprovalsPanel() {
                         <Button
                           onClick={() => handleApprove(approval.id, approval.post_id)}
                           className="flex-1 gap-1.5"
-                          disabled={approvePost.isPending}
+                          disabled={approvePost.isPending || !canApprove}
+                          title={canApprove ? undefined : "Only neel@rebar.shop can approve posts"}
                         >
-                          <CheckCircle className="w-4 h-4" /> Approve
+                          <CheckCircle className="w-4 h-4" /> {canApprove ? "Approve" : "Approve (Neel only)"}
                         </Button>
                         <Button
                           onClick={() => handleReject(approval.id, approval.post_id)}
