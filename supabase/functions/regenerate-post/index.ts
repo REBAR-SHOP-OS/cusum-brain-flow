@@ -101,7 +101,7 @@ async function generatePixelImage(
     : prompt;
 
   // Inject aspect ratio instruction at the START of prompt for maximum priority
-  const aspectRatio = options?.imageAspectRatio || "1:1";
+  const aspectRatio = options?.imageAspectRatio || "9:16";
   const dimensionMap: Record<string, string> = { "16:9": "1536×1024", "9:16": "1024×1536", "1:1": "1024×1024" };
   const orientationMap: Record<string, string> = { "16:9": "LANDSCAPE (wider than tall)", "9:16": "PORTRAIT/VERTICAL (taller than wide)", "1:1": "SQUARE (equal width and height)" };
   const aspectInstruction = `MANDATORY IMAGE DIMENSIONS: Generate in ${orientationMap[aspectRatio] || orientationMap["1:1"]} format (${dimensionMap[aspectRatio] || dimensionMap["1:1"]} pixels, ${aspectRatio} ratio). The output MUST strictly follow this aspect ratio.`;
