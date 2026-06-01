@@ -288,7 +288,7 @@ Deno.serve((req) =>
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
 
-    const { post_id, caption_only, image_only, is_video, selectedProducts, imageStyles, story_mode } = body;
+    const { post_id, caption_only, image_only, is_video, selectedProducts, imageStyles, story_mode, variation_hint, product: productOverride } = body;
     if (!post_id) throw new Error("post_id is required");
 
     // 1. Fetch post
@@ -434,8 +434,12 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       // is passed so the model can't inherit a square aspect from the prior image.
       const isStoryPost = story_mode === true || post.content_type === "story";
       if (isStoryPost) {
-        const headline = (post.title || "RebarShop").slice(0, 60);
-        const product = post.title || "rebar and steel reinforcement products";
+        const product = (productOverride && String(productOverride)) || post.title || "rebar and steel reinforcement products";
+        const hint = (variation_hint && typeof variation_hint === "object") ? variation_hint : {};
+        const headline = String(hint.headline || post.title || "RebarShop").slice(0, 80);
+        const angle = String(hint.angle || "professional product hero composition");
+        const lighting = String(hint.lighting || "dramatic studio lighting with soft fill");
+        const palette = String(hint.palette || "industrial steel grays with brand accents");
         const sessionSeed = crypto.randomUUID();
 
         const buildStoryImagePrompt = () =>
@@ -443,6 +447,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
           `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
           `PHOTOREALISTIC vertical portrait composition only. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
+          `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
           `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
           `BAKED-IN ADVERTISING TEXT (MANDATORY — perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish, no duplicated words, ENGLISH ONLY, NO Persian/Arabic/non-Latin script): ` +
           `1) Large bold HEADLINE / advertising slogan in the UPPER THIRD over a darkened gradient strip: "${headline}". High contrast (bright white or brand primary on dark gradient bar). Billboard-style typography. ` +
