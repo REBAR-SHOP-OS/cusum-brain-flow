@@ -134,6 +134,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [selectedBarlistId, setSelectedBarlistId] = useState<string>("");
   const [createNewProject, setCreateNewProject] = useState(false);
+  const [projectOpen, setProjectOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [createNewBarlist, setCreateNewBarlist] = useState(false);
   const [newRevision, setNewRevision] = useState(false);
