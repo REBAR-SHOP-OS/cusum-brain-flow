@@ -463,6 +463,8 @@ export function useAutoClearance({
         ensureEvidenceRow(candidateId),
         uploadToStorage(candidateId, "tag", blob),
       ]);
+      const ocrHeld: any = pendingTagOcrRef.current?.ocr || lastOcr || {};
+      const mismatchHeld: string | null = pendingTagOcrRef.current?.mismatchReason ?? null;
       const { error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
@@ -471,6 +473,14 @@ export function useAutoClearance({
           verification_method: "assisted",
           ai_confidence: lastConfidence,
           ocr_metadata: { ...(pendingTagOcrRef.current || { ocr: lastOcr }), picked: candidateId },
+          ocr_mark: ocrHeld.mark || ocrHeld.tag_number || null,
+          ocr_dwg: ocrHeld.dwg || null,
+          ocr_ref: ocrHeld.ref || null,
+          matched_mark: match.mark_number,
+          matched_dwg: match.drawing_ref,
+          matched_ref: match.ref_no,
+          match_confidence: lastConfidence,
+          mismatch_reason: mismatchHeld,
         })
         .eq("id", evId);
       if (pickUpErr) throw pickUpErr;
