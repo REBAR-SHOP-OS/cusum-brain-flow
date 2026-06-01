@@ -366,16 +366,18 @@ Deno.serve((req) =>
           : "";
         return (
           `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. ` +
+          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook story ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
           `PHOTOREALISTIC vertical portrait composition only. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
           styleBlock +
           `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
           `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
-          `BAKED-IN TEXT (must be perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish): ` +
-          `1) Large bold headline in the UPPER THIRD over a subtle darkened gradient strip: "${headline}". ` +
-          `2) Small wordmark strip in the LOWER THIRD: "REBAR.SHOP  —  ${product}". ` +
-          `Headline color: bright high-contrast (white or brand primary) over a dark gradient bar so it stays readable. ` +
-          `No other text anywhere in the image. No watermarks beyond the wordmark above. ` +
+          `BAKED-IN ADVERTISING TEXT (MANDATORY — perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish, no duplicated words, ENGLISH ONLY, NO Persian/Arabic/non-Latin script): ` +
+          `1) Large bold HEADLINE / advertising slogan in the UPPER THIRD over a darkened gradient strip: "${headline}". High contrast (bright white or brand primary on dark gradient bar). Billboard-style typography. ` +
+          `2) WORDMARK strip in the LOWER THIRD: "REBAR.SHOP  —  ${product}" in clean bold sans-serif. ` +
+          `3) Small CALL-TO-ACTION line under the wordmark: "Call 647-260-9403  •  rebar.shop". ` +
+          `An image without ALL THREE baked-in text elements is a FAILURE — output MUST look like a finished promotional ad. ` +
+          `No other text anywhere. No stock-site watermarks. No photographer credits. ` +
           `Variation seed: ${seed}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`
         );
       };
