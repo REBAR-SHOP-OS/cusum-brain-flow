@@ -2,6 +2,15 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+
+/** Hard-validate the encoded PNG bytes are exactly 1080x1920 (true 9:16 Story). */
+async function assertStoryDimensions(bytes: Uint8Array): Promise<void> {
+  const img = await Image.decode(bytes);
+  if (img.width !== 1080 || img.height !== 1920) {
+    throw new Error(`Story image must be exactly 1080x1920, got ${img.width}x${img.height}`);
+  }
+}
 
 // ─── Same visual styles pool as Pixel agent ───
 const VISUAL_STYLES_POOL = [
