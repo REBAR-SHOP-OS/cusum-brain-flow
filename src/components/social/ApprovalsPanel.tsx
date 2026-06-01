@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle, XCircle, Clock, MessageSquare, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useSocialApprovals } from "@/hooks/useSocialApprovals";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { getCurrentUser } from "@/lib/auth";
 import { formatDistanceToNow } from "date-fns";
 
 const platformColors: Record<string, string> = {
