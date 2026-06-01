@@ -6,7 +6,7 @@ import {
   ArrowLeft, Plus, Settings, ChevronLeft, ChevronRight,
   ThumbsUp, Palette, Users, TrendingUp, Search, Filter, X,
   Sparkles, Loader2, BookOpen, ShieldCheck, CheckSquare, Trash2,
-  CalendarDays, PlusSquare, Clock,
+  CalendarDays, PlusSquare, Clock, Clapperboard,
 } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
