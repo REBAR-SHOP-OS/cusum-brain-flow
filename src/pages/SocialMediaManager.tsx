@@ -63,6 +63,8 @@ export default function SocialMediaManager() {
   const { pendingApprovals } = useSocialApprovals();
   const [showApprovals, setShowApprovals] = useState(false);
   const [weekStart, setWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const [storyPopoverOpen, setStoryPopoverOpen] = useState(false);
+  const [storyPickedDate, setStoryPickedDate] = useState<Date | null>(null);
    const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
 
   // Derive selectedPost from fresh query data so it updates after mutations
