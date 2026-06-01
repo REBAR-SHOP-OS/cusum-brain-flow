@@ -223,66 +223,142 @@ Deno.serve((req) =>
 
       const STORY_ANGLES = [
         "Hero macro close-up, shallow depth of field, dramatic side lighting on the product texture",
-        "Real warehouse product shot, bundled units stacked on industrial floor, natural daylight from skylights",
-        "Workshop fabrication scene, the product being handled by a worker in safety gear, sparks/dust atmosphere",
+        "Real warehouse product shot, bundled units stacked on industrial floor",
+        "Workshop fabrication scene, worker in safety gear handling the product, sparks/dust atmosphere",
         "Top-down overhead arrangement of the product on a real workbench, clean industrial backdrop",
-        "Golden-hour outdoor product shot on a real construction site staging area, dramatic shadows",
+        "Outdoor product shot on a real construction site staging area, dramatic shadows",
+        "Three-quarter angle product portrait against a textured concrete wall",
+        "Low-angle heroic shot of the product against an open industrial ceiling",
+        "Tight cropped detail of the product end profile, ribbing and texture filling the frame",
+        "Crane-loading scene, bundles being lifted with rigging straps, real yard",
+        "Steel mill backdrop with the product staged in the foreground, soft haze",
+        "Truck flatbed loaded with bundles, tailgate view, real logistics yard",
+        "Rack storage aisle perspective, product visible front-and-center, depth tunnel",
+      ];
+      const STORY_LIGHTING = [
+        "golden hour warm sunlight",
+        "overcast soft diffuse daylight",
+        "cool blue morning light",
+        "harsh midday top light",
+        "dramatic single spotlight rim",
+        "warehouse fluorescent overhead",
+        "industrial skylight beams",
+        "moody dusk side light",
+        "fresh post-rain glossy reflections",
+        "high-contrast chiaroscuro",
+      ];
+      const STORY_PALETTES = [
+        "muted steel gray and orange safety accents",
+        "rich amber and deep charcoal",
+        "cool slate blue and concrete gray",
+        "warm rust and cream",
+        "bold red accent on neutral industrial gray",
+        "olive green and weathered steel",
+        "midnight navy and sodium-vapor yellow",
+        "raw concrete white and matte black",
+      ];
+      const STORY_HEADLINES = [
+        "Built to Last",
+        "Industrial Grade",
+        "Made in Ontario",
+        "Order Today",
+        "Precision Steel",
+        "Trusted Quality",
+        "Always In Stock",
+        "Strength You Trust",
       ];
 
+      // Random sample WITHOUT replacement
+      const pickN = <T,>(arr: T[], n: number): T[] => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy.slice(0, n);
+      };
+
+      const slotsCount = TIME_SLOTS.length;
+      const slotAngles = pickN(STORY_ANGLES, slotsCount);
+      const slotLighting = pickN(STORY_LIGHTING, slotsCount);
+      const slotPalettes = pickN(STORY_PALETTES, slotsCount);
+      const slotHeadlines = pickN(STORY_HEADLINES, slotsCount);
+
       const updateResults: { id: string; image_url: string | null }[] = [];
-      const brainImgs = brainCtx.resourceImageUrls.slice(0, 3);
+      const usedHashes = new Set<string>();
 
-      const generateStoryImage = async (angle: string): Promise<string | null> => {
-        const refsNote = brainImgs.length > 0
-          ? ` Match REBAR.SHOP product appearance and brand identity (real product references on file: ${brainImgs.join(", ")}).`
-          : "";
-        const logoNote = logoUrl
-          ? ` Include a small REBAR.SHOP logo watermark in a corner (reference: ${logoUrl}).`
-          : "";
-        const fullPrompt =
-          `PHOTOREALISTIC vertical 9:16 portrait Instagram/Facebook STORY image, taller than wide. ` +
+      const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+        const buf = await crypto.subtle.digest("SHA-256", bytes);
+        return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      };
+
+      const buildStoryPrompt = (
+        angle: string, lighting: string, palette: string, headline: string,
+      ): string => {
+        const seed = crypto.randomUUID();
+        return (
+          `PHOTOREALISTIC vertical portrait STORY BANNER, 2:3 / 9:16 aspect, taller than wide. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
-          `Composition: ${angle}. Full-bleed vertical portrait framing with safe top/bottom margins.` +
-          `${refsNote}${logoNote} ` +
+          `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
           `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
-          `ABSOLUTELY NO text overlay, NO slogan, NO caption inside the image. Image only.`;
+          `BAKED-IN TEXT (must be perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish): ` +
+          `1) Large bold headline in the UPPER THIRD over a subtle darkened gradient strip: "${headline}". ` +
+          `2) Small wordmark strip in the LOWER THIRD: "REBAR.SHOP  —  ${product}". ` +
+          `Headline color: bright high-contrast (white or brand primary) over a dark gradient bar so it stays readable. ` +
+          `No other text anywhere in the image. No watermarks beyond the wordmark above. ` +
+          `Variation seed: ${seed}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`
+        );
+      };
 
-        try {
-          const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
-              model: "openai/gpt-image-2",
-              prompt: fullPrompt,
-              size: "1024x1536",
-              quality: "low",
-              n: 1,
-            }),
-          });
-          if (!imgResp.ok) {
-            console.error("Story image gen failed:", imgResp.status, await imgResp.text());
+      const generateStoryImage = async (
+        angle: string, lighting: string, palette: string, headline: string,
+      ): Promise<string | null> => {
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const prompt = buildStoryPrompt(angle, lighting, palette, headline);
+          try {
+            const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "openai/gpt-image-2",
+                prompt,
+                size: "1024x1536",
+                quality: "medium",
+                n: 1,
+              }),
+            });
+            if (!imgResp.ok) {
+              console.error("Story image gen failed:", imgResp.status, await imgResp.text());
+              return null;
+            }
+            const imgData = await imgResp.json();
+            const b64 = imgData.data?.[0]?.b64_json;
+            if (!b64) return null;
+            const binaryStr = atob(b64);
+            const bytes = new Uint8Array(binaryStr.length);
+            for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            const hash = await sha256Hex(bytes);
+            if (usedHashes.has(hash) && attempt === 0) {
+              console.warn("Story duplicate hash, retrying:", hash);
+              continue;
+            }
+            usedHashes.add(hash);
+            const blob = new Blob([bytes], { type: "image/png" });
+            const fileName = `images/story-${crypto.randomUUID()}.png`;
+            const { error: uploadErr } = await supabaseAdmin.storage
+              .from("social-media-assets")
+              .upload(fileName, blob, { contentType: "image/png", upsert: false });
+            if (uploadErr) { console.error("Story upload error:", uploadErr); return null; }
+            const { data: pubUrl } = supabaseAdmin.storage
+              .from("social-media-assets")
+              .getPublicUrl(fileName);
+            return pubUrl.publicUrl;
+          } catch (e) {
+            console.error("Story image error:", e);
             return null;
           }
-          const imgData = await imgResp.json();
-          const b64 = imgData.data?.[0]?.b64_json;
-          if (!b64) return null;
-          const binaryStr = atob(b64);
-          const bytes = new Uint8Array(binaryStr.length);
-          for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
-          const blob = new Blob([bytes], { type: "image/png" });
-          const fileName = `images/story-${crypto.randomUUID()}.png`;
-          const { error: uploadErr } = await supabaseAdmin.storage
-            .from("social-media-assets")
-            .upload(fileName, blob, { contentType: "image/png", upsert: false });
-          if (uploadErr) { console.error("Story upload error:", uploadErr); return null; }
-          const { data: pubUrl } = supabaseAdmin.storage
-            .from("social-media-assets")
-            .getPublicUrl(fileName);
-          return pubUrl.publicUrl;
-        } catch (e) {
-          console.error("Story image error:", e);
-          return null;
         }
+        return null;
       };
 
       // Process in parallel batches of 2 to stay within rate limits
@@ -290,7 +366,12 @@ Deno.serve((req) =>
       for (let i = 0; i < TIME_SLOTS.length; i += BATCH) {
         const slice = TIME_SLOTS.slice(i, i + BATCH);
         const results = await Promise.all(
-          slice.map((_, k) => generateStoryImage(STORY_ANGLES[(i + k) % STORY_ANGLES.length]))
+          slice.map((_, k) => {
+            const idx = i + k;
+            return generateStoryImage(
+              slotAngles[idx], slotLighting[idx], slotPalettes[idx], slotHeadlines[idx],
+            );
+          })
         );
         for (let k = 0; k < slice.length; k++) {
           const idx = i + k;
@@ -305,6 +386,7 @@ Deno.serve((req) =>
           updateResults.push({ id: phId, image_url: imageUrl });
         }
       }
+
 
       return new Response(
         JSON.stringify({
