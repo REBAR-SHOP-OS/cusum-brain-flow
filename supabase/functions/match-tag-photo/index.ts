@@ -312,6 +312,8 @@ Deno.serve(async (req) => {
 
     const normalized = {
       mark: normMark(ocr.mark || ocr.tag_number),
+      dwg: normCode(ocr.dwg),
+      ref: normCode(ocr.ref),
       size: normSize(ocr.bar_size),
       grade: normGrade(ocr.grade),
       length_mm: ocrLenMm,
@@ -323,6 +325,8 @@ Deno.serve(async (req) => {
     // pick from a list than tell the operator "unreadable".
     const fieldHits =
       (normalized.mark ? 1 : 0) +
+      (normalized.dwg ? 1 : 0) +
+      (normalized.ref ? 1 : 0) +
       (normalized.size ? 1 : 0) +
       (normalized.length_mm ? 1 : 0) +
       (normalized.quantity ? 1 : 0) +
@@ -337,30 +341,43 @@ Deno.serve(async (req) => {
     const ranked = [...scored].sort((a, b) => b.score - a.score);
 
     // ---- decision ----
-    // Fast path: if normalized MARK exactly matches exactly ONE candidate, auto.
-    const exactMarkHits = scored.filter((s) => s.markExact);
+    // STRICT 3-FIELD RULE: auto-match requires MARK + DWG + Ref all to match
+    // exactly on the SAME candidate. Anything else degrades to 'confirm' or 'none'.
     let decision: 'auto' | 'confirm' | 'none' = 'none';
     let reason = '';
+    let mismatchReason: string | null = null;
 
-    if (exactMarkHits.length === 1) {
+    const strictHits = scored.filter((s) => s.markExact && s.dwgExact && s.refExact);
+    const exactMarkHits = scored.filter((s) => s.markExact);
+
+    if (strictHits.length === 1) {
       decision = 'auto';
-      reason = 'unique MARK exact';
-    } else if (exactMarkHits.length > 1) {
-      // Multiple candidates share that mark — let operator pick.
+      reason = 'unique MARK+DWG+Ref exact';
+    } else if (strictHits.length > 1) {
+      // Should never happen with proper data — multiple identical 3-tuples.
       decision = 'confirm';
-      reason = 'multiple MARK matches';
+      reason = 'multiple MARK+DWG+Ref matches';
+      mismatchReason = 'Duplicate MARK+DWG+Ref in manifest — supervisor review.';
+    } else if (exactMarkHits.length >= 1) {
+      // MARK matched but DWG or Ref is missing/mismatched. Never auto-clear.
+      decision = 'confirm';
+      const m = exactMarkHits[0];
+      const parts: string[] = [];
+      if (!normalized.dwg) parts.push('DWG missing on tag');
+      else if (m.dwgMismatch) parts.push(`DWG ${normalized.dwg}≠${normCode(m.matched_dwg)}`);
+      else if (!normCode(m.matched_dwg)) parts.push('DWG missing on item');
+      if (!normalized.ref) parts.push('Ref missing on tag');
+      else if (m.refMismatch) parts.push(`Ref ${normalized.ref}≠${normCode(m.matched_ref)}`);
+      else if (!normCode(m.matched_ref)) parts.push('Ref missing on item');
+      mismatchReason = `MARK matched, but ${parts.join(' · ') || 'DWG/Ref incomplete'}.`;
+      reason = mismatchReason;
     } else {
       const best = ranked[0];
-      const second = ranked[1];
-      if (best && best.score >= 0.70 && (!second || best.score - second.score >= 0.15)) {
-        decision = 'auto'; reason = `high score ${best.score.toFixed(2)}`;
-      } else if (best && best.score >= 0.25) {
+      if (best && best.score >= 0.25) {
         decision = 'confirm'; reason = `medium score ${best.score.toFixed(2)}`;
       } else if (fieldHits === 0 && !rawHasText) {
         decision = 'none'; reason = 'no readable text';
       } else if (candidates.length <= 5) {
-        // Some text was read but nothing scored — still show the manifest
-        // as a pick list rather than fail. Operator can confirm visually.
         decision = 'confirm'; reason = 'low score but text present';
       } else {
         decision = 'none'; reason = 'low score, large manifest';
@@ -373,8 +390,10 @@ Deno.serve(async (req) => {
       field_hits: fieldHits,
       raw_has_text: rawHasText,
       ranked_top5: ranked.slice(0, 5),
+      strict_hits: strictHits.length,
       decision,
       reason,
+      mismatch_reason: mismatchReason,
     };
     console.log('match-tag-photo', JSON.stringify(debug));
 
@@ -384,10 +403,12 @@ Deno.serve(async (req) => {
       ranked: ranked.slice(0, 5),
       decision,
       reason,
+      mismatch_reason: mismatchReason,
       debug,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
   } catch (e) {
     console.error('match-tag-photo error', e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : 'Unknown error' }), {
