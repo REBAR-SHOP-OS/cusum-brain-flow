@@ -330,6 +330,7 @@ export function useAutoClearance({
       const ocr = data?.ocr || {};
       const ranked: RankedMatch[] = data?.ranked || [];
       const decision: "auto" | "confirm" | "none" = data?.decision || "none";
+      const mismatchReason: string | null = data?.mismatch_reason ?? null;
       setLastOcr(ocr);
       setState("matching");
 
@@ -346,6 +347,16 @@ export function useAutoClearance({
         setState("waiting_tag");
         return;
       }
+      // Zone gate — if a zone is selected and the matched item is bound to a
+      // different zone, never auto-match. Operator must rescan or change zone.
+      const activeZone = (selectedZone || "").trim();
+      if (activeZone && matchedItem.storage_zone && matchedItem.storage_zone !== activeZone) {
+        showBanner({ kind: "mismatch", text: "Tag belongs to a different zone." }, 3000);
+        speak("Wrong zone");
+        vibrate([120, 60, 120]);
+        setState("waiting_tag");
+        return;
+      }
       if (matchedItem.evidence_status === "cleared") {
         showBanner({ kind: "duplicate", text: `${matchedItem.mark_number || "Item"} already verified.` });
         speak("Already verified");
@@ -354,22 +365,37 @@ export function useAutoClearance({
         return;
       }
 
+      // Shared OCR/match snapshot written to clearance_evidence on every path.
+      const evidenceMatchPatch = {
+        ocr_mark: ocr.mark || ocr.tag_number || null,
+        ocr_dwg: ocr.dwg || null,
+        ocr_ref: ocr.ref || null,
+        matched_mark: matchedItem.mark_number,
+        matched_dwg: matchedItem.drawing_ref,
+        matched_ref: matchedItem.ref_no,
+        match_confidence: best.score,
+        mismatch_reason: mismatchReason,
+      };
+
       if (decision === "confirm") {
         // HOLD the captured tag blob — confirmPick will upload it after the
         // operator confirms the candidate. Previously this branch dropped the
         // blob entirely, leaving evidence rows without a tag_scan_url.
         pendingTagBlobRef.current = blob;
-        pendingTagOcrRef.current = { ocr, ranked, decision };
+        pendingTagOcrRef.current = { ocr, ranked, decision, mismatchReason };
         setPickCandidates(ranked.slice(0, 3));
         setLastConfidence(best.score);
         setState("tag_pick");
+        if (mismatchReason) {
+          showBanner({ kind: "mismatch", text: mismatchReason }, 4000);
+        }
         speak("Confirm match");
         return;
       }
 
-      // High confidence — upload tag photo + ensure evidence row in parallel,
-      // then write the evidence row update. Move to product mode ONLY after
-      // the DB-confirmed gate passes (assertTagEvidenceReady).
+      // High confidence (strict MARK+DWG+Ref) — upload tag photo + ensure
+      // evidence row in parallel, then write the evidence row update. Move to
+      // product mode ONLY after the DB-confirmed gate passes.
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
       const [evId, path] = await Promise.all([
@@ -385,6 +411,7 @@ export function useAutoClearance({
           verification_method: "auto",
           ai_confidence: best.score,
           ocr_metadata: { ocr, ranked, decision },
+          ...evidenceMatchPatch,
         })
         .eq("id", evId);
       perfLog("tag_row_update", tNow() - tRowUp);
@@ -399,6 +426,7 @@ export function useAutoClearance({
       // product shutter cannot fire while the gate is mid-flight.
       setState("waiting_product");
       perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
+
     } catch (e: any) {
       console.error("tag capture failed", e);
       // Clear partial active refs so the next shutter cannot reuse a stale id.
