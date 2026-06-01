@@ -13,6 +13,23 @@ async function assertStoryDimensions(bytes: Uint8Array): Promise<void> {
   }
 }
 
+/** Generic dimension assertion for non-Story aspect ratios. */
+async function assertImageDimensions(bytes: Uint8Array, expectedW: number, expectedH: number): Promise<void> {
+  const img = await Image.decode(bytes);
+  if (img.width !== expectedW || img.height !== expectedH) {
+    throw new Error(`Image must be exactly ${expectedW}x${expectedH}, got ${img.width}x${img.height}`);
+  }
+}
+
+type StoryAspect = "9:16" | "1:1" | "4:5" | "16:9";
+const ASPECT_SIZE: Record<StoryAspect, { gpt: string; w: number; h: number }> = {
+  "9:16": { gpt: "1024x1792", w: 1080, h: 1920 },
+  "1:1":  { gpt: "1024x1024", w: 1536, h: 1536 },
+  "4:5":  { gpt: "1024x1280", w: 1228, h: 1536 },
+  "16:9": { gpt: "1792x1024", w: 1920, h: 1080 },
+};
+
+
 // buildEventPromptBlock removed — events are opt-in via chat only
 
 /** Resolve company logo URL from storage (same as Pixel agent) */
@@ -203,7 +220,10 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
     const authHeader = originalReq.headers.get("Authorization")!;
-    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [], mode = "post", product = "" } = body;
+    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [], mode = "post", product = "", aspectRatio = "9:16" } = body;
+    const storyAspect: StoryAspect = (["9:16", "1:1", "4:5", "16:9"] as const).includes(aspectRatio) ? aspectRatio : "9:16";
+    const aspectCfg = ASPECT_SIZE[storyAspect];
+    const isStoryRatio = storyAspect === "9:16";
 
     const postDate = scheduledDate || new Date().toISOString();
     const dateStr = new Date(postDate).toLocaleDateString("en-US", {
@@ -366,6 +386,16 @@ Deno.serve((req) =>
       }
 
 
+      const ORIENTATION_BLOCK: Record<StoryAspect, string> = {
+        "9:16": `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. `,
+        "1:1":  `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 1:1 SQUARE: Generate a square image with width:height ratio exactly 1:1. Portrait or landscape output is FORBIDDEN. `,
+        "4:5":  `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 4:5 PORTRAIT: Generate a vertical portrait image with width:height ratio exactly 4:5. Square or landscape output is FORBIDDEN. `,
+        "16:9": `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 16:9 LANDSCAPE: Generate a horizontal landscape image with width:height ratio exactly 16:9. Portrait or square output is FORBIDDEN. `,
+      };
+      const COMPOSITION_WORD: Record<StoryAspect, string> = {
+        "9:16": "vertical portrait", "1:1": "square", "4:5": "vertical portrait", "16:9": "horizontal landscape",
+      };
+
       const buildStoryPrompt = (
         angle: string, lighting: string, palette: string, headline: string,
       ): string => {
@@ -374,9 +404,9 @@ Deno.serve((req) =>
           ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
           : "";
         return (
-          `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. ` +
-          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook story ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
-          `PHOTOREALISTIC vertical portrait composition only. ` +
+          ORIENTATION_BLOCK[storyAspect] +
+          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
+          `PHOTOREALISTIC ${COMPOSITION_WORD[storyAspect]} composition only. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
           styleBlock +
           `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
@@ -392,6 +422,7 @@ Deno.serve((req) =>
       };
 
 
+
       const generateStoryImage = async (
         angle: string, lighting: string, palette: string, headline: string,
       ): Promise<string | null> => {
@@ -404,7 +435,8 @@ Deno.serve((req) =>
               body: JSON.stringify({
                 model: "openai/gpt-image-2",
                 prompt,
-                size: "1024x1792",
+                // 9:16 → "1024x1792" (locked Story size); other ratios use ASPECT_SIZE map.
+                size: isStoryRatio ? "1024x1792" : aspectCfg.gpt,
                 quality: "medium",
                 n: 1,
               }),
@@ -419,11 +451,15 @@ Deno.serve((req) =>
             const binaryStr = atob(b64);
             let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
-            // Enforce exact 9:16 portrait (never square, never 2:3)
-            bytes = await cropToAspectRatioStrict(bytes, "9:16");
-            // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
-            // If anything upstream lied about the canvas, reject and retry.
-            await assertStoryDimensions(bytes);
+            if (isStoryRatio) {
+              // Enforce exact 9:16 portrait (never square, never 2:3)
+              bytes = await cropToAspectRatioStrict(bytes, "9:16");
+              // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
+              await assertStoryDimensions(bytes);
+            } else {
+              bytes = await cropToAspectRatioStrict(bytes, storyAspect);
+              await assertImageDimensions(bytes, aspectCfg.w, aspectCfg.h);
+            }
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
@@ -474,10 +510,10 @@ Deno.serve((req) =>
             await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
             continue;
           }
-          // Update image only; keep title=product, content="", content_type="story"
+          // Update image; content_type = "story" only for 9:16, else regular feed post.
           await supabaseAdmin
             .from("social_posts")
-            .update({ image_url: imageUrl, content_type: "story", title: product, content: "", hashtags: [] })
+            .update({ image_url: imageUrl, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
             .eq("id", phId);
           updateResults.push({ id: phId, image_url: imageUrl });
         }

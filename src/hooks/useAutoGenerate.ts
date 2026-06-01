@@ -46,6 +46,7 @@ export function useAutoGenerate() {
     scheduledDate?: string;
     mode?: "story" | "post";
     product?: string;
+    aspectRatio?: "9:16" | "1:1" | "4:5" | "16:9";
   }) => {
     setGenerating(true);
     const controller = new AbortController();
@@ -71,6 +72,10 @@ export function useAutoGenerate() {
 
       const isStory = options?.mode === "story";
       const storyProduct = options?.product ?? "";
+      // For story mode, only 9:16 keeps the "story" content_type (Story 9:16 hard rule).
+      // Other ratios produce regular feed posts at the chosen aspect.
+      const aspectRatio = options?.aspectRatio ?? (isStory ? "9:16" : undefined);
+      const isStoryRatio = isStory && aspectRatio === "9:16";
 
       // Phase 0: Insert 5 placeholder "?" cards immediately
       const placeholderRows = PLACEHOLDER_TIMES.map((slot) => ({
@@ -81,7 +86,7 @@ export function useAutoGenerate() {
         hashtags: [] as string[],
         image_url: null,
         status: "draft" as const,
-        content_type: isStory ? "story" : null,
+        content_type: isStoryRatio ? "story" : null,
         scheduled_date: buildScheduledDate(postDate, slot.hour, slot.minute),
       }));
 
@@ -109,6 +114,7 @@ export function useAutoGenerate() {
           placeholderIds,
           mode: options?.mode ?? "post",
           product: storyProduct,
+          aspectRatio,
         },
       });
       clearTimeout(timeout);
