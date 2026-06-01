@@ -1,30 +1,60 @@
-## هدف
-وقتی آیکون Story زده می‌شود، خروجی واقعی عکس‌ها باید 9:16 باشد؛ نه اینکه فقط داخل قاب 9:16 نمایش داده شوند. اگر مدل عکس مربع/اشتباه برگرداند، سیستم باید آن را server-side به PNG واقعی 1080×1920 تبدیل کند و همان فایل را ذخیره کند.
+# Plan — Let user pick image aspect ratio before generating Story cards
 
-## پلن اجرا
-1. **قفل کردن مسیر آیکون Story**
-   - در `auto-generate-post` مسیر `mode === "story"` را سخت‌تر می‌کنم تا هر خروجی قبل از ذخیره حتماً با `cropToAspectRatioStrict(..., "9:16")` تبدیل و اعتبارسنجی شود.
-   - بعد از تبدیل، ابعاد نهایی را decode می‌کنم و اگر دقیقاً 1080×1920 نبود، آن تصویر reject می‌شود و همان slot دوباره تلاش می‌کند.
+## Scope
+The popover in the screenshot (pink/orange Clapperboard button, "5" badge) on `/social-media-manager`. Today it has two steps:
+1. Pick a date
+2. Pick a product → immediately generates 5 cards at hard‑locked 9:16
 
-2. **جلوگیری از ذخیره کارت Story بدون عکس معتبر**
-   - الان اگر تولید تصویر fail شود، ممکن است کارت با `image_url: null` یا خروجی نامعتبر باقی بماند.
-   - تغییر می‌دهم تا برای Story فقط وقتی کارت آپدیت شود که عکس معتبر 9:16 تولید شده باشد؛ در غیر این صورت خطای واضح برگردد.
+The user wants an extra step where they choose the dimensions of the image that the LLM will generate.
 
-3. **هم‌راستا کردن مسیرهای جایگزین**
-   - مسیرهای `Regenerate image` و `AI Image` برای Story را بررسی/قفل می‌کنم تا خروجی Story هم قبل از استفاده به 1080×1920 واقعی تبدیل شود، نه صرفاً در UI قاب شود.
-   - در صورت نیاز، برای عکس‌های upload/edit شده در Story هم همین enforcement حفظ می‌شود.
+## UX change (only this popover)
+New 3‑step flow inside `StoryBannerReferences` popover in `src/pages/SocialMediaManager.tsx`:
 
-4. **تست رگرسیون**
-   - تست موجود `story-icon-output-9x16.test.ts` را سخت‌تر می‌کنم تا فقط وجود کلاس UI را چک نکند؛ بلکه قرارداد واقعی را enforce کند:
-     - `auto-generate-post` باید بعد از crop، ابعاد واقعی 1080×1920 را validate کند.
-     - Story card نباید با تصویر null/نامعتبر به عنوان موفق گزارش شود.
-     - مسیر Story icon همچنان `mode: "story"` بفرستد.
+```text
+Step 1 · Pick a date      (unchanged)
+Step 2 · Pick image size  ← NEW
+Step 3 · Pick a product   (was Step 2)
+```
 
-## خارج از محدوده
-- تغییر Gate تایید Neel یا publish flow.
-- تغییر طراحی کلی تقویم یا کارت‌ها.
-- تغییر نسبت نمایش پست‌های معمولی غیر Story.
+Step 2 options (vertical list, same visual style as Step 2 today):
+- 9:16 — Story / Reel (default, pre-selected)
+- 1:1  — Square (Feed)
+- 4:5  — Portrait (Feed)
+- 16:9 — Landscape
 
-## اعتبارسنجی
-- اجرای تست رگرسیون Story 9:16.
-- بررسی کد مسیر Story تا مطمئن شویم فایل ذخیره‌شده واقعی، PNG با نسبت 9:16 و اندازه 1080×1920 است.
+"← Back" returns to the previous step. Selecting an option advances to the next step; the product list only triggers generation on click as it does today.
+
+No changes to: Add Card (blue), Approved posts, Brand Kit, calendar grid, post cards, PostReviewPanel, publish flow, Neel approval gate.
+
+## Data flow
+1. `useAutoGenerate.generatePosts` gains an optional `aspectRatio?: "9:16" | "1:1" | "4:5" | "16:9"` (default `"9:16"` when `mode === "story"`, else unchanged).
+2. It is forwarded in the edge-function body as `aspectRatio`.
+3. `supabase/functions/auto-generate-post/index.ts`:
+   - Map ratio → image size for the gateway call:
+     - 9:16 → `1024x1792`
+     - 1:1  → `1024x1024`
+     - 4:5  → `1024x1280`
+     - 16:9 → `1792x1024`
+   - Pass that ratio into `cropToAspectRatioStrict(..., aspectRatio)`.
+   - `assertStoryDimensions` is renamed to `assertImageDimensions(bytes, expectedWxH)` and validates against the chosen ratio's exact pixel size; on mismatch the slot still fails (null images are still deleted, per existing hard gate).
+4. `content_type` stays `"story"` only when the chosen ratio is `9:16` (preserves the Story display + publish path). For 1:1 / 4:5 / 16:9 the placeholder rows are inserted with `content_type: null` (regular post) so `PixelPostCard` / `PostReviewPanel` render them as standard square/landscape cards — no UI changes needed there.
+
+## Hard-rule check
+- HARD: "AI Video Director videos must be silent." — unaffected, this is image generation only.
+- HARD: Story 9:16 enforcement — preserved: when the user picks 9:16 the existing strict crop + dimension assertion + Story rendering path runs unchanged. Other ratios are treated as regular posts, not Stories, so the Story contract is not loosened.
+- HARD: Neel approval gate — unaffected.
+
+## Regression test
+Update `tests/regression/social/story-icon-output-9x16.test.ts` (or add a sibling `story-icon-aspect-ratio.test.ts`) to lock:
+- Popover exposes the 4 ratio options.
+- `generatePosts` forwards `aspectRatio` to the edge function.
+- Edge function maps ratio → size and calls `cropToAspectRatioStrict` + `assertImageDimensions` with the matching dimensions.
+- Picking 9:16 still writes `content_type: "story"`; other ratios write `content_type: null`.
+
+## Files touched
+- `src/pages/SocialMediaManager.tsx` — add Step 2 ratio picker, thread `aspectRatio` into `generatePosts`.
+- `src/hooks/useAutoGenerate.ts` — accept + forward `aspectRatio`, set `content_type` based on ratio.
+- `supabase/functions/auto-generate-post/index.ts` — generalize size + strict-crop + dimension assertion to the chosen ratio.
+- `tests/regression/social/story-icon-output-9x16.test.ts` — extend coverage.
+
+Out of scope: Add Card (blue) flow, manual `AI Image` regenerate dialog, video aspect handling, calendar layout.
