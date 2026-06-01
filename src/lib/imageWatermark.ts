@@ -58,19 +58,22 @@ export async function ensureSquare(imageUrl: string): Promise<string> {
 }
 
 /**
- * Ensures an image is 9:16 portrait. Crops from center if not.
- * Returns a data URL of the portrait image.
+ * Ensures an image is true 9:16 portrait at exactly 1080×1920.
+ * Center-crops then resizes to the canonical Story canvas. Throws if
+ * the input cannot be loaded — callers must treat that as a hard failure
+ * so a square image can never reach the calendar.
  */
+export const STORY_TARGET_W = 1080;
+export const STORY_TARGET_H = 1920;
+
 export async function ensurePortrait(imageUrl: string): Promise<string> {
   const img = await loadImage(imageUrl);
   const w = img.naturalWidth;
   const h = img.naturalHeight;
+  if (!w || !h) throw new Error("ensurePortrait: source has no dimensions");
 
-  // Target 9:16 ratio
-  const targetRatio = 9 / 16;
+  const targetRatio = STORY_TARGET_W / STORY_TARGET_H; // 9/16
   const currentRatio = w / h;
-
-  if (Math.abs(currentRatio - targetRatio) < 0.01) return imageUrl;
 
   let cropW: number, cropH: number;
   if (currentRatio > targetRatio) {
@@ -78,20 +81,24 @@ export async function ensurePortrait(imageUrl: string): Promise<string> {
     cropH = h;
     cropW = Math.round(h * targetRatio);
   } else {
-    // Too tall — crop height
+    // Too tall (or square) — crop height
     cropW = w;
     cropH = Math.round(w / targetRatio);
   }
 
   const canvas = document.createElement("canvas");
-  canvas.width = cropW;
-  canvas.height = cropH;
+  canvas.width = STORY_TARGET_W;
+  canvas.height = STORY_TARGET_H;
   const ctx = canvas.getContext("2d")!;
 
   const sx = (w - cropW) / 2;
   const sy = (h - cropH) / 2;
-  ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, cropW, cropH);
+  // Draw the center-crop directly resampled into the canonical 1080×1920 canvas.
+  ctx.drawImage(img, sx, sy, cropW, cropH, 0, 0, STORY_TARGET_W, STORY_TARGET_H);
 
+  if (canvas.width !== STORY_TARGET_W || canvas.height !== STORY_TARGET_H) {
+    throw new Error(`ensurePortrait: canvas mismatch ${canvas.width}×${canvas.height}`);
+  }
   return canvas.toDataURL("image/png");
 }
 
