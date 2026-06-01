@@ -1719,6 +1719,7 @@ export function PostReviewPanel({
       <ImageGeneratorDialog
         open={showImageGen}
         onOpenChange={setShowImageGen}
+        storyMode={isStory}
         onImageReady={(url) => {
           setShowImageGen(false);
           handleMediaReady(url, "image");
