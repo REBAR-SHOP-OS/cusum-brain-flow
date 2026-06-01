@@ -739,7 +739,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       qualitySuffix;
 
     console.log(`🎨 Regenerate: Using style #${selected.idx}: ${selected.style.slice(0, 60)}...`);
-    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined, resourceImageUrls: brainImageRefs.slice(0, 3) });
+    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined, resourceImageUrls: brainImageRefs.slice(0, 3), imageAspectRatio: "9:16" });
 
     const imageUrl = imgResult.imageUrl || post.image_url;
 
