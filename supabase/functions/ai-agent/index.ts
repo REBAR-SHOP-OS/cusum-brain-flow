@@ -7,7 +7,7 @@ import { executeToolCall } from "../_shared/agentToolExecutor.ts";
 import { selectModel, AIError, callAI, type AIMessage, type AIProvider } from "../_shared/aiRouter.ts";
 import { analyzeDocumentWithGemini, convertPdfToImages, performOCR, performOCROnBase64, performMultiPassAnalysis, detectZones, extractRebarData } from "../_shared/agentDocumentUtils.ts";
 import { agentPrompts } from "../_shared/agentPrompts.ts";
-import { cropToAspectRatio } from "../_shared/imageResize.ts";
+import { cropToAspectRatio, cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { reviewAgentOutput } from "../_shared/agentQA.ts";
 import { 
   ONTARIO_CONTEXT, 
@@ -246,14 +246,14 @@ async function generatePixelImage(
   // Soft composition guidance — final dimensions enforced by server-side crop/resize
   const aspectRatio = options?.imageAspectRatio || "1:1";
   const compositionMap: Record<string, string> = {
-    "16:9": "CRITICAL ASPECT RATIO: Generate this image in LANDSCAPE orientation (wider than tall). Target dimensions: 1536×864 pixels. The image MUST be significantly wider than it is tall. Spread important elements horizontally.",
-    "9:16": "CRITICAL ASPECT RATIO: Generate this image in PORTRAIT orientation (taller than wide). Target dimensions: 864×1536 pixels. The image MUST be significantly taller than it is wide. Arrange elements vertically (suitable for Stories/Reels).",
+    "16:9": "CRITICAL ASPECT RATIO: Generate this image in LANDSCAPE orientation (wider than tall). Target dimensions: 1920×1080 pixels. The image MUST be significantly wider than it is tall. Spread important elements horizontally.",
+    "9:16": "ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.",
     "1:1": "CRITICAL ASPECT RATIO: Generate this image as a perfect SQUARE. Target dimensions: 1024×1024 pixels. The image width and height must be equal. Center the main subject.",
   };
   const aspectHint = compositionMap[aspectRatio] || `Compose the image for a ${aspectRatio} layout.`;
   const finalPrompt = aspectHint + "\n\n" + fullPrompt;
 
-  const openaiSizeMap: Record<string, string> = { "16:9": "1536x1024", "9:16": "1024x1536", "1:1": "1024x1024" };
+  const openaiSizeMap: Record<string, string> = { "16:9": "1792x1024", "9:16": "1024x1792", "1:1": "1024x1024" };
 
   // ─── OpenAI gpt-image-1 path (when user selects ChatGPT) ───
   if (options?.preferredModel === "chatgpt") {
@@ -287,7 +287,9 @@ async function generatePixelImage(
 
           if (imageBytes) {
             // Enforce aspect ratio via server-side crop/resize
-            imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+            imageBytes = aspectRatio === "9:16"
+              ? await cropToAspectRatioStrict(imageBytes, "9:16")
+              : await cropToAspectRatio(imageBytes, aspectRatio);
 
             const styleTag = options?.styleIndex ?? "x";
             const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
@@ -403,7 +405,9 @@ async function generatePixelImage(
       }
 
       // Enforce aspect ratio via server-side crop/resize
-      imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+      imageBytes = aspectRatio === "9:16"
+        ? await cropToAspectRatioStrict(imageBytes, "9:16")
+        : await cropToAspectRatio(imageBytes, aspectRatio);
 
       // Encode styleIndex in filename for dedup tracking (set by caller via options)
       const styleTag = options?.styleIndex ?? "x";

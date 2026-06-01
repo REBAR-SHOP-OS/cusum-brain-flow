@@ -1,64 +1,34 @@
-# Fix: "Zone update failed — column 'payload' of relation 'activity_events' does not exist"
+## Goal
+Make every image generated from the Story icon/request path a true 9:16 vertical story image, not square. The fix will prioritize instructing the image model itself with an explicit 9:16 requirement and prevent square output settings from being sent.
 
-## Root cause
+## Plan
+1. **Strengthen the LLM prompt for Story generation**
+   - Update the Story prompt sent to the image model so the first instruction is an explicit hard contract:
+     - output must be vertical portrait
+     - exact story aspect ratio 9:16
+     - target dimensions 1080×1920 or equivalent 9:16
+     - square 1:1 output is forbidden
+   - Apply this to the manual Story icon flow and the automated story generation flow.
 
-When an operator picks a Storage Zone on a Clearance card, the update to `clearance_evidence.storage_zone` fires the trigger `public.log_clearance_zone_assignment()`. That function inserts into `public.activity_events` using a column called `payload`, but the table's JSONB column is actually named `metadata`. Every zone assignment therefore aborts with the Postgres error shown in the toast, and no zone is saved.
+2. **Fix the actual model request dimensions**
+   - Replace the current 2:3-ish request size (`1024x1536`) in Story image calls with a real 9:16-compatible size where the model/API supports it, such as `1024x1792`.
+   - Ensure no Story path sends `1024x1024`.
 
-No frontend/edge code references `activity_events`, so this is purely a DB-side fix.
+3. **Keep server-side enforcement as the safety net**
+   - Keep the existing strict server crop/validation so even if the model returns the wrong shape, the stored/displayed result is forced to 9:16 or rejected.
+   - Update the resize target so strict 9:16 output is stored as a true 9:16 portrait size, not 2:3.
 
-## Change
+4. **Fix display paths that visually make stories look square**
+   - Adjust the story preview/zoom/card rendering so Story posts use a portrait `aspect-[9/16]` container instead of square `aspect-square` where applicable.
+   - This avoids a correct 9:16 image being displayed inside a square crop.
 
-One migration that replaces the trigger function with the correct column name. No table changes, no policy changes, no data migration.
+5. **Regression coverage**
+   - Update the existing regression test to assert:
+     - Story prompts contain mandatory 9:16 wording.
+     - Story request size is 9:16-compatible.
+     - Story UI passes `aspectRatio: "9:16"`.
+     - Story display paths do not force story images into square presentation.
 
-```sql
-CREATE OR REPLACE FUNCTION public.log_clearance_zone_assignment()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-DECLARE
-  _company_id uuid;
-BEGIN
-  IF NEW.storage_zone IS DISTINCT FROM COALESCE(OLD.storage_zone, NULL)
-     AND NEW.storage_zone IS NOT NULL THEN
-    SELECT cp.company_id INTO _company_id
-      FROM public.cut_plan_items ci
-      JOIN public.cut_plans cp ON cp.id = ci.cut_plan_id
-     WHERE ci.id = NEW.cut_plan_item_id
-     LIMIT 1;
-
-    INSERT INTO public.activity_events (
-      company_id, event_type, entity_type, entity_id, actor_id, metadata
-    ) VALUES (
-      _company_id,
-      'audit',
-      'clearance_evidence',
-      NEW.id,
-      auth.uid(),
-      jsonb_build_object(
-        'action', 'storage_zone_assigned',
-        'cut_plan_item_id', NEW.cut_plan_item_id,
-        'previous_zone', OLD.storage_zone,
-        'new_zone', NEW.storage_zone
-      )
-    );
-  END IF;
-  RETURN NEW;
-END;
-$$;
-```
-
-## Regression test
-
-Add `tests/regression/shopfloor/clearance-zone-trigger-column.test.ts` that greps the migration files to assert no `log_clearance_zone_assignment` definition references `payload`, so this typo cannot return.
-
-## Verification
-
-1. Reload `/shopfloor/clearance`, pick a Storage Zone on any pending card → no error toast, zone persists.
-2. `select metadata from public.activity_events where event_type='audit' and entity_type='clearance_evidence' order by created_at desc limit 1;` shows the `storage_zone_assigned` payload.
-3. `vitest tests/regression/shopfloor/clearance-zone-trigger-column.test.ts` passes.
-
-## Out of scope
-
-No changes to other `log_*` triggers, RLS, or the clearance UI — those are working and unaffected.
+## Validation
+- Run the targeted regression test for story images.
+- Verify the relevant source now contains no square request size in Story paths and that Story UI displays portrait images.
