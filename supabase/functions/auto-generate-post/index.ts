@@ -485,48 +485,55 @@ Deno.serve((req) =>
         return null;
       };
 
-      // Process in parallel batches of 2 to stay within rate limits
-      const BATCH = 2;
-      for (let i = 0; i < TIME_SLOTS.length; i += BATCH) {
-        const slice = TIME_SLOTS.slice(i, i + BATCH);
-        const results = await Promise.all(
-          slice.map((_, k) => {
+      // Run image generation in the background so the HTTP request returns
+      // immediately. The 5 placeholders are already inserted by the client and
+      // visible in the calendar; the client polls social_posts to pick up the
+      // image_url updates as each card finishes. Avoids the 150s edge function
+      // idle timeout when generating multiple 9:16 images sequentially.
+      const backgroundWork = (async () => {
+        const BATCH = 2;
+        for (let i = 0; i < TIME_SLOTS.length; i += BATCH) {
+          const slice = TIME_SLOTS.slice(i, i + BATCH);
+          const results = await Promise.all(
+            slice.map((_, k) => {
+              const idx = i + k;
+              return generateStoryImage(
+                slotAngles[idx], slotLighting[idx], slotPalettes[idx], slotHeadlines[idx],
+              );
+            })
+          );
+          for (let k = 0; k < slice.length; k++) {
             const idx = i + k;
-            return generateStoryImage(
-              slotAngles[idx], slotLighting[idx], slotPalettes[idx], slotHeadlines[idx],
-            );
-          })
-        );
-        for (let k = 0; k < slice.length; k++) {
-          const idx = i + k;
-          const imageUrl = results[k];
-          const phId = placeholderIds[idx];
-          if (!phId) continue;
-          // HARD GATE: never save a Story card with a null/invalid image. If the
-          // 9:16 generation failed for this slot, leave the placeholder untouched
-          // (or delete it) instead of overwriting a previously valid image with null.
-          if (!imageUrl) {
-            console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
-            await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
-            continue;
+            const imageUrl = results[k];
+            const phId = placeholderIds[idx];
+            if (!phId) continue;
+            if (!imageUrl) {
+              console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
+              await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
+              continue;
+            }
+            await supabaseAdmin
+              .from("social_posts")
+              .update({ image_url: imageUrl, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
+              .eq("id", phId);
+            updateResults.push({ id: phId, image_url: imageUrl });
           }
-          // Update image; content_type = "story" only for 9:16, else regular feed post.
-          await supabaseAdmin
-            .from("social_posts")
-            .update({ image_url: imageUrl, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
-            .eq("id", phId);
-          updateResults.push({ id: phId, image_url: imageUrl });
         }
-      }
+      })().catch((e) => console.error("[story background] failed:", e));
 
+      // @ts-ignore - EdgeRuntime is provided by the Supabase edge runtime
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(backgroundWork);
+      }
 
       return new Response(
         JSON.stringify({
           success: true,
-          postsCreated: updateResults.length,
+          postsCreated: placeholderIds.length,
           mode: "story",
           product,
-          message: `Generated ${updateResults.length} story image(s) for ${product}.`,
+          message: `Generating ${placeholderIds.length} story image(s) for ${product}. Cards will appear as each one finishes.`,
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
