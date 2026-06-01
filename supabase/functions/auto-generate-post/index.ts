@@ -233,62 +233,40 @@ Deno.serve((req) =>
       const brainImgs = brainCtx.resourceImageUrls.slice(0, 3);
 
       const generateStoryImage = async (angle: string): Promise<string | null> => {
+        const refsNote = brainImgs.length > 0
+          ? ` Match REBAR.SHOP product appearance and brand identity (real product references on file: ${brainImgs.join(", ")}).`
+          : "";
+        const logoNote = logoUrl
+          ? ` Include a small REBAR.SHOP logo watermark in a corner (reference: ${logoUrl}).`
+          : "";
         const fullPrompt =
-          `PHOTOREALISTIC vertical 9:16 portrait Instagram/Facebook STORY image. ` +
+          `PHOTOREALISTIC vertical 9:16 portrait Instagram/Facebook STORY image, taller than wide. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
-          `Composition: ${angle}. Full-bleed 9:16 portrait framing with safe top/bottom margins. ` +
+          `Composition: ${angle}. Full-bleed vertical portrait framing with safe top/bottom margins.` +
+          `${refsNote}${logoNote} ` +
           `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
-          `Place the REBAR.SHOP logo as a small watermark in a corner exactly as provided. ` +
           `ABSOLUTELY NO text overlay, NO slogan, NO caption inside the image. Image only.`;
 
-        const contentParts: any[] = [{ type: "text", text: fullPrompt }];
-        if (logoUrl) {
-          contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
-          contentParts.push({
-            type: "text",
-            text: "Use this EXACT logo image as-is in a corner watermark. Do NOT modify or redraw it.",
-          });
-        }
-        for (const refUrl of brainImgs) {
-          contentParts.push({ type: "image_url", image_url: { url: refUrl } });
-        }
-        if (brainImgs.length > 0) {
-          contentParts.push({
-            type: "text",
-            text: "Reference images show real REBAR.SHOP products — match product appearance and brand identity.",
-          });
-        }
-
         try {
-          let imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
             method: "POST",
             headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
             body: JSON.stringify({
-              model: "google/gemini-2.5-flash-image",
-              messages: [{ role: "user", content: contentParts }],
-              modalities: ["image", "text"],
+              model: "openai/gpt-image-2",
+              prompt: fullPrompt,
+              size: "1024x1536",
+              quality: "low",
+              n: 1,
             }),
           });
-          if (!imgResp.ok && (logoUrl || brainImgs.length > 0)) {
-            imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
-                model: "google/gemini-2.5-flash-image",
-                messages: [{ role: "user", content: fullPrompt }],
-                modalities: ["image", "text"],
-              }),
-            });
-          }
           if (!imgResp.ok) {
             console.error("Story image gen failed:", imgResp.status, await imgResp.text());
             return null;
           }
           const imgData = await imgResp.json();
-          const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
-          if (!b64Url) return null;
-          const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
-          const binaryStr = atob(base64Data);
+          const b64 = imgData.data?.[0]?.b64_json;
+          if (!b64) return null;
+          const binaryStr = atob(b64);
           const bytes = new Uint8Array(binaryStr.length);
           for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
           const blob = new Blob([bytes], { type: "image/png" });

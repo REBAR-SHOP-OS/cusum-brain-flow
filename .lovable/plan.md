@@ -1,62 +1,38 @@
-## Bug
+## Problem
 
-Clicking the 5-Stories icon → picking a date → picking a product creates the 5 cards on the **previous day** (e.g. picking Jun 1 inserts them on May 31). Because the calendar shows the current week starting Monday, the cards appear "missing" and their images appear "not displayed".
+Story images are generated via `google/gemini-2.5-flash-image` in `supabase/functions/auto-generate-post/index.ts` (story mode, around lines 235–300). The prompt asks for "vertical 9:16", but Gemini's image model ignores aspect-ratio instructions in text and returns square (~1:1) images. That is why the Story cards on the calendar show square photos instead of 9:16.
 
-Verified in DB: every recent `content_type = 'story'` row has `scheduled_date = 2026-05-31`, even though they were generated today (Jun 1) and the user picked Jun 1+. Image URLs are populated correctly — the only defect is the date.
+## Fix (single file, edge function only)
 
-## Root cause
+In `supabase/functions/auto-generate-post/index.ts`, change **only** the `generateStoryImage` function to use OpenAI's image endpoint with an explicit portrait size, which is the reliable way to force vertical output through the Lovable AI Gateway.
 
-`src/hooks/useAutoGenerate.ts` → `buildScheduledDate(baseDate, hour, minute)`:
+Concretely:
 
-```ts
-const d = new Date(baseDate);          // baseDate = "2026-06-01"
-const year  = d.getFullYear();         // parsed as UTC midnight
-const month = d.getMonth() + 1;        // → in EDT becomes 2026-05-31 20:00
-const day   = d.getDate();             // → returns 2026 / 5 / 31  ❌
-```
+1. Replace the `chat/completions` + `google/gemini-2.5-flash-image` call with a call to `https://ai.gateway.lovable.dev/v1/images/generations` using:
+   - `model: "openai/gpt-image-2"`
+   - `size: "1024x1536"` (true portrait, closest supported size to 9:16 — gpt-image-2 does not expose 1080x1920)
+   - `quality: "low"`
+   - `n: 1`
+   - `stream: false` (we're on the server, we just need the final PNG)
+   - `prompt`: the existing story prompt text, with the logo URL and brain reference URLs appended as plain text references (gpt-image-2 doesn't accept reference images in this endpoint, so we keep the textual brand description and drop the image_url parts that only Gemini supported).
+2. Parse `data[0].b64_json`, decode to bytes, and reuse the existing upload-to-storage block (`images/story-<uuid>.png`) unchanged.
+3. Keep the existing fallback / null-handling shape so the rest of the story flow (placeholder rows, DB update of `image_url`) stays identical.
 
-The Stories flow passes `scheduledDate: format(date, "yyyy-MM-dd")`. A bare `YYYY-MM-DD` string is parsed as UTC by the JS `Date` constructor, then `getFullYear/Month/Date` reads it in the browser's local timezone (Eastern), shifting it back one day.
-
-The regular "auto-generate today" path passes `new Date().toISOString()` (a full timestamp with a current local time embedded), which usually keeps the same calendar date in Eastern time, so the bug is most visible on the Stories path.
-
-## Fix (single file, surgical)
-
-Edit `src/hooks/useAutoGenerate.ts`:
-
-1. Make `buildScheduledDate` accept either a `YYYY-MM-DD` string or a full ISO timestamp.
-2. When the input matches `/^\d{4}-\d{2}-\d{2}$/`, split the string and use the components directly (no `Date` parsing) — so "2026-06-01" stays Jun 1.
-3. Otherwise fall back to the existing `new Date(baseDate)` path for full ISO strings.
-
-Resulting builder (sketch):
-
-```ts
-function buildScheduledDate(baseDate: string, hour: number, minute: number): string {
-  let year: number, month: number, day: number;
-  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(baseDate);
-  if (dateOnly) {
-    year = +dateOnly[1]; month = +dateOnly[2]; day = +dateOnly[3];
-  } else {
-    const d = new Date(baseDate);
-    year = d.getFullYear(); month = d.getMonth() + 1; day = d.getDate();
-  }
-  const mm = String(month).padStart(2, "0");
-  const dd = String(day).padStart(2, "0");
-  const hh = String(hour).padStart(2, "0");
-  const mi = String(minute).padStart(2, "0");
-  return new Date(`${year}-${mm}-${dd}T${hh}:${mi}:00-04:00`).toISOString();
-}
-```
-
-No other files change. The edge function, the placeholder insert path, and the Stories popover stay as-is.
-
-## Verification
-
-1. Open Social Media Manager → click the pink 5-Stories icon → pick e.g. Jun 3 → pick "Rebar Cages".
-2. Confirm 5 placeholder cards appear in the **Wed Jun 3** column (Eastern time slots 06:30 / 07:30 / 08:00 / 12:30 / 14:30).
-3. After generation completes, confirm each card shows a 9:16 image (no caption).
-4. DB check: `select scheduled_date from social_posts where content_type='story' order by created_at desc limit 5;` — all five rows should be `2026-06-03 ...`.
+Nothing else in the file changes — non-story branches (`mode !== "story"`) keep using Gemini and their current logic.
 
 ## Out of scope
 
-- Cleaning up the already-misplaced May 31 story rows (can be done separately if the user wants).
-- Any change to image generation, the edge function, the Stories prompt, or the popover UI — those are working.
+- Frontend (`SocialMediaManager.tsx`, `useAutoGenerate.ts`) — no changes; the card UI already renders whatever `image_url` we save.
+- Non-story image generation paths.
+- Cropping/padding existing already-generated square stories — only future story generations will be 9:16.
+
+## Verification
+
+1. Open Social Media Manager → click the pink 5-Stories icon → pick a date and a product → wait for generation.
+2. Open one of the new Story cards → the image preview in the right panel should be visibly portrait (taller than wide), roughly 2:3 / 9:16.
+3. Storage check: new file under `social-media-assets/images/story-*.png` should be 1024×1536.
+4. Old square stories from before the fix are expected to remain square — they are not regenerated.
+
+## Technical note
+
+`openai/gpt-image-2` supported sizes are `1024x1024`, `1024x1536`, `1536x1024`. `1024x1536` (2:3) is the closest available portrait — full 9:16 (1080×1920) is not exposed by the gateway today, but 2:3 renders correctly as a vertical story card and is what platforms like IG/FB Stories upscale cleanly. If exact 9:16 is required later, we'd add a server-side center-pad step, which is intentionally not included now to keep the change surgical.
