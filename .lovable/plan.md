@@ -1,64 +1,52 @@
 ## Goal
 
-Make the pink/orange **Story Generator** icon (Clapperboard, badge "5") learn from reference banner images you upload, so the 5 generated story images match your desired style.
+Make Style References **per product**: before uploading a banner, ask which product it belongs to. Each generation then loads only the references for the selected product.
 
-## UX changes — `src/pages/SocialMediaManager.tsx`
+## UX — `StoryBannerReferences.tsx` + `SocialMediaManager.tsx`
 
-Extend the existing Clapperboard popover (currently: Step 1 date → Step 2 product) with a small **References** strip at the top of the popover and a new Step 0:
+The Style References strip becomes product-scoped:
 
 ```
-┌──────────────────────────────────────────┐
-│ Style References (used by all generations)│
-│ [img][img][img][img] [ + Upload ]         │  ← click image to remove
-├──────────────────────────────────────────┤
-│ Step 1 · Pick a date  → Step 2 · Product │
-└──────────────────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ Style references  ·  Product: [ Rebar ▼ ]   2/5 │
+│ Upload sample banners for THIS product.          │
+│ [img][img] [ + Upload ]                          │
+└──────────────────────────────────────────────────┘
+Step 1 · Pick a date
+Step 2 · Product  ← auto-syncs with reference selector
 ```
 
-- Multi-upload (PNG/JPG, max 5 active references, ≤4 MB each).
-- Per-user (dual-scoping: `user_id`), not company-wide, since it's a personal marketing tool.
-- Persists across sessions; same references reused for every story generation until you remove them.
+- A product dropdown sits at the top of the references panel (same product list already used in Step 2: Rebar, Stirrups, Mesh, etc.).
+- Clicking **+ Upload** when no product is selected shows a toast: *"Pick a product first"* and opens the dropdown — no file picker until a product is chosen.
+- The grid shows only references for the currently selected product. Switching product reloads the grid.
+- The product chosen here pre-selects Step 2's product (and vice versa) so the user never uploads under one product and generates under another.
 
 ## Data
 
-New table `story_banner_references` (user-scoped, RLS via `auth.uid() = user_id`):
+Add `product text not null` to `story_banner_references` (migration):
+- Backfill existing rows with `'general'`.
+- New index on `(user_id, product, created_at)`.
+- Same RLS, same bucket path → `story-references/{user_id}/{product}/{uuid}.{ext}`.
 
-| column | type |
-|---|---|
-| id | uuid pk |
-| user_id | uuid |
-| image_url | text (public URL in `social-media-assets`) |
-| storage_path | text |
-| created_at | timestamptz |
+Cache table `story_banner_style_cache` stays as-is — the `reference_set_hash` already changes when the reference set changes, which naturally happens per product.
 
-Reuse existing `social-media-assets` bucket under `story-references/{user_id}/...`. GRANT block included per project standard.
+## Edge function — `auto-generate-post/index.ts` (story branch only)
 
-Optional small cache table `story_banner_style_cache` keyed by SHA‑256 of the sorted reference URLs → cached style brief text, so we don't re-analyze on every generation.
+- Load references filtered by `user_id` AND the requested `product` (already passed in the body).
+- If a product has zero references → fall back to the current generic story style (no Gemini vision call, no style brief).
+- Everything else (hash → cache → style brief → Gemini pro image with refs) stays the same.
 
-## Edge function — `supabase/functions/auto-generate-post/index.ts` (story branch only)
+## Out of scope
 
-1. Load up to 5 active references for the requesting `user_id`.
-2. If references exist and no cached brief for this set:
-   - Call `google/gemini-3-flash-preview` (vision) with the reference image URLs and ask it to return a tight JSON style brief: `{ composition, typography, palette, mood, do, dont }`.
-   - Cache the brief by reference-set hash.
-3. Switch story image model to `google/gemini-3-pro-image-preview` when references exist — Gemini accepts image inputs alongside text, so we pass the reference images as visual anchors plus the style brief. Without references, keep current `openai/gpt-image-2` path unchanged.
-4. `buildStoryPrompt` gains a `styleBrief` argument injected verbatim, plus a "MATCH THIS STYLE" instruction. Existing baked-in headline + REBAR.SHOP wordmark rules unchanged.
-5. Existing per-run SHA-256 dedup loop preserved.
-
-## Out of scope (explicitly not touched)
-
-- Non-story branches of `auto-generate-post`.
-- Daily auto-generate cron, Neel approval gate, publishing path.
-- Brand Kit editor — references live in their own table, not in Brand Kit.
-- Regeneration of past stories — only new generations consume references.
+- Cross-product reference sharing / "apply to all products" toggle.
+- Renaming products or editing the product list.
+- Migrating old generations.
 
 ## Verification
 
-- Upload 2–3 banner samples, click Clapperboard → pick date → pick product → 5 placeholders appear.
-- After ~30–60s the 5 images render in 2:3 portrait, visibly inspired by the uploaded banner style (palette, typography, composition), each one still unique.
-- Remove all references → next run falls back to the current generic story style with no regression.
-- Edge function logs: one Gemini vision call per new reference set, cached on subsequent runs.
-
-## Open question
-
-Do you want references to be **per product** (different style memory for "Rebar", "Stirrups", etc.) or **one global style** applied to all products? The plan above assumes one global per-user style; per-product is a small extension (add `product` column + filter).
+- Open Clapperboard → product dropdown defaults to empty → click + → toast asks to pick product.
+- Pick "Rebar" → upload 2 banners → switch to "Stirrups" → grid is empty → upload 1 banner.
+- Switch back to "Rebar" → still shows the 2 Rebar banners.
+- Generate for Rebar on June 2 → 5 images match Rebar references.
+- Generate for Stirrups → 5 images match the single Stirrups reference (different style).
+- Remove all Rebar refs → next Rebar run falls back to generic style.
