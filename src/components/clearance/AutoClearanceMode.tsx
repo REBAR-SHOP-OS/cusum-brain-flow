@@ -114,6 +114,8 @@ export function AutoClearanceMode({
               {manifestLabel}
             </p>
             <p className="text-[10px] mt-0.5 text-white/70">
+              Zone: <span className="font-bold text-white">{selectedZone || "—"}</span>
+              {"  ·  "}
               Target: <span className="font-bold text-white">{activeItem?.mark_number ?? (stage === "tag" ? "AUTO — scanning" : "—")}</span>
             </p>
           </div>
