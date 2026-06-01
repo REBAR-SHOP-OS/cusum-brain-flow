@@ -220,7 +220,10 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
     const authHeader = originalReq.headers.get("Authorization")!;
-    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [], mode = "post", product = "" } = body;
+    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [], mode = "post", product = "", aspectRatio = "9:16" } = body;
+    const storyAspect: StoryAspect = (["9:16", "1:1", "4:5", "16:9"] as const).includes(aspectRatio) ? aspectRatio : "9:16";
+    const aspectCfg = ASPECT_SIZE[storyAspect];
+    const isStoryRatio = storyAspect === "9:16";
 
     const postDate = scheduledDate || new Date().toISOString();
     const dateStr = new Date(postDate).toLocaleDateString("en-US", {
