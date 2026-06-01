@@ -390,6 +390,9 @@ export function useAutoClearance({
       perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
     } catch (e: any) {
       console.error("tag capture failed", e);
+      // Clear partial active refs so the next shutter cannot reuse a stale id.
+      setActiveItemId(null);
+      setActiveEvidenceId(null);
       showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 3000);
       setState("waiting_tag");
     } finally {
