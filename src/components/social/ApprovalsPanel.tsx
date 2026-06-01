@@ -23,7 +23,15 @@ export function ApprovalsPanel() {
   const { posts } = useSocialPosts();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState<Record<string, string>>({});
-  const [showHistory, setShowHistory] = useState(false);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCurrentUser().then((u) => setCurrentUserEmail(u?.email ?? null));
+  }, []);
+
+  // HARD RULE: only neel@rebar.shop may approve. All other reviewers can reject only.
+  const canApprove = currentUserEmail === "neel@rebar.shop";
+
 
   const getPost = (postId: string): SocialPost | undefined =>
     posts.find((p) => p.id === postId);
