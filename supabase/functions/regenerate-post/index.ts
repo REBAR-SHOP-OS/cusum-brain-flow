@@ -455,12 +455,13 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         `PRODUCT/TOPIC FOCUS: ${userProductFocus} for REBAR.SHOP. ` +
         `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${existingImageText}"` +
         ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}\n\n` +
-        `Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram.`;
+        `Ultra high resolution, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels. NEVER square.`;
 
       console.log("[regenerate-post] IMAGE-ONLY mode — caption preserved");
       const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, {
         styleIndex: "io",
         previousImageUrl: post.image_url || undefined,
+        imageAspectRatio: "9:16",
       });
 
       if (!imgResult.imageUrl) {
