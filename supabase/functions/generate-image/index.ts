@@ -436,6 +436,10 @@ Instructions:
       );
     }
 
+    const openAiPrompt = aspectRatio === "9:16"
+      ? `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n${prompt}`
+      : prompt;
+
     const resp = await fetch("https://api.openai.com/v1/images/generations", {
       method: "POST",
       headers: {
@@ -444,8 +448,8 @@ Instructions:
       },
       body: JSON.stringify({
         model: selectedModel === "gpt-image-1" ? "gpt-image-1" : "dall-e-3",
-        prompt,
-        size: "1024x1024",
+        prompt: openAiPrompt,
+        size: aspectRatio === "9:16" ? "1024x1536" : "1024x1024",
         quality: selectedModel === "gpt-image-1" ? "high" : "hd",
         n: 1,
       }),
@@ -471,7 +475,19 @@ Instructions:
       );
     }
     const imageData = data.data?.[0];
-    const imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : null);
+    let imageUrl = imageData?.url || (imageData?.b64_json ? `data:image/png;base64,${imageData.b64_json}` : null);
+    if (imageUrl && aspectRatio === "9:16") {
+      try {
+        const imageBytes = await cropToAspectRatioStrict(await imageUrlToBytes(imageUrl), "9:16");
+        imageUrl = bytesToPngDataUrl(imageBytes);
+      } catch (cropErr) {
+        console.error("[generate-image] OpenAI strict 9:16 crop failed:", cropErr);
+        return new Response(
+          JSON.stringify({ error: "Generated image was not valid 9:16 portrait. Please try again." }),
+          { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     return new Response(
       JSON.stringify({ imageUrl, revisedPrompt: imageData?.revised_prompt || null, pexelsInspired: false }),
