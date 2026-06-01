@@ -193,7 +193,7 @@ Deno.serve((req) =>
   handleRequest(req, async (ctx) => {
     const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
     const authHeader = originalReq.headers.get("Authorization")!;
-    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [] } = body;
+    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [], mode = "post", product = "" } = body;
 
     const postDate = scheduledDate || new Date().toISOString();
     const dateStr = new Date(postDate).toLocaleDateString("en-US", {
@@ -207,6 +207,138 @@ Deno.serve((req) =>
       resolveLogoUrl(),
       fetchBrainContext(supabaseAdmin),
     ]);
+
+    // ────────────────────────────────────────────────────────────
+    // STORY MODE: image-only 9:16 cards for a single product.
+    // Skips caption AI entirely. Only updates placeholder rows
+    // with image_url. No approvals, no slogans, no Persian.
+    // ────────────────────────────────────────────────────────────
+    if (mode === "story" && product) {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) {
+        return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const STORY_ANGLES = [
+        "Hero macro close-up, shallow depth of field, dramatic side lighting on the product texture",
+        "Real warehouse product shot, bundled units stacked on industrial floor, natural daylight from skylights",
+        "Workshop fabrication scene, the product being handled by a worker in safety gear, sparks/dust atmosphere",
+        "Top-down overhead arrangement of the product on a real workbench, clean industrial backdrop",
+        "Golden-hour outdoor product shot on a real construction site staging area, dramatic shadows",
+      ];
+
+      const updateResults: { id: string; image_url: string | null }[] = [];
+      const brainImgs = brainCtx.resourceImageUrls.slice(0, 3);
+
+      const generateStoryImage = async (angle: string): Promise<string | null> => {
+        const fullPrompt =
+          `PHOTOREALISTIC vertical 9:16 portrait Instagram/Facebook STORY image. ` +
+          `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
+          `Composition: ${angle}. Full-bleed 9:16 portrait framing with safe top/bottom margins. ` +
+          `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
+          `Place the REBAR.SHOP logo as a small watermark in a corner exactly as provided. ` +
+          `ABSOLUTELY NO text overlay, NO slogan, NO caption inside the image. Image only.`;
+
+        const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+        if (logoUrl) {
+          contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+          contentParts.push({
+            type: "text",
+            text: "Use this EXACT logo image as-is in a corner watermark. Do NOT modify or redraw it.",
+          });
+        }
+        for (const refUrl of brainImgs) {
+          contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+        }
+        if (brainImgs.length > 0) {
+          contentParts.push({
+            type: "text",
+            text: "Reference images show real REBAR.SHOP products — match product appearance and brand identity.",
+          });
+        }
+
+        try {
+          let imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "google/gemini-2.5-flash-image",
+              messages: [{ role: "user", content: contentParts }],
+              modalities: ["image", "text"],
+            }),
+          });
+          if (!imgResp.ok && (logoUrl || brainImgs.length > 0)) {
+            imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash-image",
+                messages: [{ role: "user", content: fullPrompt }],
+                modalities: ["image", "text"],
+              }),
+            });
+          }
+          if (!imgResp.ok) {
+            console.error("Story image gen failed:", imgResp.status, await imgResp.text());
+            return null;
+          }
+          const imgData = await imgResp.json();
+          const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+          if (!b64Url) return null;
+          const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
+          const binaryStr = atob(base64Data);
+          const bytes = new Uint8Array(binaryStr.length);
+          for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+          const blob = new Blob([bytes], { type: "image/png" });
+          const fileName = `images/story-${crypto.randomUUID()}.png`;
+          const { error: uploadErr } = await supabaseAdmin.storage
+            .from("social-media-assets")
+            .upload(fileName, blob, { contentType: "image/png", upsert: false });
+          if (uploadErr) { console.error("Story upload error:", uploadErr); return null; }
+          const { data: pubUrl } = supabaseAdmin.storage
+            .from("social-media-assets")
+            .getPublicUrl(fileName);
+          return pubUrl.publicUrl;
+        } catch (e) {
+          console.error("Story image error:", e);
+          return null;
+        }
+      };
+
+      // Process in parallel batches of 2 to stay within rate limits
+      const BATCH = 2;
+      for (let i = 0; i < TIME_SLOTS.length; i += BATCH) {
+        const slice = TIME_SLOTS.slice(i, i + BATCH);
+        const results = await Promise.all(
+          slice.map((_, k) => generateStoryImage(STORY_ANGLES[(i + k) % STORY_ANGLES.length]))
+        );
+        for (let k = 0; k < slice.length; k++) {
+          const idx = i + k;
+          const imageUrl = results[k];
+          const phId = placeholderIds[idx];
+          if (!phId) continue;
+          // Update image only; keep title=product, content="", content_type="story"
+          await supabaseAdmin
+            .from("social_posts")
+            .update({ image_url: imageUrl, content_type: "story", title: product, content: "", hashtags: [] })
+            .eq("id", phId);
+          updateResults.push({ id: phId, image_url: imageUrl });
+        }
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          postsCreated: updateResults.length,
+          mode: "story",
+          product,
+          message: `Generated ${updateResults.length} story image(s) for ${product}.`,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     const products = pickUniqueProducts(TIME_SLOTS.length);
     const brainInstructionsText = brainCtx.customInstructions

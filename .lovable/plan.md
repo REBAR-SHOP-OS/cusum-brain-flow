@@ -1,75 +1,51 @@
 ## Goal
 
-Make the existing pink/orange "5" icon next to **Add Card** a 2-step popover:
+The "5" icon next to **Add Card** must produce **stories only**:
+- 5 cards on the picked date for the picked product
+- Each card flagged as a Story (`content_type = "story"`)
+- Each card has **only an image** in 9:16 portrait, **no caption / no hashtags / no slogan overlay**
+- Image must depict **only the chosen product** (no generic construction scenes)
 
-1. Pick a date (calendar).
-2. Pick one of 9 products.
-3. Auto-generate **5 Story cards** for that date, each with a product-specific AI image (9:16) and a matching caption.
+The existing 2-step popover (calendar → product list) stays. Only the generation pipeline changes.
 
-## Scope
+## Changes
 
-Frontend-only change in `src/pages/SocialMediaManager.tsx`, plus a tiny addition to the prompt sent to the existing `auto-generate-post` edge function via `useAutoGenerate.generatePosts(...)`. No DB migrations, no new edge function, no schema changes.
+### 1. `src/hooks/useAutoGenerate.ts`
+- Add optional params: `mode?: "story" | "post"` (default `"post"`), `product?: string`.
+- When `mode === "story"`:
+  - Placeholder rows insert with `content_type: "story"`, `title: product`, `content: ""`, `hashtags: []`.
+  - Forward `mode` and `product` in the `auto-generate-post` invoke body.
 
-## UX flow
+### 2. `supabase/functions/auto-generate-post/index.ts`
+- Read `mode` and `product` from body.
+- When `mode === "story"`:
+  - Skip the full Pixel system prompt / JSON caption generation entirely.
+  - Build 5 image prompts locally (one per `TIME_SLOTS` slot) — each prompt:
+    - Pins the subject to the single chosen `product` only (no city/skyline/crane filler).
+    - Requests **9:16 vertical / portrait framing**, full-bleed Instagram/Facebook Story composition, safe top/bottom margins.
+    - Uses 5 different camera angles / lighting setups from `VISUAL_STYLES` filtered to product-centric ones (macro, warehouse product shot, workshop close-up, dramatic lighting, blueprint-on-bench).
+    - Keeps the existing logo watermark rule (logo image attached as reference).
+    - Adds: "No text overlay, no slogan, no caption inside the image."
+  - Update the 5 placeholder rows with `image_url` only — do **not** overwrite `title`, `content`, `hashtags`, or `content_type`.
+  - Skip approval-record creation block (stories stay as drafts owned by user) — same path as current placeholder-only flow.
 
-```text
-[click 5-icon] → Popover step 1: Calendar (single date)
-              → Popover step 2: Product list (9 buttons, scrollable)
-              → Toast "Generating 5 Story cards for <Product>…"
-              → Week jumps to the chosen date; 5 placeholder cards appear,
-                then fill in with images + captions as generation completes.
-```
-
-Products (fixed list, in this order):
-
-- Rebar Stirrups
-- Rebar Cages
-- Rebar Hooks
-- Rebar Dowels
-- Circular Ties / Bars
-- Fiberglass Rebar (GFRP)
-- Wire Mesh
-- Rebar Tie Wire
-- Rebar Accessories
-
-Cancel/back: a small "← Back to date" link in step 2 returns to the calendar. Closing the popover resets both selections.
-
-## Technical details
-
-1. **`src/pages/SocialMediaManager.tsx`** (only file touched in UI):
-   - Convert the existing 5-stories `<Popover>` (currently at ~lines 402–440) from uncontrolled to controlled with `useState` for `open`, `pickedDate`, and a new `STORY_PRODUCTS` constant (the 9 names above).
-   - Step 1 = current `<Calendar mode="single">`. `onSelect` only stores `pickedDate` — no DB writes yet.
-   - Step 2 = a vertical list of 9 `<Button variant="ghost">` rows. Clicking one:
-     1. Closes the popover, resets local state.
-     2. Calls `setWeekStart(startOfWeek(pickedDate, { weekStartsOn: 1 }))`.
-     3. Calls the existing `generatePosts({...})` from `useAutoGenerate` (already wired into the component — re-add it to the destructure if missing) with:
-        ```ts
-        generatePosts({
-          platforms: ["unassigned"],
-          themes: [productName],
-          scheduledDate: format(pickedDate, "yyyy-MM-dd"),
-          customInstructions:
-            `Create 5 Instagram/Facebook STORY cards (9:16 portrait) for the product "${productName}". ` +
-            `Each card must feature a real-looking product photo of ${productName} on a clean construction-site background, ` +
-            `with a short punchy caption (max 12 words) highlighting one distinct benefit per card. ` +
-            `Keep the REBAR.SHOP logo. Output 5 unique angles.`,
-        });
-        ```
-   - Remove the inline 5×`createPost.mutate` loop from the current implementation (it produces blank cards) — replaced by `generatePosts` which already creates 5 placeholder rows + fills them with AI image + caption (logic in `useAutoGenerate.ts` lines 60–115). This satisfies the dead-code-removal rule.
-
-2. **No edge-function change required.** `auto-generate-post` already accepts `customInstructions` (line 196) and uses it in the image+caption prompt (lines 212–215). The 9:16 story framing is conveyed through `customInstructions`. We are not adding a new `aspect` param to the API.
-
-3. **`content_type = "story"`** is **not** set by `auto-generate-post` today; this plan does not change that (out of scope). The cards land as drafts the user can still tag as Story manually if needed. If you want auto-tagging, say so and I'll add a tiny post-insert update in `useAutoGenerate` behind a new option — but that's an extra step, not in this plan.
+### 3. `src/pages/SocialMediaManager.tsx`
+- In the "5 stories" popover product-button `onClick`, change the `generatePosts` call to:
+  ```ts
+  generatePosts({
+    mode: "story",
+    product,
+    platforms: ["unassigned"],
+    scheduledDate: format(storyPickedDate, "yyyy-MM-dd"),
+  });
+  ```
+- Drop the previous `customInstructions` / `themes` payload — the edge function owns the story prompt now.
 
 ## Out of scope
-
-- No changes to the existing **Add Card** button, the auto-generate brain prompt for non-story posts, the publish pipeline, or any DB tables.
-- No new edge function, no aspect-ratio plumbing through the API.
-- No automatic `content_type='story'` stamping (call this out — ask if you want it added).
+- No DB migration (`content_type` column already exists on `social_posts`).
+- No new edge function.
+- Image API still Gemini 2.5 flash image via chat-completions (9:16 framing is conveyed in the prompt — Gemini image doesn't accept a `size` param).
+- No change to "Add Card", "Generating…", approvals, or the rest of the page.
 
 ## Verification
-
-- Click the 5-icon → calendar appears. Pick a date → product list appears. Pick "Rebar Stirrups".
-- Toast "Posts generated 🎨" within ~30–60s; week view jumps to that date; 5 cards appear, each with an image of stirrups and a short caption.
-- Re-open the popover → it resets to step 1 (calendar). No leaked state.
-- Existing **Add Card** popover and all other buttons unchanged.
+- Click "5" → pick date → pick "Rebar Stirrups" → 5 cards appear at the 5 placeholder times on that date, each card empty caption, image is a vertical 9:16 stirrups close-up with logo watermark, `content_type = 'story'` in DB.

@@ -33,6 +33,8 @@ export function useAutoGenerate() {
     themes?: string[];
     customInstructions?: string;
     scheduledDate?: string;
+    mode?: "story" | "post";
+    product?: string;
   }) => {
     setGenerating(true);
     const controller = new AbortController();
@@ -56,15 +58,19 @@ export function useAutoGenerate() {
 
       const postDate = options?.scheduledDate || new Date().toISOString();
 
+      const isStory = options?.mode === "story";
+      const storyProduct = options?.product ?? "";
+
       // Phase 0: Insert 5 placeholder "?" cards immediately
       const placeholderRows = PLACEHOLDER_TIMES.map((slot) => ({
         user_id: user.id,
         platform: "unassigned" as const,
-        title: "?",
+        title: isStory ? storyProduct || "Story" : "?",
         content: "",
         hashtags: [] as string[],
         image_url: null,
         status: "draft" as const,
+        content_type: isStory ? "story" : null,
         scheduled_date: buildScheduledDate(postDate, slot.hour, slot.minute),
       }));
 
@@ -90,6 +96,8 @@ export function useAutoGenerate() {
           customInstructions: options?.customInstructions ?? "",
           scheduledDate: options?.scheduledDate,
           placeholderIds,
+          mode: options?.mode ?? "post",
+          product: storyProduct,
         },
       });
       clearTimeout(timeout);
