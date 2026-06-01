@@ -69,9 +69,9 @@ function buildAdPrompt(
   parts.push("- Natural lighting, real textures, real materials, real environments.");
   parts.push("- ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, clip-art.");
 
-  // Soft composition hint — final dimensions enforced by server-side crop/resize
+  // Hard composition hint — final dimensions enforced by server-side crop/resize
   if (aspectRatio === "9:16") {
-    parts.push("- Compose the scene as a VERTICAL/PORTRAIT layout — taller than wide, suitable for Instagram/Facebook Stories.");
+    parts.push("- MANDATORY CANVAS: 9:16 vertical portrait STORY image, exactly taller-than-wide, equivalent to 1080×1920 pixels. DO NOT create a square 1:1 image. DO NOT create landscape.");
   } else if (aspectRatio === "16:9") {
     parts.push("- Compose the scene as a LANDSCAPE layout — wider than tall, suitable for social media banners.");
   } else {
@@ -319,10 +319,10 @@ Instructions:
       // Step 2: Build advertising-optimized prompt with Pixel Brain context
       let adPrompt = buildAdPrompt(prompt, brandContext, !!pexelsUrl, aspectRatio);
       if (aspectRatio === "9:16") {
-        adPrompt = `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n${adPrompt}`;
+        adPrompt = `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n\n${adPrompt}`;
       }
       if (brainInstructions) {
-        adPrompt = `PRIORITY BRAND INSTRUCTIONS (from Pixel Brain):\n${brainInstructions}\n\n${adPrompt}`;
+        adPrompt = `${adPrompt}\n\nPRIORITY BRAND INSTRUCTIONS (from Pixel Brain — follow only when they do not conflict with the mandatory 9:16 Story canvas):\n${brainInstructions}`;
       }
 
       // Step 3: Build message content (multi-modal with reference + logo + brain resources)
@@ -437,7 +437,7 @@ Instructions:
     }
 
     const openAiPrompt = aspectRatio === "9:16"
-      ? `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n${prompt}`
+      ? `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n\n${prompt}`
       : prompt;
 
     const resp = await fetch("https://api.openai.com/v1/images/generations", {
@@ -449,7 +449,7 @@ Instructions:
       body: JSON.stringify({
         model: selectedModel === "gpt-image-1" ? "gpt-image-1" : "dall-e-3",
         prompt: openAiPrompt,
-        size: aspectRatio === "9:16" ? "1024x1536" : "1024x1024",
+        size: aspectRatio === "9:16" ? "1024x1792" : "1024x1024",
         quality: selectedModel === "gpt-image-1" ? "high" : "hd",
         n: 1,
       }),
