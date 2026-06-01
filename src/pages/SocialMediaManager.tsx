@@ -432,7 +432,11 @@ export default function SocialMediaManager() {
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-72 p-0" align="start">
-              <StoryBannerReferences />
+              <StoryBannerReferences
+                products={STORY_PRODUCTS}
+                product={storyProduct}
+                onProductChange={setStoryProduct}
+              />
               {!storyPickedDate ? (
                 <div className="p-0">
                   <div className="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground">Step 1 · Pick a date</div>
