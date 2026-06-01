@@ -420,12 +420,15 @@ export default function SocialMediaManager() {
             open={storyPopoverOpen}
             onOpenChange={(o) => {
               setStoryPopoverOpen(o);
-              if (!o) setStoryPickedDate(null);
+              if (!o) {
+                setStoryPickedDate(null);
+                setStoryAspect(null);
+              }
             }}
           >
             <PopoverTrigger asChild>
               <button
-                title="Create 5 Story cards for a product"
+                title="Create 5 image cards for a product"
                 className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-pink-600 to-orange-500 text-white hover:opacity-90 transition-opacity"
               >
                 <Clapperboard className="w-5 h-5" />
@@ -448,16 +451,48 @@ export default function SocialMediaManager() {
                     className={cn("p-3 pointer-events-auto")}
                   />
                 </div>
-              ) : (
+              ) : !storyAspect ? (
                 <div className="w-64 p-2">
                   <div className="flex items-center justify-between px-2 pt-1 pb-2">
                     <div className="text-xs font-medium text-muted-foreground">
-                      Step 2 · Pick a product
+                      Step 2 · Pick image size
                       <div className="text-[10px] opacity-70">{format(storyPickedDate, "EEE, MMM d")}</div>
                     </div>
                     <button
                       className="text-xs text-primary hover:underline"
                       onClick={() => setStoryPickedDate(null)}
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    {([
+                      { value: "9:16", label: "9:16 — Story / Reel", icon: "📱" },
+                      { value: "1:1", label: "1:1 — Square (Feed)", icon: "⬜" },
+                      { value: "4:5", label: "4:5 — Portrait (Feed)", icon: "🖼️" },
+                      { value: "16:9", label: "16:9 — Landscape", icon: "🖥️" },
+                    ] as const).map((opt) => (
+                      <button
+                        key={opt.value}
+                        className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors flex items-center gap-2"
+                        onClick={() => setStoryAspect(opt.value)}
+                      >
+                        <span>{opt.icon}</span>
+                        <span>{opt.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="w-64 p-2">
+                  <div className="flex items-center justify-between px-2 pt-1 pb-2">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Step 3 · Pick a product
+                      <div className="text-[10px] opacity-70">{format(storyPickedDate, "EEE, MMM d")} · {storyAspect}</div>
+                    </div>
+                    <button
+                      className="text-xs text-primary hover:underline"
+                      onClick={() => setStoryAspect(null)}
                     >
                       ← Back
                     </button>
@@ -469,8 +504,10 @@ export default function SocialMediaManager() {
                         className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
                         onClick={() => {
                           const date = storyPickedDate;
+                          const aspect = storyAspect;
                           setStoryPopoverOpen(false);
                           setStoryPickedDate(null);
+                          setStoryAspect(null);
                           setStoryProduct(product);
                           setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
                           generatePosts({
@@ -478,6 +515,7 @@ export default function SocialMediaManager() {
                             product,
                             platforms: ["unassigned"],
                             scheduledDate: format(date, "yyyy-MM-dd"),
+                            aspectRatio: aspect,
                           });
                         }}
                       >
@@ -489,6 +527,7 @@ export default function SocialMediaManager() {
               )}
             </PopoverContent>
           </Popover>
+
 
           <div className="flex items-center gap-4 sm:gap-6 sm:ml-auto">
             <div className="flex items-center gap-2">
