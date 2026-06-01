@@ -465,14 +465,10 @@ export default function SocialMediaManager() {
                           setStoryPickedDate(null);
                           setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
                           generatePosts({
+                            mode: "story",
+                            product,
                             platforms: ["unassigned"],
-                            themes: [product],
                             scheduledDate: format(date, "yyyy-MM-dd"),
-                            customInstructions:
-                              `Create 5 Instagram/Facebook STORY cards (9:16 portrait) for the product "${product}". ` +
-                              `Each card must feature a real-looking product photo of ${product} on a clean construction-site background, ` +
-                              `with a short punchy caption (max 12 words) highlighting one distinct benefit per card. ` +
-                              `Keep the REBAR.SHOP logo. Output 5 unique angles.`,
                           });
                         }}
                       >
