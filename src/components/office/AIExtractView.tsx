@@ -1296,6 +1296,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                                       setNewProjectName("");
                                       setCustomer(c.name);
                                       setSelectedBarlistId("");
+                                      setProjectOpen(false);
                                     }}>
                                       + {c.name}
                                     </CommandItem>
