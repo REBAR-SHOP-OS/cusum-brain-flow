@@ -14202,6 +14202,54 @@ export type Database = {
         }
         Relationships: []
       }
+      story_banner_references: {
+        Row: {
+          created_at: string
+          id: string
+          image_url: string
+          storage_path: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_url: string
+          storage_path: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_url?: string
+          storage_path?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      story_banner_style_cache: {
+        Row: {
+          created_at: string
+          id: string
+          reference_set_hash: string
+          style_brief: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          reference_set_hash: string
+          style_brief: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          reference_set_hash?: string
+          style_brief?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       stripe_payment_links: {
         Row: {
           amount: number
