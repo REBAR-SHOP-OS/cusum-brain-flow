@@ -746,6 +746,7 @@ export function PostReviewPanel({
   };
 
   const isVideo = post.image_url?.endsWith(".mp4");
+  const isStory = localContentType === "story" || post.content_type === "story";
 
   // Derive display values
   const platformsDisplay = localPlatforms.length === PLATFORM_OPTIONS.length
@@ -833,7 +834,16 @@ export function PostReviewPanel({
                         </>
                       ) : (
                         <>
-                          <img src={post.image_url} alt="Post preview" className="w-full object-contain rounded-lg" />
+                          <div className={cn(isStory && "mx-auto aspect-[9/16] max-h-[520px] bg-muted")}> 
+                            <img
+                              src={post.image_url}
+                              alt="Post preview"
+                              className={cn(
+                                "rounded-lg object-contain",
+                                isStory ? "h-full w-full" : "w-full"
+                              )}
+                            />
+                          </div>
                           <button
                             onClick={() => setImageZoomOpen(true)}
                             className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1736,7 +1746,9 @@ export function PostReviewPanel({
         <>
           <Dialog open={imageZoomOpen} onOpenChange={setImageZoomOpen}>
             <DialogContent className="max-w-[60vw] max-h-[70vh] p-4 flex items-center justify-center">
-              <img src={post.image_url} alt="Full preview" className="max-w-full max-h-[65vh] object-contain rounded-lg" />
+              <div className={cn(isStory && "aspect-[9/16] max-h-[65vh]")}> 
+                <img src={post.image_url} alt="Full preview" className={cn("max-w-full max-h-[65vh] object-contain rounded-lg", isStory && "h-full w-full")} />
+              </div>
             </DialogContent>
           </Dialog>
           <ImageEditDialog
