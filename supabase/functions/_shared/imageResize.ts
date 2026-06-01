@@ -25,6 +25,12 @@ function resolveTargetDimensions(ratio: string): { w: number; h: number } | null
 
   const r = ratio.trim();
 
+  // Hard-coded social formats. Story images must be true 9:16 output,
+  // not the provider's common 2:3 portrait size.
+  if (r === "9:16") return { w: 1080, h: 1920 };
+  if (r === "16:9") return { w: 1920, h: 1080 };
+  if (r === "1:1") return { w: 1536, h: 1536 };
+
   // Explicit WxH (e.g. "1024x1536")
   const wxhMatch = r.match(/^(\d+)\s*[xX×]\s*(\d+)$/);
   if (wxhMatch) {
