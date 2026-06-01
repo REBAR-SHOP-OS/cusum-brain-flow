@@ -101,7 +101,7 @@ async function generatePixelImage(
     : prompt;
 
   // Inject aspect ratio instruction at the START of prompt for maximum priority
-  const aspectRatio = options?.imageAspectRatio || "1:1";
+  const aspectRatio = options?.imageAspectRatio || "9:16";
   const dimensionMap: Record<string, string> = { "16:9": "1536×1024", "9:16": "1024×1536", "1:1": "1024×1024" };
   const orientationMap: Record<string, string> = { "16:9": "LANDSCAPE (wider than tall)", "9:16": "PORTRAIT/VERTICAL (taller than wide)", "1:1": "SQUARE (equal width and height)" };
   const aspectInstruction = `MANDATORY IMAGE DIMENSIONS: Generate in ${orientationMap[aspectRatio] || orientationMap["1:1"]} format (${dimensionMap[aspectRatio] || dimensionMap["1:1"]} pixels, ${aspectRatio} ratio). The output MUST strictly follow this aspect ratio.`;
@@ -455,12 +455,13 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         `PRODUCT/TOPIC FOCUS: ${userProductFocus} for REBAR.SHOP. ` +
         `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${existingImageText}"` +
         ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}\n\n` +
-        `Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram.`;
+        `Ultra high resolution, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels. NEVER square.`;
 
       console.log("[regenerate-post] IMAGE-ONLY mode — caption preserved");
       const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, {
         styleIndex: "io",
         previousImageUrl: post.image_url || undefined,
+        imageAspectRatio: "9:16",
       });
 
       if (!imgResult.imageUrl) {
@@ -716,9 +717,9 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         `Every image MUST look like it was taken by a professional photographer with a real camera at a real location.\n\n`;
 
     const qualitySuffix = userWantsNonRealistic
-      ? `- Ultra high resolution, 1:1 square aspect ratio, perfect for Instagram\n` +
+      ? `- Ultra high resolution, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels — NEVER square\n` +
         `- Follow the "${effectiveStyle}" style with professional quality`
-      : `- Ultra high resolution, PHOTOREALISTIC ONLY, 1:1 square aspect ratio, perfect for Instagram\n` +
+      : `- Ultra high resolution, PHOTOREALISTIC ONLY, 9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels — NEVER square\n` +
         `- Must look like a REAL photograph — natural imperfections, real lighting, actual textures`;
 
     const imagePrompt = userPriorityBlock + customInstructionsBlock + productFocusBlock +
@@ -738,7 +739,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
       qualitySuffix;
 
     console.log(`🎨 Regenerate: Using style #${selected.idx}: ${selected.style.slice(0, 60)}...`);
-    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined, resourceImageUrls: brainImageRefs.slice(0, 3) });
+    const imgResult = await generatePixelImage(imagePrompt, supabase, logoUrl, { styleIndex: selected.idx, previousImageUrl: post.image_url || undefined, resourceImageUrls: brainImageRefs.slice(0, 3), imageAspectRatio: "9:16" });
 
     const imageUrl = imgResult.imageUrl || post.image_url;
 

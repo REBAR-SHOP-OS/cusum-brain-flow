@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { cropToAspectRatio } from "../_shared/imageResize.ts";
 
 // buildEventPromptBlock removed — events are opt-in via chat only
 
@@ -404,8 +405,10 @@ Deno.serve((req) =>
             const b64 = imgData.data?.[0]?.b64_json;
             if (!b64) return null;
             const binaryStr = atob(b64);
-            const bytes = new Uint8Array(binaryStr.length);
+            let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            // Enforce exact 9:16 portrait (never square, never 2:3)
+            bytes = await cropToAspectRatio(bytes, "9:16");
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
@@ -714,7 +717,8 @@ Return an array of 5 objects:
             console.log(`Generating image for post ${idx + 1}/${generatedPosts.length}...`);
 
             // Build multimodal content with logo + brain refs
-            const fullPrompt = brainInstructionsText + post.image_prompt;
+            const ASPECT_9_16 = "MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square (1:1), NEVER landscape. The image MUST be portrait orientation.\n\n";
+            const fullPrompt = ASPECT_9_16 + brainInstructionsText + post.image_prompt;
             const contentParts: any[] = [{ type: "text", text: fullPrompt }];
 
             if (logoUrl) {
@@ -780,8 +784,10 @@ Return an array of 5 objects:
 
             const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
             const binaryStr = atob(base64Data);
-            const bytes = new Uint8Array(binaryStr.length);
+            let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            // Enforce exact 9:16 portrait — Gemini ignores size, so crop server-side
+            bytes = await cropToAspectRatio(bytes, "9:16");
             const blob = new Blob([bytes], { type: "image/png" });
 
             const fileName = `images/${crypto.randomUUID()}.png`;
