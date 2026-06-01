@@ -421,6 +421,9 @@ Deno.serve((req) =>
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
             // Enforce exact 9:16 portrait (never square, never 2:3)
             bytes = await cropToAspectRatioStrict(bytes, "9:16");
+            // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
+            // If anything upstream lied about the canvas, reject and retry.
+            await assertStoryDimensions(bytes);
             const hash = await sha256Hex(bytes);
             if (usedHashes.has(hash) && attempt === 0) {
               console.warn("Story duplicate hash, retrying:", hash);
