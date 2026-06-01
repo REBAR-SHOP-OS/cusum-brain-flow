@@ -523,17 +523,9 @@ export function PostReviewPanel({
     if (!window.confirm("Are you sure you want to delete this post?")) return;
     setDeleting(true);
     try {
-      // Find all sibling posts in the same calendar card (same platform + title + day)
-      const postDay = post.scheduled_date?.substring(0, 10);
-      const siblings = allPosts.filter(p =>
-        p.platform === post.platform &&
-        p.title === post.title &&
-        p.scheduled_date?.substring(0, 10) === postDay
-      );
-      const idsToDelete = siblings.length > 0 ? siblings.map(s => s.id) : [post.id];
-
-      await Promise.all(idsToDelete.map(id => deletePost.mutateAsync(id)));
-      toast({ title: "Deleted", description: `${idsToDelete.length} post(s) deleted.` });
+      // Delete ONLY the current post. Never cascade to other cards.
+      await deletePost.mutateAsync(post.id);
+      toast({ title: "Deleted", description: "Post deleted." });
     } finally {
       setDeleting(false);
       onClose();

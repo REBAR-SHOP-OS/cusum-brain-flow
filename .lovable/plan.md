@@ -1,45 +1,34 @@
-## هدف
-تصاویر ساخته‌شده در بخش Story باید واقعاً 9:16 باشند، نه فقط داخل کادر 9:16 نمایش داده شوند. اصلاح باید ریشه‌ای باشد و مسیرهای تولید، ذخیره، آپلود و نمایش را پوشش دهد.
+## مشکل (Root cause)
 
-## علت‌های محتملی که باید اصلاح شوند
-- مدل بعضی وقت‌ها با وجود prompt خروجی مربع می‌دهد.
-- `ensurePortrait` در فرانت‌اند فقط crop می‌کند اما خروجی را به سایز ثابت 1080×1920 تبدیل نمی‌کند.
-- بعد از تولید Story، `handleMediaReady` تصویر را دوباره آپلود می‌کند و می‌تواند نوع/ابعاد فایل را بدون کنترل سخت ذخیره کند.
-- نمایش preview با `object-contain` ممکن است تصویر مربعی واقعی را داخل قاب 9:16 نشان دهد، پس مشکل واقعی پنهان می‌ماند.
-- مسیرهای `AI Image` و `Regenerate image` برای یک Story باید aspect را از `content_type=story` بگیرند و 9:16 تولید کنند، نه مسیر عادی مربعی.
+در `src/components/social/PostReviewPanel.tsx` تابع `handleDelete` (خط ۵۲۲–۵۴۱) عمداً همهٔ پست‌های «خواهر/برادر» (siblings) را که هم‌پلتفرم، هم‌عنوان و هم‌روز هستند پیدا می‌کند و همه را با هم پاک می‌کند:
 
-## برنامه اجرا
-1. **یک ابزار قطعی سمت کلاینت برای Story بسازم/اصلاح کنم**
-   - `ensurePortrait` را به خروجی ثابت 1080×1920 PNG تبدیل کنم.
-   - اگر تصویر ورودی مربع/افقی/2:3 باشد، center-crop + resize واقعی انجام شود.
-   - تابع validation اضافه شود تا قبل از ذخیره، نسبت 9:16 تأیید شود.
+```ts
+const siblings = allPosts.filter(p =>
+  p.platform === post.platform &&
+  p.title === post.title &&
+  p.scheduled_date?.substring(0,10) === postDay
+);
+const idsToDelete = siblings.length > 0 ? siblings.map(s => s.id) : [post.id];
+await Promise.all(idsToDelete.map(id => deletePost.mutateAsync(id)));
+```
 
-2. **مسیر Auto Generate Story داخل پنل را سخت‌گیر کنم**
-   - وقتی `storyMode` فعال است، خروجی dialog بعد از تولید و قبل از upload حتماً 1080×1920 شود.
-   - پس از `applyLogoToImage` هم دوباره portrait enforce شود چون overlay ممکن است خروجی جدید بسازد.
-   - در `handleMediaReady` اگر پست Story است، قبل از آپلود مجدد تصویر حتماً دوباره 9:16 شود.
+به همین دلیل وقتی کاربر روی یک کارت Delete می‌زند، تمام پست‌های مشابه آن روز هم پاک می‌شوند.
 
-3. **مسیر Regenerate image برای Story را اصلاح کنم**
-   - در `PostReviewPanel` به `regenerate-post` مقدار content type/aspect مناسب ارسال شود.
-   - در backend اگر پست `content_type='story'` است، اجبار 9:16 باقی بماند و برای غیر-Story مسیر موجود خراب نشود.
+## رفع باگ (Surgical)
 
-4. **نمایش preview را از حالت فریبنده خارج کنم**
-   - برای Story، container همیشه portrait بماند.
-   - تصویر داخل preview و zoom طوری نمایش داده شود که اگر خروجی اشتباه بود واضح دیده شود، اما بعد از fix باید full portrait fill شود.
+فقط همین تابع را اصلاح می‌کنیم تا فقط همان `post.id` پاک شود — بدون لمس مسیر Bulk Delete یا حذف unassigned.
 
-5. **Regression test اضافه/تقویت کنم**
-   - تست کند `ensurePortrait` دیگر فقط crop بدون resize نیست و خروجی 1080×1920 می‌سازد.
-   - تست کند `handleMediaReady` برای Story قبل از ذخیره 9:16 enforce می‌کند.
-   - تست کند مسیر regenerate برای Story aspect را حفظ می‌کند.
-   - تست‌های قبلی 9:16 و advertising text حفظ می‌شوند.
+### تغییرات
 
-## تضمین عدم شکست
-- Manual Mode و پست‌های معمولی 1:1 دست‌نخورده می‌مانند.
-- فقط مسیرهایی که `storyMode` یا `content_type='story'` دارند سخت‌گیر می‌شوند.
-- RLS یا publish approval gate دور زده نمی‌شود.
-- ذخیره همچنان از مسیر موجود storage و mutation انجام می‌شود.
+1. **`src/components/social/PostReviewPanel.tsx`** — `handleDelete`:
+   - حذف منطق siblings.
+   - فقط `await deletePost.mutateAsync(post.id)`.
+   - پیام toast: `"Post deleted."`.
 
-## اعتبارسنجی بعد از اجرا
-- اجرای regression test مربوط به social story images.
-- بررسی فایل‌های تغییرکرده برای اطمینان از حذف مسیرهای مربعی قدیمی در Story.
-- خروجی نهایی باید برای Story فایل واقعی 1080×1920 باشد، نه فقط قاب نمایشی 9:16.
+2. **رگرشن**: افزودن `tests/regression/social/delete-single-card-only.test.ts` که تضمین می‌کند با حذف یک پست، فقط یک id به `deletePost` پاس داده می‌شود حتی وقتی پست‌های دیگری با همان title/platform/date در `allPosts` وجود دارند.
+
+### خارج از scope (بدون تغییر)
+
+- مسیر Bulk Delete (`handleBulkDelete` در `SocialMediaManager.tsx`) دست‌نخورده.
+- مسیر `schedulePost({ delete_original: true })` برای unassigned دست‌نخورده.
+- منطق RLS، triggerها و workflow gates دست‌نخورده.
