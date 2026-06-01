@@ -33,6 +33,8 @@ export function useAutoGenerate() {
     themes?: string[];
     customInstructions?: string;
     scheduledDate?: string;
+    mode?: "story" | "post";
+    product?: string;
   }) => {
     setGenerating(true);
     const controller = new AbortController();
