@@ -442,6 +442,8 @@ export function useAutoClearance({
       setState("waiting_product");
     } catch (e: any) {
       console.error("confirmPick failed", e);
+      setActiveItemId(null);
+      setActiveEvidenceId(null);
       showBanner({ kind: "error", text: e?.message || "Tag save failed" }, 3000);
       setState("waiting_tag");
     } finally {
