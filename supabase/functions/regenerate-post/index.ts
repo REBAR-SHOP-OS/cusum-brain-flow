@@ -453,9 +453,14 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 
       const imagePrompt =
         `MANDATORY REALISM RULE: ALL images MUST be PHOTOREALISTIC real-world photography unless style says otherwise.\n\n` +
+        `THIS IS A COMPANY ADVERTISING BANNER for REBAR.SHOP — NOT a plain photo. It MUST look like a finished promotional ad / story banner with baked-in text.\n\n` +
         `VISUAL STYLE: ${userEffectiveStyle}. ` +
         `PRODUCT/TOPIC FOCUS: ${userProductFocus} for REBAR.SHOP. ` +
-        `MANDATORY: Write this exact advertising text prominently on the image in a clean, bold, readable font: "${existingImageText}"` +
+        `BAKED-IN ADVERTISING TEXT (MANDATORY, perfectly legible, bold sans-serif, spelled exactly, ENGLISH ONLY, no Persian/Arabic, no lorem ipsum, no gibberish):\n` +
+        `  1) HEADLINE / advertising slogan in the upper third over a darkened gradient strip: "${existingImageText}".\n` +
+        `  2) WORDMARK strip in the lower third: "REBAR.SHOP".\n` +
+        `  3) Small CALL-TO-ACTION line: "Call 647-260-9403  •  rebar.shop".\n` +
+        `An image without ALL THREE baked-in text elements is a FAILURE.\n` +
         ` — unique session seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}\n\n` +
         `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.`;
 
