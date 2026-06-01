@@ -292,13 +292,80 @@ Deno.serve((req) =>
         return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
       };
 
+      // ── Style references: load + derive (cached) style brief ───────────
+      let styleBrief = "";
+      let referenceImageUrls: string[] = [];
+      try {
+        const { data: refs } = await supabaseAdmin
+          .from("story_banner_references")
+          .select("image_url")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: true })
+          .limit(5);
+        referenceImageUrls = (refs ?? []).map((r: any) => r.image_url).filter(Boolean);
+
+        if (referenceImageUrls.length > 0) {
+          const sorted = [...referenceImageUrls].sort();
+          const enc = new TextEncoder().encode(sorted.join("|"));
+          const setHash = await sha256Hex(enc);
+
+          const { data: cached } = await supabaseAdmin
+            .from("story_banner_style_cache")
+            .select("style_brief")
+            .eq("user_id", userId)
+            .eq("reference_set_hash", setHash)
+            .maybeSingle();
+
+          if (cached?.style_brief) {
+            styleBrief = cached.style_brief as string;
+          } else {
+            try {
+              const visionResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "google/gemini-3-flash-preview",
+                  messages: [{
+                    role: "user",
+                    content: [
+                      { type: "text", text: "Analyze these reference story banner images. Return ONE concise paragraph (max 90 words) describing the SHARED visual style: composition, typography style, color palette, mood, photographic vs graphic treatment, and any recurring layout pattern (e.g. headline placement). This brief will be injected into image-generation prompts so future banners match this look. No preamble, no lists — single paragraph only." },
+                      ...referenceImageUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+                    ],
+                  }],
+                }),
+              });
+              if (visionResp.ok) {
+                const vj = await visionResp.json();
+                styleBrief = (vj.choices?.[0]?.message?.content || "").trim();
+                if (styleBrief) {
+                  await supabaseAdmin.from("story_banner_style_cache").insert({
+                    user_id: userId, reference_set_hash: setHash, style_brief: styleBrief,
+                  } as any);
+                }
+              } else {
+                console.warn("Style brief vision call failed:", visionResp.status, await visionResp.text());
+              }
+            } catch (e) {
+              console.warn("Style brief derivation error:", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Reference load error:", e);
+      }
+
+
       const buildStoryPrompt = (
         angle: string, lighting: string, palette: string, headline: string,
       ): string => {
         const seed = crypto.randomUUID();
+        const styleBlock = styleBrief
+          ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
+          : "";
         return (
           `PHOTOREALISTIC vertical portrait STORY BANNER, 2:3 / 9:16 aspect, taller than wide. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
+          styleBlock +
           `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
           `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
           `BAKED-IN TEXT (must be perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish): ` +
@@ -309,6 +376,7 @@ Deno.serve((req) =>
           `Variation seed: ${seed}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`
         );
       };
+
 
       const generateStoryImage = async (
         angle: string, lighting: string, palette: string, headline: string,

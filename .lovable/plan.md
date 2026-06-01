@@ -1,56 +1,64 @@
-## Problem
+## Goal
 
-Two issues with the 5-Stories generator in `supabase/functions/auto-generate-post/index.ts`:
+Make the pink/orange **Story Generator** icon (Clapperboard, badge "5") learn from reference banner images you upload, so the 5 generated story images match your desired style.
 
-1. **No banner text** — current prompt explicitly says *"ABSOLUTELY NO text overlay, NO slogan, NO caption inside the image."* The user now wants each story to look like a marketing **banner** with a short headline + brand text **baked into the image**.
-2. **Visual repetition risk** — the 5 stories per run cycle through 5 fixed `STORY_ANGLES` strings and use no per-image uniqueness token. Across multiple runs (or even within one run when the model latches onto a similar composition) images can look nearly identical.
+## UX changes — `src/pages/SocialMediaManager.tsx`
 
-## Fix (single file, edge function only)
+Extend the existing Clapperboard popover (currently: Step 1 date → Step 2 product) with a small **References** strip at the top of the popover and a new Step 0:
 
-Edit only `supabase/functions/auto-generate-post/index.ts` inside the `mode === "story"` branch.
+```
+┌──────────────────────────────────────────┐
+│ Style References (used by all generations)│
+│ [img][img][img][img] [ + Upload ]         │  ← click image to remove
+├──────────────────────────────────────────┤
+│ Step 1 · Pick a date  → Step 2 · Product │
+└──────────────────────────────────────────┘
+```
 
-### 1. Banner headlines baked into the image
+- Multi-upload (PNG/JPG, max 5 active references, ≤4 MB each).
+- Per-user (dual-scoping: `user_id`), not company-wide, since it's a personal marketing tool.
+- Persists across sessions; same references reused for every story generation until you remove them.
 
-- Add a small array of short banner headline templates (≤4 words each), e.g. `"Built to Last"`, `"Industrial Grade"`, `"Made in Ontario"`, `"Order Today"`, `"Precision Steel"`. These rotate per slot alongside the angle.
-- Switch the model from `openai/gpt-image-2` (low) to **`openai/gpt-image-2` with `quality: "medium"`** — gpt-image-2's headline strength is legible in-image typography, but `low` quality renders text poorly. Medium is required for clean banner text. Size stays `1024x1536` (portrait 2:3, the closest gateway-supported aspect to 9:16).
-- Rewrite the prompt to **require** baked-in text:
-  - Large bold sans-serif headline (the rotating phrase) in the upper third, high-contrast over a darkened gradient strip.
-  - Small "REBAR.SHOP" wordmark + product name strip in the lower third.
-  - Headline color picked from the brand kit primary if available, else white on dark.
-  - All text must be spelled exactly as given; no extra text, no lorem ipsum, no decorative gibberish.
+## Data
 
-### 2. Hard anti-repetition
+New table `story_banner_references` (user-scoped, RLS via `auth.uid() = user_id`):
 
-- Add a wider pool: 12 `STORY_ANGLES` (up from 5), 10 `STORY_LIGHTING` moods, 8 `STORY_PALETTES`, 8 `STORY_HEADLINES`. For each of the 5 slots, randomly draw **without replacement** one angle + one lighting + one palette + one headline → 5 unique combinations per run.
-- Inject a per-image **uniqueness token** into the prompt: `Variation seed: <crypto.randomUUID()>. This image must be visually distinct from any other generation — different angle, lighting, palette, and headline.`
-- After generation, before saving, compute a SHA-256 of the PNG bytes; if the same hash appears twice in the same run, retry that slot once with a fresh seed. (Cheap defense; gpt-image-2 almost never repeats but it's a real guard.)
-- Keep per-run state in a `Set<string>` of used hashes scoped to the request handler.
+| column | type |
+|---|---|
+| id | uuid pk |
+| user_id | uuid |
+| image_url | text (public URL in `social-media-assets`) |
+| storage_path | text |
+| created_at | timestamptz |
 
-### 3. Keep everything else identical
+Reuse existing `social-media-assets` bucket under `story-references/{user_id}/...`. GRANT block included per project standard.
 
-- Placeholder row creation, time slots, `content_type: "story"`, `content: ""`, parallel BATCH=2 generation loop, upload path `images/story-<uuid>.png`, DB update via `image_url` — all unchanged.
-- Non-story branches (`mode !== "story"`) — unchanged.
+Optional small cache table `story_banner_style_cache` keyed by SHA‑256 of the sorted reference URLs → cached style brief text, so we don't re-analyze on every generation.
 
-## Out of scope
+## Edge function — `supabase/functions/auto-generate-post/index.ts` (story branch only)
 
-- Frontend (`SocialMediaManager.tsx`, `useAutoGenerate.ts`) — no UI changes; cards already render `image_url`.
-- Regenerating historical stories — only new generations get banner text.
-- Switching image provider away from Lovable AI Gateway.
-- Adding a user-facing field to customize the headline text (not requested).
+1. Load up to 5 active references for the requesting `user_id`.
+2. If references exist and no cached brief for this set:
+   - Call `google/gemini-3-flash-preview` (vision) with the reference image URLs and ask it to return a tight JSON style brief: `{ composition, typography, palette, mood, do, dont }`.
+   - Cache the brief by reference-set hash.
+3. Switch story image model to `google/gemini-3-pro-image-preview` when references exist — Gemini accepts image inputs alongside text, so we pass the reference images as visual anchors plus the style brief. Without references, keep current `openai/gpt-image-2` path unchanged.
+4. `buildStoryPrompt` gains a `styleBrief` argument injected verbatim, plus a "MATCH THIS STYLE" instruction. Existing baked-in headline + REBAR.SHOP wordmark rules unchanged.
+5. Existing per-run SHA-256 dedup loop preserved.
+
+## Out of scope (explicitly not touched)
+
+- Non-story branches of `auto-generate-post`.
+- Daily auto-generate cron, Neel approval gate, publishing path.
+- Brand Kit editor — references live in their own table, not in Brand Kit.
+- Regeneration of past stories — only new generations consume references.
 
 ## Verification
 
-1. Click pink 5-Stories icon → pick date + product → wait for generation.
-2. Each of the 5 new cards should show:
-   - Portrait 2:3 aspect (taller than wide).
-   - A clear bold headline baked **into** the image (e.g. "Built to Last").
-   - Small "REBAR.SHOP" wordmark + product name visible.
-3. Compare the 5 cards side by side → angle, lighting, palette, and headline must all differ.
-4. Run the 5-Stories generator a **second** time on a different date with the same product → the new 5 should not visually match the first 5 (different angle/lighting/headline draws).
-5. Edge function logs should show no duplicate-hash retries in normal runs; if a retry fires, it should also succeed.
+- Upload 2–3 banner samples, click Clapperboard → pick date → pick product → 5 placeholders appear.
+- After ~30–60s the 5 images render in 2:3 portrait, visibly inspired by the uploaded banner style (palette, typography, composition), each one still unique.
+- Remove all references → next run falls back to the current generic story style with no regression.
+- Edge function logs: one Gemini vision call per new reference set, cached on subsequent runs.
 
-## Technical notes
+## Open question
 
-- gpt-image-2 `quality: "medium"` ~3–4× cost vs `low` but is the only reliable way to get readable typography. Worth it for banners.
-- 1024x1536 (2:3) remains the closest gateway-supported portrait. True 9:16 (1080x1920) is not exposed; stories will be center-displayed with negligible crop on IG/FB.
-- Anti-repetition via `crypto.randomUUID()` + no-replacement draws + post-hash check is deterministic and adds no external dependency.
+Do you want references to be **per product** (different style memory for "Rebar", "Stirrups", etc.) or **one global style** applied to all products? The plan above assumes one global per-user style; per-product is a small extension (add `product` column + filter).
