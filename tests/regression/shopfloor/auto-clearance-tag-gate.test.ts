@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Regression: Auto Clearance must NOT unlock product photo until the tag
 // photo is persisted on the SAME clearance_evidence row.
 //
