@@ -1008,7 +1008,7 @@ export function PostReviewPanel({
                            onClick={async () => {
                              setRegeneratingStory(true);
                              try {
-                               await invokeEdgeFunction("regenerate-post", { post_id: post.id, image_only: true }, { timeoutMs: 120000 });
+                               await invokeEdgeFunction("regenerate-post", { post_id: post.id, image_only: true, story_mode: true }, { timeoutMs: 120000 });
                                queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                                toast({ title: "Story image regenerated", description: "New 9:16 image generated — caption preserved." });
                              } catch (err: any) {
