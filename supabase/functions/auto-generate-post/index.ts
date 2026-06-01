@@ -784,8 +784,10 @@ Return an array of 5 objects:
 
             const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
             const binaryStr = atob(base64Data);
-            const bytes = new Uint8Array(binaryStr.length);
+            let bytes = new Uint8Array(binaryStr.length);
             for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            // Enforce exact 9:16 portrait — Gemini ignores size, so crop server-side
+            bytes = await cropToAspectRatio(bytes, "9:16");
             const blob = new Blob([bytes], { type: "image/png" });
 
             const fileName = `images/${crypto.randomUUID()}.png`;
