@@ -359,9 +359,13 @@ Deno.serve((req) =>
         angle: string, lighting: string, palette: string, headline: string,
       ): string => {
         const seed = crypto.randomUUID();
+        const styleBlock = styleBrief
+          ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
+          : "";
         return (
           `PHOTOREALISTIC vertical portrait STORY BANNER, 2:3 / 9:16 aspect, taller than wide. ` +
           `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
+          styleBlock +
           `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
           `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
           `BAKED-IN TEXT (must be perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish): ` +
@@ -372,6 +376,7 @@ Deno.serve((req) =>
           `Variation seed: ${seed}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`
         );
       };
+
 
       const generateStoryImage = async (
         angle: string, lighting: string, palette: string, headline: string,
