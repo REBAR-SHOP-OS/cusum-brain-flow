@@ -399,10 +399,16 @@ export default function SocialMediaManager() {
             </PopoverContent>
           </Popover>
 
-          <Popover>
+          <Popover
+            open={storyPopoverOpen}
+            onOpenChange={(o) => {
+              setStoryPopoverOpen(o);
+              if (!o) setStoryPickedDate(null);
+            }}
+          >
             <PopoverTrigger asChild>
               <button
-                title="Create 5 Story cards on a date"
+                title="Create 5 Story cards for a product"
                 className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-pink-600 to-orange-500 text-white hover:opacity-90 transition-opacity"
               >
                 <Clapperboard className="w-5 h-5" />
@@ -410,32 +416,58 @@ export default function SocialMediaManager() {
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="start">
-              <Calendar
-                mode="single"
-                selected={undefined}
-                onSelect={(date) => {
-                  if (!date) return;
-                  const user = posts[0]?.user_id;
-                  if (!user) return;
-                  const scheduled = format(date, "yyyy-MM-dd'T'10:00:00");
-                  setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
-                  for (let i = 0; i < 5; i++) {
-                    createPost.mutate({
-                      platform: "unassigned",
-                      status: "draft",
-                      qa_status: "needs_review",
-                      title: "",
-                      content: "",
-                      content_type: "story",
-                      scheduled_date: scheduled,
-                      user_id: user,
-                      hashtags: [],
-                      neel_approved: false,
-                    });
-                  }
-                }}
-                className={cn("p-3 pointer-events-auto")}
-              />
+              {!storyPickedDate ? (
+                <div className="p-0">
+                  <div className="px-3 pt-3 pb-1 text-xs font-medium text-muted-foreground">Step 1 · Pick a date</div>
+                  <Calendar
+                    mode="single"
+                    selected={undefined}
+                    onSelect={(date) => date && setStoryPickedDate(date)}
+                    className={cn("p-3 pointer-events-auto")}
+                  />
+                </div>
+              ) : (
+                <div className="w-64 p-2">
+                  <div className="flex items-center justify-between px-2 pt-1 pb-2">
+                    <div className="text-xs font-medium text-muted-foreground">
+                      Step 2 · Pick a product
+                      <div className="text-[10px] opacity-70">{format(storyPickedDate, "EEE, MMM d")}</div>
+                    </div>
+                    <button
+                      className="text-xs text-primary hover:underline"
+                      onClick={() => setStoryPickedDate(null)}
+                    >
+                      ← Back
+                    </button>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto flex flex-col gap-0.5">
+                    {STORY_PRODUCTS.map((product) => (
+                      <button
+                        key={product}
+                        className="w-full text-left px-3 py-2 rounded-md text-sm hover:bg-accent hover:text-accent-foreground transition-colors"
+                        onClick={() => {
+                          const date = storyPickedDate;
+                          setStoryPopoverOpen(false);
+                          setStoryPickedDate(null);
+                          setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
+                          generatePosts({
+                            platforms: ["unassigned"],
+                            themes: [product],
+                            scheduledDate: format(date, "yyyy-MM-dd"),
+                            customInstructions:
+                              `Create 5 Instagram/Facebook STORY cards (9:16 portrait) for the product "${product}". ` +
+                              `Each card must feature a real-looking product photo of ${product} on a clean construction-site background, ` +
+                              `with a short punchy caption (max 12 words) highlighting one distinct benefit per card. ` +
+                              `Keep the REBAR.SHOP logo. Output 5 unique angles.`,
+                          });
+                        }}
+                      >
+                        {product}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </PopoverContent>
           </Popover>
 
