@@ -53,6 +53,18 @@ function normGrade(s: string | null | undefined): string {
   return s.toString().toUpperCase().replace(/[\s\-_.]/g, '');
 }
 
+// DWG / Ref identifiers like "SD14", "SD-14", "S/14", "Ref 7". Strip everything
+// non-alphanumeric, uppercase, collapse common OCR digit confusions.
+function normCode(s: string | null | undefined): string {
+  if (!s) return '';
+  return s
+    .toString()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/I/g, '1')
+    .replace(/O/g, '0');
+}
+
 // Parse a length string in either imperial (14'2", 14-2, 14ft 2in) or metric (4318mm, 4.318m)
 // and return millimetres. Returns null if unparseable.
 function parseLengthToMm(text: string | null | undefined): number | null {
