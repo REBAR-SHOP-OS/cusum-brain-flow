@@ -428,6 +428,89 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
 
     // ─── IMAGE-ONLY mode: regenerate ONLY the image. Do NOT touch title / content / hashtags. ───
     if (image_only) {
+      // ── STORY 9:16 path: bypass the unstable Gemini-first generic generator. ──
+      // Use the same proven gpt-image-2 1024x1792 pipeline as auto-generate-post,
+      // with strict 9:16 crop + 1080x1920 dimension assertion. No previousImageUrl
+      // is passed so the model can't inherit a square aspect from the prior image.
+      const isStoryPost = story_mode === true || post.content_type === "story";
+      if (isStoryPost) {
+        const headline = (post.title || "RebarShop").slice(0, 60);
+        const product = post.title || "rebar and steel reinforcement products";
+        const sessionSeed = crypto.randomUUID();
+
+        const buildStoryImagePrompt = () =>
+          `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n\n` +
+          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
+          `PHOTOREALISTIC vertical portrait composition only. ` +
+          `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
+          `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
+          `BAKED-IN ADVERTISING TEXT (MANDATORY — perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish, no duplicated words, ENGLISH ONLY, NO Persian/Arabic/non-Latin script): ` +
+          `1) Large bold HEADLINE / advertising slogan in the UPPER THIRD over a darkened gradient strip: "${headline}". High contrast (bright white or brand primary on dark gradient bar). Billboard-style typography. ` +
+          `2) WORDMARK strip in the LOWER THIRD: "REBAR.SHOP  —  ${product}" in clean bold sans-serif. ` +
+          `3) Small CALL-TO-ACTION line under the wordmark: "Call 647-260-9403  •  rebar.shop". ` +
+          `An image without ALL THREE baked-in text elements is a FAILURE — output MUST look like a finished promotional ad. ` +
+          `No other text anywhere. No stock-site watermarks. No photographer credits. ` +
+          `Variation seed: ${sessionSeed}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`;
+
+        let finalImageUrl: string | null = null;
+        let lastStoryErr = "Unknown error";
+        for (let attempt = 0; attempt < 2 && !finalImageUrl; attempt++) {
+          try {
+            const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "openai/gpt-image-2",
+                prompt: buildStoryImagePrompt(),
+                size: "1024x1792",
+                quality: "medium",
+                n: 1,
+              }),
+            });
+            if (!imgResp.ok) {
+              lastStoryErr = `gpt-image-2 returned ${imgResp.status}`;
+              console.warn(`[regenerate-post:story] ${lastStoryErr}: ${(await imgResp.text()).slice(0, 200)}`);
+              continue;
+            }
+            const imgData = await imgResp.json();
+            const b64 = imgData.data?.[0]?.b64_json;
+            if (!b64) { lastStoryErr = "gpt-image-2 returned no b64_json"; continue; }
+            const bin = atob(b64);
+            let bytes = new Uint8Array(bin.length);
+            for (let j = 0; j < bin.length; j++) bytes[j] = bin.charCodeAt(j);
+            // Enforce exact 9:16 portrait (never square, never 2:3) + hard-validate 1080x1920.
+            bytes = await cropToAspectRatioStrict(bytes, "9:16");
+            await assertStoryDimensions(bytes);
+
+            const filePath = `pixel/story-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+            const { error: upErr } = await svcClient.storage
+              .from("social-images")
+              .upload(filePath, bytes, { contentType: "image/png", upsert: false });
+            if (upErr) { lastStoryErr = `Story upload failed: ${upErr.message}`; continue; }
+            const { data: pubData } = svcClient.storage.from("social-images").getPublicUrl(filePath);
+            finalImageUrl = pubData.publicUrl;
+          } catch (e) {
+            lastStoryErr = e instanceof Error ? e.message : String(e);
+            console.warn(`[regenerate-post:story] attempt ${attempt} failed: ${lastStoryErr}`);
+          }
+        }
+
+        if (!finalImageUrl) {
+          throw new Error(`Story image regeneration failed: ${lastStoryErr}`);
+        }
+
+        const { error: updateErr } = await supabase
+          .from("social_posts")
+          .update({ image_url: finalImageUrl, updated_at: new Date().toISOString() })
+          .eq("id", post_id);
+        if (updateErr) throw new Error(`DB update failed: ${updateErr.message}`);
+
+        return new Response(
+          JSON.stringify({ success: true, image_url: finalImageUrl, image_only: true, story_mode: true }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       const logoUrl = await resolveLogoUrl();
       const IMAGE_STYLE_MAP: Record<string, string> = {
         realism: "Ultra-photorealistic, shot on professional DSLR, natural lighting, real textures, shallow depth of field",
