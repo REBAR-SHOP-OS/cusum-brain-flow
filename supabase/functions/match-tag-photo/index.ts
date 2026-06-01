@@ -112,14 +112,19 @@ function levenshtein(a: string, b: string): number {
 }
 
 // ----------------- weighted scoring -----------------
-// Weights — MARK dominates, SIZE / LENGTH medium, QTY / GRADE / SHAPE low.
-const W = { mark: 0.50, size: 0.15, length: 0.20, qty: 0.08, shape: 0.07 };
+// Weights — MARK + DWG + Ref are the three mandatory identifiers (combined ≈ 0.70).
+// SIZE / LENGTH / QTY / SHAPE are tie-breakers only.
+const W = { mark: 0.30, dwg: 0.20, ref: 0.20, size: 0.10, length: 0.12, qty: 0.04, shape: 0.04 };
 
 function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null) {
   const reasons: string[] = [];
   const rejected: string[] = [];
   let score = 0;
   let markExact = false;
+  let dwgExact = false;
+  let refExact = false;
+  let dwgMismatch = false;
+  let refMismatch = false;
 
   const candMark = normMark(c.mark_number);
   const ocrMark = normMark(ocr.mark || ocr.tag_number);
@@ -131,6 +136,30 @@ function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null
       if (d === 1) { score += W.mark * 0.6; reasons.push(`~MARK ${ocrMark}≈${candMark}`); }
       else if (d === 2 && candMark.length >= 4) { score += W.mark * 0.3; reasons.push(`~~MARK ${ocrMark}≈${candMark}`); }
       else rejected.push(`MARK ${ocrMark}≠${candMark}`);
+    }
+  }
+
+  // ---- DWG (system: drawing_ref) ----
+  const candDwg = normCode(c.drawing_ref);
+  const ocrDwg = normCode(ocr.dwg);
+  if (candDwg && ocrDwg) {
+    if (candDwg === ocrDwg) {
+      score += W.dwg; reasons.push(`DWG=${candDwg}`); dwgExact = true;
+    } else {
+      rejected.push(`DWG ${ocrDwg}≠${candDwg}`);
+      dwgMismatch = true;
+    }
+  }
+
+  // ---- Ref (system: ref_no) ----
+  const candRef = normCode(c.ref_no);
+  const ocrRef = normCode(ocr.ref);
+  if (candRef && ocrRef) {
+    if (candRef === ocrRef) {
+      score += W.ref; reasons.push(`REF=${candRef}`); refExact = true;
+    } else {
+      rejected.push(`REF ${ocrRef}≠${candRef}`);
+      refMismatch = true;
     }
   }
 
@@ -161,8 +190,21 @@ function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null
     score += W.shape; reasons.push(`SHAPE=${candShape}`);
   }
 
-  return { score: Math.min(score, 1), reasons, rejected, markExact };
+  return {
+    score: Math.min(score, 1),
+    reasons,
+    rejected,
+    markExact,
+    dwgExact,
+    refExact,
+    dwgMismatch,
+    refMismatch,
+    matched_mark: c.mark_number ?? null,
+    matched_dwg: c.drawing_ref ?? null,
+    matched_ref: c.ref_no ?? null,
+  };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
