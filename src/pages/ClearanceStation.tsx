@@ -376,11 +376,23 @@ export default function ClearanceStation() {
                   </span>
                   <Select
                     value={manifestZone || undefined}
-                    onValueChange={applyZoneToManifest}
+                    onValueChange={(z) => {
+                      // Changing zone while a clearance session is in progress
+                      // (auto camera open) requires confirmation so the operator
+                      // doesn't accidentally lose context.
+                      if (autoMode && manifestZone && z !== manifestZone) {
+                        const ok = window.confirm(
+                          "Changing zone will reset current clearance session view. Continue?",
+                        );
+                        if (!ok) return;
+                        setAutoMode(false);
+                      }
+                      applyZoneToManifest(z);
+                    }}
                     disabled={zoneSaving}
                   >
                     <SelectTrigger className="h-8 text-xs w-[140px]" aria-label="Manifest storage zone">
-                      <SelectValue placeholder="Assign zone…" />
+                      <SelectValue placeholder="Select zone…" />
                     </SelectTrigger>
                     <SelectContent>
                       {STORAGE_ZONES.map((z) => (
@@ -390,9 +402,14 @@ export default function ClearanceStation() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {!allPendingHaveZone && (
+                  {!manifestZone && (
                     <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
                       Required
+                    </Badge>
+                  )}
+                  {manifestZone && !allPendingHaveZone && (
+                    <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                      Some items missing zone
                     </Badge>
                   )}
                 </div>
@@ -400,14 +417,28 @@ export default function ClearanceStation() {
               {!manifestComplete && canWrite && activeItems.some((i) => i.evidence_status !== "cleared") && (
                 <div className="ml-auto inline-flex rounded-lg border border-border overflow-hidden">
                   <button
-                    onClick={() => setAutoMode(false)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase ${!autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+                    onClick={() => {
+                      if (!manifestZone) {
+                        toast({ title: "Select zone before clearance.", variant: "destructive" });
+                        return;
+                      }
+                      setAutoMode(false);
+                    }}
+                    disabled={!manifestZone}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase disabled:opacity-40 disabled:cursor-not-allowed ${!autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
                   >
                     <Hand className="w-3.5 h-3.5" /> Manual
                   </button>
                   <button
-                    onClick={() => setAutoMode(true)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border ${autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
+                    onClick={() => {
+                      if (!manifestZone) {
+                        toast({ title: "Select zone before clearance.", variant: "destructive" });
+                        return;
+                      }
+                      setAutoMode(true);
+                    }}
+                    disabled={!manifestZone}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border disabled:opacity-40 disabled:cursor-not-allowed ${autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
                   >
                     <Zap className="w-3.5 h-3.5" /> Auto Clearance
                   </button>
@@ -415,6 +446,17 @@ export default function ClearanceStation() {
               )}
 
             </div>
+            {!manifestZone && !manifestComplete && pendingItems.length > 0 && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-center">
+                <AlertTriangle className="w-6 h-6 text-amber-500 mx-auto mb-2" />
+                <p className="text-sm font-bold tracking-wider uppercase text-foreground">
+                  Select zone before clearance
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Pick a storage zone above to enable Manual Verify and Auto Clearance.
+                </p>
+              </div>
+            )}
             {manifestComplete ? (
               <div className="rounded-xl border border-primary/30 bg-primary/5 p-6 text-center space-y-3">
                 <ShieldCheck className="w-10 h-10 text-primary mx-auto" />
@@ -436,12 +478,13 @@ export default function ClearanceStation() {
                   Back to Projects
                 </Button>
               </div>
-            ) : autoMode && canWrite ? (
+            ) : autoMode && canWrite && manifestZone ? (
               <AutoClearanceMode
                 items={activeItems}
                 manifestLabel={displayLabel}
                 manifestKey={selectedProjectKey!}
                 userId={user?.id}
+                selectedZone={manifestZone}
                 onExit={() => setAutoMode(false)}
               />
             ) : (
