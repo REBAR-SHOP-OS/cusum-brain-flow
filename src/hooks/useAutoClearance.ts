@@ -280,6 +280,11 @@ export function useAutoClearance({
       return;
     }
     setBusy(true);
+    // Clear any stale active refs from a previous aborted cycle BEFORE any
+    // state advances. Without this, a failed tag scan could leave the prior
+    // evidenceId in scope, and a later product shutter would attach to it.
+    setActiveItemId(null);
+    setActiveEvidenceId(null);
     setState("tag_uploading");
     try {
       // Pre-normalized candidates (rebuilt only when manifest changes).
@@ -385,6 +390,9 @@ export function useAutoClearance({
       perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
     } catch (e: any) {
       console.error("tag capture failed", e);
+      // Clear partial active refs so the next shutter cannot reuse a stale id.
+      setActiveItemId(null);
+      setActiveEvidenceId(null);
       showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 3000);
       setState("waiting_tag");
     } finally {
@@ -434,6 +442,8 @@ export function useAutoClearance({
       setState("waiting_product");
     } catch (e: any) {
       console.error("confirmPick failed", e);
+      setActiveItemId(null);
+      setActiveEvidenceId(null);
       showBanner({ kind: "error", text: e?.message || "Tag save failed" }, 3000);
       setState("waiting_tag");
     } finally {
