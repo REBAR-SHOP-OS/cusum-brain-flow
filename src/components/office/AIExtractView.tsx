@@ -1247,6 +1247,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                                               setSelectedBarlistId("");
                                               setCustomer(custName);
                                               if (!manifestName) setManifestName(p.name);
+                                              setProjectOpen(false);
                                             }} className="flex items-center justify-between">
                                               <span>{p.name}</span>
                                               <button
