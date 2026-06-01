@@ -1,41 +1,60 @@
-## Goal
-Add a dedicated **"Regenerate Story"** icon button in the post detail panel that — only when the post is a 9:16 Story — regenerates a brand-new image at the exact same 9:16 (1080×1920) dimensions, preserving caption, title, and hashtags.
+## Root cause
 
-## Why a new button (vs reusing "Regenerate image")
-The existing `Regenerate image` button works, but:
-- It's labeled generically, so users don't trust it will keep portrait dimensions on Story posts.
-- The user wants a clear, story-specific affordance that visually mirrors "Auto Generate Story" but acts on the current card.
+The "Regenerate Story" button calls `regenerate-post` with `image_only: true`. That branch (in `supabase/functions/regenerate-post/index.ts`) runs `generatePixelImage(...)`, which:
 
-The backend (`supabase/functions/regenerate-post/index.ts`, `image_only: true` branch) already hard-locks output to 9:16 (`imageAspectRatio: "9:16"` + `cropToAspectRatioStrict` + the explicit "OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT" prompt). No backend changes needed.
+1. Tries **`google/gemini-2.5-flash-image` (Nano Banana) first**, then `gemini-3-pro-image-preview`. Gemini image models **ignore aspect-ratio instructions in the prompt** and frequently return a 1:1 square.
+2. Passes the **previous image as a reference** (`previousImageUrl: post.image_url`). When the prior image is square, Gemini inherits that aspect even more strongly.
+3. Then runs `cropToAspectRatioStrict(..., "9:16")` which center-crops the square down to 1080×1920 — destroying the baked-in HEADLINE (top) and WORDMARK/CTA (bottom) text, and producing a visibly different, inconsistent result each time.
 
-## Changes
+By contrast, `auto-generate-post`'s story branch uses **`openai/gpt-image-2` at `size: "1024x1792"` natively + strict 9:16 crop + `assertStoryDimensions` (must be exactly 1080×1920)**. That path is stable and never produces a square first.
 
-### 1. Frontend — `src/components/social/PostReviewPanel.tsx`
-In the visual-actions button row (around line 996, next to **Auto Generate Story** / **Repost**), add a new button:
+So the two paths disagree, which is exactly the "unstable / sometimes square, sometimes 9:16" behavior the user is reporting.
 
-- **Visible only when** `isStory` is `true` (post.content_type === "story" OR localContentType === "story").
-- Icon: `Smartphone` + `RefreshCw` (or just `RefreshCw` with smartphone-style outline label).
-- Label: **"Regenerate Story"**.
-- On click:
-  - Set a local `regeneratingStory` state.
-  - Call `invokeEdgeFunction("regenerate-post", { post_id: post.id, image_only: true }, { timeoutMs: 120000 })`.
-  - Invalidate `social_posts` query.
-  - Toast: "New 9:16 story image generated — caption preserved."
-  - On error, show destructive toast.
+## Fix (surgical, backend-only)
 
-The existing **"Regenerate image"** button stays unchanged (no behavior change for non-story posts).
+Add a dedicated "story image regenerate" path inside the existing `image_only` branch of `regenerate-post`, and make the "Regenerate Story" button opt into it.
 
-### 2. Regression test — `tests/regression/social/regenerate-story-9x16.test.ts`
-Static checks:
-- `PostReviewPanel.tsx` contains a "Regenerate Story" button gated by `isStory`.
-- That button's onClick invokes `regenerate-post` with `image_only: true`.
-- `supabase/functions/regenerate-post/index.ts` still enforces `imageAspectRatio: "9:16"` in the `image_only` branch (guard against future regressions stripping the 9:16 lock).
+### 1. `supabase/functions/regenerate-post/index.ts`
 
-### 3. Memory
-No new memory entry required — covered by existing **Story 9:16 hard rule** and **Neel Approval Gate** rules. The button respects both (regeneration does not flip `neel_approved`).
+Inside the `if (image_only) { ... }` block (around line 421):
+
+- Detect story mode: `const storyMode = body.story_mode === true || post.content_type === "story";`
+- When `storyMode` is true, do NOT call `generatePixelImage`. Instead, inline the same proven generator used by `auto-generate-post`:
+  - `POST https://ai.gateway.lovable.dev/v1/images/generations` with `model: "openai/gpt-image-2"`, `size: "1024x1792"`, `quality: "medium"`, `n: 1`.
+  - Prompt = the existing 9:16 "COMPANY ADVERTISING BANNER" prompt already built at lines 454–465 (keep the HEADLINE / WORDMARK / CTA block).
+  - Do **not** pass `previousImageUrl` (eliminates square-inheritance).
+  - Decode base64 → `cropToAspectRatioStrict(bytes, "9:16")` → import and call `assertStoryDimensions(bytes)` from the shared helper (extract it from `auto-generate-post` into `supabase/functions/_shared/imageResize.ts` if it isn't already shared; otherwise inline the 1080×1920 check).
+  - Upload to `social-images` bucket (same as today) and update `social_posts.image_url`.
+- Retry once on failure (same 2-attempt pattern as `auto-generate-post`). If still failing, return the existing error response.
+- Non-story `image_only` calls keep their current behavior unchanged.
+
+### 2. `src/components/social/PostReviewPanel.tsx`
+
+Line ~1011 — the "Regenerate Story" button — add `story_mode: true` to the payload:
+
+```ts
+await invokeEdgeFunction(
+  "regenerate-post",
+  { post_id: post.id, image_only: true, story_mode: true },
+  { timeoutMs: 120000 }
+);
+```
+
+The other "Regenerate image" button (line 892) stays unchanged — it keeps the current generic image-only behavior for non-story posts.
+
+### 3. Regression test
+
+`tests/regression/social/regenerate-story-9x16.test.ts` — extend to assert:
+- The "Regenerate Story" button payload contains `story_mode: true`.
+- `regenerate-post/index.ts` `image_only` branch contains a `story_mode`/`content_type === "story"` check that routes to `openai/gpt-image-2` with `size: "1024x1792"` and calls `assertStoryDimensions` (or the 1080×1920 equivalent).
+- The story path does NOT pass `previousImageUrl` to the generator.
 
 ## Out of scope
-- No changes to the existing `Regenerate image` button.
-- No changes to non-story aspect handling (separate concern).
-- No backend changes — `image_only` already produces 9:16.
-- No caption regeneration; image-only.
+
+- No change to caption regeneration, non-story `Regenerate image`, video flows, or `auto-generate-post`.
+- No change to the Neel-only approval gate.
+- No DB migration.
+
+## Expected outcome
+
+Clicking **Regenerate Story** always produces a single, true 1080×1920 portrait image generated by `gpt-image-2` (same engine as Auto Generate Story), with intact headline + wordmark + CTA — no more intermediate square, no more inconsistent cropped results.
