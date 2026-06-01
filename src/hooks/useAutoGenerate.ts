@@ -46,6 +46,7 @@ export function useAutoGenerate() {
     scheduledDate?: string;
     mode?: "story" | "post";
     product?: string;
+    aspectRatio?: "9:16" | "1:1" | "4:5" | "16:9";
   }) => {
     setGenerating(true);
     const controller = new AbortController();
