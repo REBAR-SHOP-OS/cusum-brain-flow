@@ -1,52 +1,26 @@
 ## Goal
+Force every image produced from the Social Media Manager to be 9:16 (vertical portrait). Square (1:1) output is forbidden in all paths — story generation, post generation, and post regeneration.
 
-Make Style References **per product**: before uploading a banner, ask which product it belongs to. Each generation then loads only the references for the selected product.
+## Files to change
 
-## UX — `StoryBannerReferences.tsx` + `SocialMediaManager.tsx`
+### 1. `supabase/functions/auto-generate-post/index.ts`
+- **Story branch (line ~382)** — already requests 9:16 from `openai/gpt-image-2` at `1024x1536` (closest portrait OpenAI supports). After decoding the base64, run the bytes through `cropToAspectRatio(bytes, "9:16")` (from `_shared/imageResize.ts`) so the stored PNG is exactly 9:16, not 2:3.
+- **Post branch (lines ~717 and ~766)** — Gemini ignores `size`, so prepend a hard 9:16 instruction to `fullPrompt`:
+  > `MANDATORY OUTPUT FORMAT: 9:16 vertical portrait (1080×1920), taller than wide. NEVER square, NEVER landscape. The image MUST be portrait orientation.`
+  Also crop the returned bytes with `cropToAspectRatio(bytes, "9:16")` before upload so the final file is guaranteed 9:16.
 
-The Style References strip becomes product-scoped:
-
-```
-┌──────────────────────────────────────────────────┐
-│ Style references  ·  Product: [ Rebar ▼ ]   2/5 │
-│ Upload sample banners for THIS product.          │
-│ [img][img] [ + Upload ]                          │
-└──────────────────────────────────────────────────┘
-Step 1 · Pick a date
-Step 2 · Product  ← auto-syncs with reference selector
-```
-
-- A product dropdown sits at the top of the references panel (same product list already used in Step 2: Rebar, Stirrups, Mesh, etc.).
-- Clicking **+ Upload** when no product is selected shows a toast: *"Pick a product first"* and opens the dropdown — no file picker until a product is chosen.
-- The grid shows only references for the currently selected product. Switching product reloads the grid.
-- The product chosen here pre-selects Step 2's product (and vice versa) so the user never uploads under one product and generates under another.
-
-## Data
-
-Add `product text not null` to `story_banner_references` (migration):
-- Backfill existing rows with `'general'`.
-- New index on `(user_id, product, created_at)`.
-- Same RLS, same bucket path → `story-references/{user_id}/{product}/{uuid}.{ext}`.
-
-Cache table `story_banner_style_cache` stays as-is — the `reference_set_hash` already changes when the reference set changes, which naturally happens per product.
-
-## Edge function — `auto-generate-post/index.ts` (story branch only)
-
-- Load references filtered by `user_id` AND the requested `product` (already passed in the body).
-- If a product has zero references → fall back to the current generic story style (no Gemini vision call, no style brief).
-- Everything else (hash → cache → style brief → Gemini pro image with refs) stays the same.
+### 2. `supabase/functions/regenerate-post/index.ts`
+- Change the default in `generatePixelImage` from `const aspectRatio = options?.imageAspectRatio || "1:1"` → `|| "9:16"` (line 104).
+- In the IMAGE-ONLY prompt builder (line ~458) replace `"1:1 square aspect ratio, perfect for Instagram"` with `"9:16 vertical/portrait aspect ratio (1080×1920), perfect for Stories/Reels"`.
+- Explicitly pass `imageAspectRatio: "9:16"` on both `generatePixelImage(...)` call sites (lines ~461 and ~741) so the default can never silently regress.
+- The existing `cropToAspectRatio` call already enforces the ratio on the saved bytes — no change there beyond passing `"9:16"`.
 
 ## Out of scope
-
-- Cross-product reference sharing / "apply to all products" toggle.
-- Renaming products or editing the product list.
-- Migrating old generations.
+- Other surfaces that legitimately need landscape/square (AdDirector videos, VideoStudio thumbnails, generate-image generic edge function, ai-agent). Per the user's message this rule is about the Social Media Manager's generated post/story images.
+- Existing posts already saved at 1:1 — not retroactively re-cropped.
 
 ## Verification
-
-- Open Clapperboard → product dropdown defaults to empty → click + → toast asks to pick product.
-- Pick "Rebar" → upload 2 banners → switch to "Stirrups" → grid is empty → upload 1 banner.
-- Switch back to "Rebar" → still shows the 2 Rebar banners.
-- Generate for Rebar on June 2 → 5 images match Rebar references.
-- Generate for Stirrups → 5 images match the single Stirrups reference (different style).
-- Remove all Rebar refs → next Rebar run falls back to generic style.
+1. Open Social Media Manager → Auto-generate today (post mode) → confirm new card images render 9:16, not square.
+2. Open a story card → Regenerate image → confirm 9:16.
+3. Open any post → Regenerate image (image-only) → confirm 9:16.
+4. Inspect a generated file in storage: dimensions should be vertical (height > width, ratio = 0.5625).
