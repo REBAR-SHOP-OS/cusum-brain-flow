@@ -13,13 +13,24 @@ const PLACEHOLDER_TIMES = [
 ];
 
 function buildScheduledDate(baseDate: string, hour: number, minute: number): string {
-  const d = new Date(baseDate);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const eastern = new Date(
-    `${year}-${month}-${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00-04:00`
-  );
+  // Accept either "YYYY-MM-DD" (treat as calendar date — no UTC shift) or a full ISO timestamp.
+  let year: number, month: number, day: number;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(baseDate);
+  if (dateOnly) {
+    year = +dateOnly[1];
+    month = +dateOnly[2];
+    day = +dateOnly[3];
+  } else {
+    const d = new Date(baseDate);
+    year = d.getFullYear();
+    month = d.getMonth() + 1;
+    day = d.getDate();
+  }
+  const mm = String(month).padStart(2, "0");
+  const dd = String(day).padStart(2, "0");
+  const hh = String(hour).padStart(2, "0");
+  const mi = String(minute).padStart(2, "0");
+  const eastern = new Date(`${year}-${mm}-${dd}T${hh}:${mi}:00-04:00`);
   return eastern.toISOString();
 }
 
