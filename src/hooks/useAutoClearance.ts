@@ -280,6 +280,11 @@ export function useAutoClearance({
       return;
     }
     setBusy(true);
+    // Clear any stale active refs from a previous aborted cycle BEFORE any
+    // state advances. Without this, a failed tag scan could leave the prior
+    // evidenceId in scope, and a later product shutter would attach to it.
+    setActiveItemId(null);
+    setActiveEvidenceId(null);
     setState("tag_uploading");
     try {
       // Pre-normalized candidates (rebuilt only when manifest changes).
