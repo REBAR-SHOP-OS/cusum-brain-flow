@@ -53,6 +53,18 @@ const statusFilters = [
   { id: "declined", label: "Declined" },
 ];
 
+const STORY_PRODUCTS = [
+  "Rebar Stirrups",
+  "Rebar Cages",
+  "Rebar Hooks",
+  "Rebar Dowels",
+  "Circular Ties / Bars",
+  "Fiberglass Rebar (GFRP)",
+  "Wire Mesh",
+  "Rebar Tie Wire",
+  "Rebar Accessories",
+];
+
 export default function SocialMediaManager() {
   const navigate = useNavigate();
   const { generatePosts, generating } = useAutoGenerate();
