@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { cropToAspectRatio } from "../_shared/imageResize.ts";
+import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
 
@@ -141,7 +141,7 @@ async function generatePixelImage(
 
           if (imageBytes) {
             // Enforce aspect ratio via server-side crop/resize
-            imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+            imageBytes = await cropToAspectRatioStrict(imageBytes, aspectRatio);
 
             const styleTag = options?.styleIndex ?? "x";
             const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
@@ -246,7 +246,7 @@ async function generatePixelImage(
       }
 
       // Enforce aspect ratio via server-side crop/resize
-      imageBytes = await cropToAspectRatio(imageBytes, aspectRatio);
+      imageBytes = await cropToAspectRatioStrict(imageBytes, aspectRatio);
 
       const styleTag = options?.styleIndex ?? "x";
       const imagePath = `pixel/${Date.now()}-s${styleTag}-${Math.random().toString(36).slice(2, 8)}.png`;
