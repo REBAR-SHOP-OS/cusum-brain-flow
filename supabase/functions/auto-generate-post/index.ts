@@ -550,13 +550,13 @@ Scientific explanations, technical specifications, engineering terminology, mate
    🌐 www.rebar.shop
 
 ## IMAGE RULES
-- **ALL images MUST be PHOTOREALISTIC** — real-world professional photography style ONLY. ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics. Every image MUST look like a real photo taken with a professional camera at a real construction site, workshop, warehouse, or urban location. Natural lighting, real textures, authentic environments ONLY.
+- **THIS IS A COMPANY ADVERTISING BANNER** — every generated image MUST look like a finished promotional ad / social media banner for REBAR.SHOP, NOT a plain product photo. Think magazine ad, billboard, Instagram promo card.
+- **BAKED-IN ADVERTISING TEXT IS MANDATORY** — the image MUST contain perfectly legible English text rendered by the model: (1) the EXACT image_slogan as a bold headline in the upper third over a darkened gradient strip, (2) a "REBAR.SHOP" wordmark in the lower third, (3) a small CTA line such as "Call 647-260-9403 • rebar.shop". An image without baked-in advertising text is a FAILURE.
+- **ALL images MUST be PHOTOREALISTIC** — real-world professional photography style as the background. ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics. Background photo MUST look real; text overlay must look like a professional ad layout on top.
 - **LOGO IS MANDATORY** — The REBAR.SHOP logo MUST appear in EVERY image EXACTLY as the original — no changes to color, shape, aspect ratio, or design. If the logo cannot be loaded, DO NOT generate any image — report the error immediately.
-- **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations. NEVER produce a similar-looking image. Each generation must feel like a completely fresh creative direction.
-- **USE DIVERSE VISUAL STYLES** — Rotate between these styles and NEVER use the same style twice in a row: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes with buildings under construction, city landmarks & bridges & infrastructure, aerial drone views of large projects, real product photography in actual warehouse settings, macro close-up detail shots, dramatic sunrise/sunset lighting, logistics & delivery scenes, engineering blueprints overlaid with real products, night construction scenes, foundation-level perspectives. Each image must look like it came from a COMPLETELY DIFFERENT photo shoot. Each post's image_prompt MUST explicitly reference the assigned visual_style for that time slot.
-- English text overlays on the image (product name, tagline)
-- Purely promotional advertising style — NOT fantasy, cartoon, or scientific/technical
-- Clean, professional, visually striking — like professional documentary/commercial photography
+- **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations.
+- **USE DIVERSE VISUAL STYLES** — Rotate between: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes, city landmarks & bridges, aerial drone views, real product photography in warehouses, macro close-ups, dramatic sunrise/sunset lighting, logistics scenes, engineering blueprints with real products, night construction, foundation perspectives.
+- Text MUST be ENGLISH ONLY. NO Persian, Arabic, or non-Latin script on the image. NO lorem ipsum, NO gibberish, NO duplicated words.
 - Use Brain files (logo & content reference) when available
 ${brainInstructionsText}${instructionsText}
 
