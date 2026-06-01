@@ -7,11 +7,16 @@ interface Candidate {
   cut_length_mm: number;
   total_pieces: number;
   asa_shape_code: string | null;
+  drawing_ref: string | null;
+  ref_no: string | null;
+  storage_zone?: string | null;
 }
 
 interface ExtractedTag {
   tag_number?: string;
   mark?: string;
+  dwg?: string;
+  ref?: string;
   bar_size?: string;
   length_text?: string;
   length_mm?: number;
@@ -46,6 +51,18 @@ function normSize(s: string | null | undefined): string {
 function normGrade(s: string | null | undefined): string {
   if (!s) return '';
   return s.toString().toUpperCase().replace(/[\s\-_.]/g, '');
+}
+
+// DWG / Ref identifiers like "SD14", "SD-14", "S/14", "Ref 7". Strip everything
+// non-alphanumeric, uppercase, collapse common OCR digit confusions.
+function normCode(s: string | null | undefined): string {
+  if (!s) return '';
+  return s
+    .toString()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .replace(/I/g, '1')
+    .replace(/O/g, '0');
 }
 
 // Parse a length string in either imperial (14'2", 14-2, 14ft 2in) or metric (4318mm, 4.318m)
@@ -95,14 +112,19 @@ function levenshtein(a: string, b: string): number {
 }
 
 // ----------------- weighted scoring -----------------
-// Weights — MARK dominates, SIZE / LENGTH medium, QTY / GRADE / SHAPE low.
-const W = { mark: 0.50, size: 0.15, length: 0.20, qty: 0.08, shape: 0.07 };
+// Weights — MARK + DWG + Ref are the three mandatory identifiers (combined ≈ 0.70).
+// SIZE / LENGTH / QTY / SHAPE are tie-breakers only.
+const W = { mark: 0.30, dwg: 0.20, ref: 0.20, size: 0.10, length: 0.12, qty: 0.04, shape: 0.04 };
 
 function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null) {
   const reasons: string[] = [];
   const rejected: string[] = [];
   let score = 0;
   let markExact = false;
+  let dwgExact = false;
+  let refExact = false;
+  let dwgMismatch = false;
+  let refMismatch = false;
 
   const candMark = normMark(c.mark_number);
   const ocrMark = normMark(ocr.mark || ocr.tag_number);
@@ -114,6 +136,30 @@ function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null
       if (d === 1) { score += W.mark * 0.6; reasons.push(`~MARK ${ocrMark}≈${candMark}`); }
       else if (d === 2 && candMark.length >= 4) { score += W.mark * 0.3; reasons.push(`~~MARK ${ocrMark}≈${candMark}`); }
       else rejected.push(`MARK ${ocrMark}≠${candMark}`);
+    }
+  }
+
+  // ---- DWG (system: drawing_ref) ----
+  const candDwg = normCode(c.drawing_ref);
+  const ocrDwg = normCode(ocr.dwg);
+  if (candDwg && ocrDwg) {
+    if (candDwg === ocrDwg) {
+      score += W.dwg; reasons.push(`DWG=${candDwg}`); dwgExact = true;
+    } else {
+      rejected.push(`DWG ${ocrDwg}≠${candDwg}`);
+      dwgMismatch = true;
+    }
+  }
+
+  // ---- Ref (system: ref_no) ----
+  const candRef = normCode(c.ref_no);
+  const ocrRef = normCode(ocr.ref);
+  if (candRef && ocrRef) {
+    if (candRef === ocrRef) {
+      score += W.ref; reasons.push(`REF=${candRef}`); refExact = true;
+    } else {
+      rejected.push(`REF ${ocrRef}≠${candRef}`);
+      refMismatch = true;
     }
   }
 
@@ -144,8 +190,21 @@ function scoreCandidate(c: Candidate, ocr: ExtractedTag, ocrLenMm: number | null
     score += W.shape; reasons.push(`SHAPE=${candShape}`);
   }
 
-  return { score: Math.min(score, 1), reasons, rejected, markExact };
+  return {
+    score: Math.min(score, 1),
+    reasons,
+    rejected,
+    markExact,
+    dwgExact,
+    refExact,
+    dwgMismatch,
+    refMismatch,
+    matched_mark: c.mark_number ?? null,
+    matched_dwg: c.drawing_ref ?? null,
+    matched_ref: c.ref_no ?? null,
+  };
 }
+
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -180,12 +239,12 @@ Deno.serve(async (req) => {
         messages: [
           {
             role: 'system',
-            content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields.',
+            content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG, REF. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields. MARK, DWG and REF are critical identifiers; never skip them when visible.',
           },
           {
             role: 'user',
             content: [
-              { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear.' },
+              { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- dwg: the DWG / DRAWING cell content, e.g. "SD14", "S-14", "DWG-3"\n- ref: the REF / REFERENCE cell content (distinct from DWG), e.g. "R7", "REF-12"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear. MARK, DWG and REF are mandatory whenever readable.' },
               { type: 'image_url', image_url: { url: dataUrl } },
             ],
           },
@@ -194,12 +253,14 @@ Deno.serve(async (req) => {
           type: 'function',
           function: {
             name: 'extract_tag',
-            description: 'Return the extracted tag fields. Always include raw_text if any text is visible.',
+            description: 'Return the extracted tag fields. MARK, DWG and REF are mandatory whenever they are visible on the tag.',
             parameters: {
               type: 'object',
               properties: {
                 tag_number: { type: 'string' },
                 mark: { type: 'string' },
+                dwg: { type: 'string' },
+                ref: { type: 'string' },
                 bar_size: { type: 'string' },
                 grade: { type: 'string' },
                 length_text: { type: 'string' },
@@ -251,6 +312,8 @@ Deno.serve(async (req) => {
 
     const normalized = {
       mark: normMark(ocr.mark || ocr.tag_number),
+      dwg: normCode(ocr.dwg),
+      ref: normCode(ocr.ref),
       size: normSize(ocr.bar_size),
       grade: normGrade(ocr.grade),
       length_mm: ocrLenMm,
@@ -262,6 +325,8 @@ Deno.serve(async (req) => {
     // pick from a list than tell the operator "unreadable".
     const fieldHits =
       (normalized.mark ? 1 : 0) +
+      (normalized.dwg ? 1 : 0) +
+      (normalized.ref ? 1 : 0) +
       (normalized.size ? 1 : 0) +
       (normalized.length_mm ? 1 : 0) +
       (normalized.quantity ? 1 : 0) +
@@ -276,30 +341,43 @@ Deno.serve(async (req) => {
     const ranked = [...scored].sort((a, b) => b.score - a.score);
 
     // ---- decision ----
-    // Fast path: if normalized MARK exactly matches exactly ONE candidate, auto.
-    const exactMarkHits = scored.filter((s) => s.markExact);
+    // STRICT 3-FIELD RULE: auto-match requires MARK + DWG + Ref all to match
+    // exactly on the SAME candidate. Anything else degrades to 'confirm' or 'none'.
     let decision: 'auto' | 'confirm' | 'none' = 'none';
     let reason = '';
+    let mismatchReason: string | null = null;
 
-    if (exactMarkHits.length === 1) {
+    const strictHits = scored.filter((s) => s.markExact && s.dwgExact && s.refExact);
+    const exactMarkHits = scored.filter((s) => s.markExact);
+
+    if (strictHits.length === 1) {
       decision = 'auto';
-      reason = 'unique MARK exact';
-    } else if (exactMarkHits.length > 1) {
-      // Multiple candidates share that mark — let operator pick.
+      reason = 'unique MARK+DWG+Ref exact';
+    } else if (strictHits.length > 1) {
+      // Should never happen with proper data — multiple identical 3-tuples.
       decision = 'confirm';
-      reason = 'multiple MARK matches';
+      reason = 'multiple MARK+DWG+Ref matches';
+      mismatchReason = 'Duplicate MARK+DWG+Ref in manifest — supervisor review.';
+    } else if (exactMarkHits.length >= 1) {
+      // MARK matched but DWG or Ref is missing/mismatched. Never auto-clear.
+      decision = 'confirm';
+      const m = exactMarkHits[0];
+      const parts: string[] = [];
+      if (!normalized.dwg) parts.push('DWG missing on tag');
+      else if (m.dwgMismatch) parts.push(`DWG ${normalized.dwg}≠${normCode(m.matched_dwg)}`);
+      else if (!normCode(m.matched_dwg)) parts.push('DWG missing on item');
+      if (!normalized.ref) parts.push('Ref missing on tag');
+      else if (m.refMismatch) parts.push(`Ref ${normalized.ref}≠${normCode(m.matched_ref)}`);
+      else if (!normCode(m.matched_ref)) parts.push('Ref missing on item');
+      mismatchReason = `MARK matched, but ${parts.join(' · ') || 'DWG/Ref incomplete'}.`;
+      reason = mismatchReason;
     } else {
       const best = ranked[0];
-      const second = ranked[1];
-      if (best && best.score >= 0.70 && (!second || best.score - second.score >= 0.15)) {
-        decision = 'auto'; reason = `high score ${best.score.toFixed(2)}`;
-      } else if (best && best.score >= 0.25) {
+      if (best && best.score >= 0.25) {
         decision = 'confirm'; reason = `medium score ${best.score.toFixed(2)}`;
       } else if (fieldHits === 0 && !rawHasText) {
         decision = 'none'; reason = 'no readable text';
       } else if (candidates.length <= 5) {
-        // Some text was read but nothing scored — still show the manifest
-        // as a pick list rather than fail. Operator can confirm visually.
         decision = 'confirm'; reason = 'low score but text present';
       } else {
         decision = 'none'; reason = 'low score, large manifest';
@@ -312,8 +390,10 @@ Deno.serve(async (req) => {
       field_hits: fieldHits,
       raw_has_text: rawHasText,
       ranked_top5: ranked.slice(0, 5),
+      strict_hits: strictHits.length,
       decision,
       reason,
+      mismatch_reason: mismatchReason,
     };
     console.log('match-tag-photo', JSON.stringify(debug));
 
@@ -323,10 +403,12 @@ Deno.serve(async (req) => {
       ranked: ranked.slice(0, 5),
       decision,
       reason,
+      mismatch_reason: mismatchReason,
       debug,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
+
   } catch (e) {
     console.error('match-tag-photo error', e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : 'Unknown error' }), {

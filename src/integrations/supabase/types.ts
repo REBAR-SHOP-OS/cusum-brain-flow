@@ -2193,9 +2193,17 @@ export type Database = {
           invalidated_at: string | null
           invalidated_by: string | null
           invalidation_reason: string | null
+          match_confidence: number | null
+          matched_dwg: string | null
+          matched_mark: string | null
+          matched_ref: string | null
           material_photo_url: string | null
+          mismatch_reason: string | null
           notes: string | null
+          ocr_dwg: string | null
+          ocr_mark: string | null
           ocr_metadata: Json | null
+          ocr_ref: string | null
           override_reason: string | null
           status: string
           storage_zone: string | null
@@ -2215,9 +2223,17 @@ export type Database = {
           invalidated_at?: string | null
           invalidated_by?: string | null
           invalidation_reason?: string | null
+          match_confidence?: number | null
+          matched_dwg?: string | null
+          matched_mark?: string | null
+          matched_ref?: string | null
           material_photo_url?: string | null
+          mismatch_reason?: string | null
           notes?: string | null
+          ocr_dwg?: string | null
+          ocr_mark?: string | null
           ocr_metadata?: Json | null
+          ocr_ref?: string | null
           override_reason?: string | null
           status?: string
           storage_zone?: string | null
@@ -2237,9 +2253,17 @@ export type Database = {
           invalidated_at?: string | null
           invalidated_by?: string | null
           invalidation_reason?: string | null
+          match_confidence?: number | null
+          matched_dwg?: string | null
+          matched_mark?: string | null
+          matched_ref?: string | null
           material_photo_url?: string | null
+          mismatch_reason?: string | null
           notes?: string | null
+          ocr_dwg?: string | null
+          ocr_mark?: string | null
           ocr_metadata?: Json | null
+          ocr_ref?: string | null
           override_reason?: string | null
           status?: string
           storage_zone?: string | null
@@ -3415,6 +3439,7 @@ export type Database = {
           pieces_per_bar: number
           qty_bars: number
           ready_at: string | null
+          ref_no: string | null
           source_dims_json: Json | null
           source_total_length_text: string | null
           total_pieces: number
@@ -3445,6 +3470,7 @@ export type Database = {
           pieces_per_bar?: number
           qty_bars: number
           ready_at?: string | null
+          ref_no?: string | null
           source_dims_json?: Json | null
           source_total_length_text?: string | null
           total_pieces?: number
@@ -3475,6 +3501,7 @@ export type Database = {
           pieces_per_bar?: number
           qty_bars?: number
           ready_at?: string | null
+          ref_no?: string | null
           source_dims_json?: Json | null
           source_total_length_text?: string | null
           total_pieces?: number

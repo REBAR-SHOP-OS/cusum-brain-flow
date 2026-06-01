@@ -14,6 +14,7 @@ export interface ClearanceItem {
   source_total_length_text: string | null;
   mark_number: string | null;
   drawing_ref: string | null;
+  ref_no: string | null;
   asa_shape_code: string | null;
   total_pieces: number;
   bend_completed_pieces: number;
@@ -97,6 +98,7 @@ export function useClearanceData() {
           source_total_length_text: item.source_total_length_text ?? null,
           mark_number: item.mark_number,
           drawing_ref: item.drawing_ref,
+          ref_no: item.ref_no ?? null,
           asa_shape_code: item.asa_shape_code,
           total_pieces: item.total_pieces,
           bend_completed_pieces: item.bend_completed_pieces,

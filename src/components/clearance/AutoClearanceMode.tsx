@@ -13,6 +13,7 @@ interface AutoClearanceModeProps {
   manifestLabel: string;
   manifestKey: string;
   userId?: string;
+  selectedZone: string | null;
   onExit: () => void;
 }
 
@@ -21,6 +22,7 @@ export function AutoClearanceMode({
   manifestLabel,
   manifestKey,
   userId,
+  selectedZone,
   onExit,
 }: AutoClearanceModeProps) {
   const {
@@ -39,7 +41,7 @@ export function AutoClearanceMode({
     handleProductCapture,
     confirmPick,
     dismissBanner,
-  } = useAutoClearance({ items, manifestKey, userId });
+  } = useAutoClearance({ items, manifestKey, userId, selectedZone });
 
   const [voiceOn, setVoiceOn] = useState(isVoiceEnabled());
   const [showPanel, setShowPanel] = useState(false);
@@ -112,6 +114,8 @@ export function AutoClearanceMode({
               {manifestLabel}
             </p>
             <p className="text-[10px] mt-0.5 text-white/70">
+              Zone: <span className="font-bold text-white">{selectedZone || "—"}</span>
+              {"  ·  "}
               Target: <span className="font-bold text-white">{activeItem?.mark_number ?? (stage === "tag" ? "AUTO — scanning" : "—")}</span>
             </p>
           </div>

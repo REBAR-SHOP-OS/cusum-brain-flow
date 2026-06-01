@@ -87,10 +87,14 @@ export function useAutoClearance({
   items,
   manifestKey,
   userId,
+  selectedZone,
 }: {
   items: ClearanceItem[];
   manifestKey: string;
   userId?: string;
+  /** Required for clearance — when null/empty, auto-match is blocked and only
+   *  zone-scoped candidates are considered. */
+  selectedZone?: string | null;
 }) {
   const queryClient = useQueryClient();
   const [state, setState] = useState<AutoState>("waiting_tag");
@@ -143,11 +147,15 @@ export function useAutoClearance({
   const manifestComplete = totalCount > 0 && pendingItems.length === 0;
 
   // Pre-normalize manifest candidates once; reused on every scan so we don't
-  // rebuild this list per capture.
+  // rebuild this list per capture. When a zone is selected, restrict matching
+  // candidates to items whose evidence is already tagged with that zone OR
+  // items with no zone yet (so the operator can still onboard them).
   const candidatesRef = useRef<any[]>([]);
   useEffect(() => {
+    const z = (selectedZone || "").trim();
     candidatesRef.current = items
       .filter((i) => i.evidence_status !== "cleared")
+      .filter((i) => !z || !i.storage_zone || i.storage_zone === z)
       .map((i) => ({
         id: i.id,
         mark_number: i.mark_number,
@@ -155,8 +163,11 @@ export function useAutoClearance({
         cut_length_mm: i.cut_length_mm,
         total_pieces: i.total_pieces,
         asa_shape_code: i.asa_shape_code,
+        drawing_ref: i.drawing_ref,
+        ref_no: i.ref_no,
+        storage_zone: i.storage_zone,
       }));
-  }, [items]);
+  }, [items, selectedZone]);
 
   useEffect(() => {
     if (manifestComplete && state !== "manifest_complete") {
@@ -319,6 +330,7 @@ export function useAutoClearance({
       const ocr = data?.ocr || {};
       const ranked: RankedMatch[] = data?.ranked || [];
       const decision: "auto" | "confirm" | "none" = data?.decision || "none";
+      const mismatchReason: string | null = data?.mismatch_reason ?? null;
       setLastOcr(ocr);
       setState("matching");
 
@@ -335,6 +347,16 @@ export function useAutoClearance({
         setState("waiting_tag");
         return;
       }
+      // Zone gate — if a zone is selected and the matched item is bound to a
+      // different zone, never auto-match. Operator must rescan or change zone.
+      const activeZone = (selectedZone || "").trim();
+      if (activeZone && matchedItem.storage_zone && matchedItem.storage_zone !== activeZone) {
+        showBanner({ kind: "mismatch", text: "Tag belongs to a different zone." }, 3000);
+        speak("Wrong zone");
+        vibrate([120, 60, 120]);
+        setState("waiting_tag");
+        return;
+      }
       if (matchedItem.evidence_status === "cleared") {
         showBanner({ kind: "duplicate", text: `${matchedItem.mark_number || "Item"} already verified.` });
         speak("Already verified");
@@ -343,22 +365,37 @@ export function useAutoClearance({
         return;
       }
 
+      // Shared OCR/match snapshot written to clearance_evidence on every path.
+      const evidenceMatchPatch = {
+        ocr_mark: ocr.mark || ocr.tag_number || null,
+        ocr_dwg: ocr.dwg || null,
+        ocr_ref: ocr.ref || null,
+        matched_mark: matchedItem.mark_number,
+        matched_dwg: matchedItem.drawing_ref,
+        matched_ref: matchedItem.ref_no,
+        match_confidence: best.score,
+        mismatch_reason: mismatchReason,
+      };
+
       if (decision === "confirm") {
         // HOLD the captured tag blob — confirmPick will upload it after the
         // operator confirms the candidate. Previously this branch dropped the
         // blob entirely, leaving evidence rows without a tag_scan_url.
         pendingTagBlobRef.current = blob;
-        pendingTagOcrRef.current = { ocr, ranked, decision };
+        pendingTagOcrRef.current = { ocr, ranked, decision, mismatchReason };
         setPickCandidates(ranked.slice(0, 3));
         setLastConfidence(best.score);
         setState("tag_pick");
+        if (mismatchReason) {
+          showBanner({ kind: "mismatch", text: mismatchReason }, 4000);
+        }
         speak("Confirm match");
         return;
       }
 
-      // High confidence — upload tag photo + ensure evidence row in parallel,
-      // then write the evidence row update. Move to product mode ONLY after
-      // the DB-confirmed gate passes (assertTagEvidenceReady).
+      // High confidence (strict MARK+DWG+Ref) — upload tag photo + ensure
+      // evidence row in parallel, then write the evidence row update. Move to
+      // product mode ONLY after the DB-confirmed gate passes.
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
       const [evId, path] = await Promise.all([
@@ -374,6 +411,7 @@ export function useAutoClearance({
           verification_method: "auto",
           ai_confidence: best.score,
           ocr_metadata: { ocr, ranked, decision },
+          ...evidenceMatchPatch,
         })
         .eq("id", evId);
       perfLog("tag_row_update", tNow() - tRowUp);
@@ -388,6 +426,7 @@ export function useAutoClearance({
       // product shutter cannot fire while the gate is mid-flight.
       setState("waiting_product");
       perfLog("cycle_tag_to_product", tNow() - cycleStartRef.current);
+
     } catch (e: any) {
       console.error("tag capture failed", e);
       // Clear partial active refs so the next shutter cannot reuse a stale id.
@@ -424,6 +463,8 @@ export function useAutoClearance({
         ensureEvidenceRow(candidateId),
         uploadToStorage(candidateId, "tag", blob),
       ]);
+      const ocrHeld: any = pendingTagOcrRef.current?.ocr || lastOcr || {};
+      const mismatchHeld: string | null = pendingTagOcrRef.current?.mismatchReason ?? null;
       const { error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
@@ -432,6 +473,14 @@ export function useAutoClearance({
           verification_method: "assisted",
           ai_confidence: lastConfidence,
           ocr_metadata: { ...(pendingTagOcrRef.current || { ocr: lastOcr }), picked: candidateId },
+          ocr_mark: ocrHeld.mark || ocrHeld.tag_number || null,
+          ocr_dwg: ocrHeld.dwg || null,
+          ocr_ref: ocrHeld.ref || null,
+          matched_mark: match.mark_number,
+          matched_dwg: match.drawing_ref,
+          matched_ref: match.ref_no,
+          match_confidence: lastConfidence,
+          mismatch_reason: mismatchHeld,
         })
         .eq("id", evId);
       if (pickUpErr) throw pickUpErr;
