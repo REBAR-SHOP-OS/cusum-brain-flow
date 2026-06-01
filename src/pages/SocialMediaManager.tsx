@@ -399,6 +399,46 @@ export default function SocialMediaManager() {
             </PopoverContent>
           </Popover>
 
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                title="Create 5 Story cards on a date"
+                className="relative flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-pink-600 to-orange-500 text-white hover:opacity-90 transition-opacity"
+              >
+                <Clapperboard className="w-5 h-5" />
+                <span className="absolute -top-1 -right-1 text-[10px] font-bold bg-white text-pink-600 rounded-full w-5 h-5 flex items-center justify-center shadow">5</span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={undefined}
+                onSelect={(date) => {
+                  if (!date) return;
+                  const user = posts[0]?.user_id;
+                  if (!user) return;
+                  const scheduled = format(date, "yyyy-MM-dd'T'10:00:00");
+                  setWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
+                  for (let i = 0; i < 5; i++) {
+                    createPost.mutate({
+                      platform: "unassigned",
+                      status: "draft",
+                      qa_status: "needs_review",
+                      title: "",
+                      content: "",
+                      content_type: "story",
+                      scheduled_date: scheduled,
+                      user_id: user,
+                      hashtags: [],
+                      neel_approved: false,
+                    });
+                  }
+                }}
+                className={cn("p-3 pointer-events-auto")}
+              />
+            </PopoverContent>
+          </Popover>
+
           <div className="flex items-center gap-4 sm:gap-6 sm:ml-auto">
             <div className="flex items-center gap-2">
               <Users className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
