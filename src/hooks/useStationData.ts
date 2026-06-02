@@ -148,7 +148,25 @@ export function useStationData(machineId: string | null, machineType?: string, p
 
       console.debug("[useStationData] joined cut_plan_items count=", items?.length ?? 0);
 
-      const FINISHED_PHASES = new Set(["complete", "completed", "cleared", "delivered", "done"]);
+      // Exclude items that already have clearance evidence (tag/material captured or cleared).
+      const { data: evidenceRows } = await supabase
+        .from("clearance_evidence")
+        .select("cut_plan_item_id, status, verification_state, tag_scan_url, material_photo_url, evidence_valid")
+        .in("cut_plan_item_id", cpiIds);
+      const clearedCpiIds = new Set<string>();
+      for (const ev of (evidenceRows || []) as any[]) {
+        const valid = ev.evidence_valid !== false; // null/true count as valid
+        if (!valid) continue;
+        const hasPhoto = !!ev.tag_scan_url || !!ev.material_photo_url;
+        const clearedStatus = ev.status === "cleared";
+        const advancedState = ["tag_scanned", "product_captured", "complete"].includes(ev.verification_state);
+        if (hasPhoto || clearedStatus || advancedState) {
+          clearedCpiIds.add(ev.cut_plan_item_id);
+        }
+      }
+
+      // Cutter station: only show items still needing cutter work.
+      const CUTTER_ALLOWED_PHASES = new Set(["queued", "cutting"]);
       const mapped = (items || [])
         .filter((item: Record<string, unknown>) => {
           const proj = (item.cut_plans as any)?.projects;
@@ -158,14 +176,18 @@ export function useStationData(machineId: string | null, machineType?: string, p
         })
         .filter((item: any) => {
           const phase = (item.phase as string) || "queued";
-          if (FINISHED_PHASES.has(phase)) {
-            console.debug("[useStationData] excluded cpi", item.id, "reason=phase_finished", phase);
+          if (!CUTTER_ALLOWED_PHASES.has(phase)) {
+            console.debug("[useStationData] excluded cpi", item.id, "reason=phase_beyond_cutter", phase);
             return false;
           }
           const total = Number(item.total_pieces) || (Number(item.qty_bars) * Number(item.pieces_per_bar)) || 0;
           const done = Number(item.completed_pieces) || 0;
           if (total > 0 && done >= total) {
             console.debug("[useStationData] excluded cpi", item.id, "reason=fully_completed", done, "/", total);
+            return false;
+          }
+          if (clearedCpiIds.has(item.id)) {
+            console.debug("[useStationData] excluded cpi", item.id, "reason=clearance_evidence_exists");
             return false;
           }
           return true;
@@ -231,6 +253,11 @@ export function useStationData(machineId: string | null, machineType?: string, p
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "production_tasks" },
+        debouncedInvalidate
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "clearance_evidence" },
         debouncedInvalidate
       )
       .subscribe();
