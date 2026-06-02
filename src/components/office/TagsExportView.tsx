@@ -16,7 +16,7 @@ import { sessionUnitToDisplay } from "@/lib/unitSystem";
 import { toast } from "sonner";
 import {
   LayoutGrid, Table as TableIcon, Download, Printer,
-  Zap, Sparkles, ChevronRight, ChevronDown, Tag, Trash2,
+  Zap, Sparkles, ChevronRight, ChevronDown, Tag, Trash2, ArrowLeft, CheckCircle2,
 } from "lucide-react";
 
 // Mass per meter by bar code (RSIC Canada)
