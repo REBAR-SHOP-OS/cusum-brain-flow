@@ -173,7 +173,7 @@ export function useAutoClearance({
   useEffect(() => {
     const z = (selectedZone || "").trim();
     candidatesRef.current = items
-      .filter((i) => i.evidence_status !== "cleared")
+      .filter((i) => i.evidence_status !== "cleared" && !locallyCompletedIds.has(i.id))
       .filter((i) => !z || !i.storage_zone || i.storage_zone === z)
       .map((i) => ({
         id: i.id,
@@ -186,7 +186,7 @@ export function useAutoClearance({
         ref_no: i.ref_no,
         storage_zone: i.storage_zone,
       }));
-  }, [items, selectedZone]);
+  }, [items, selectedZone, locallyCompletedIds]);
 
   useEffect(() => {
     if (manifestComplete && state !== "manifest_complete") {
