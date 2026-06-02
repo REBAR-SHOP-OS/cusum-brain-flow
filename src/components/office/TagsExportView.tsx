@@ -560,6 +560,10 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
                     sourceDims[d] = String(sourceDimsRaw[d]);
                   }
                 });
+                if (isStraight(shapeType)) {
+                  dims.A = null;
+                  delete sourceDims.A;
+                }
 
                 return (
                   <RebarTagCard
