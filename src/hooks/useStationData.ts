@@ -91,22 +91,53 @@ export function useStationData(machineId: string | null, machineType?: string, p
           })) as StationItem[];
       }
 
+      // Station membership = machine_queue_items.machine_id (source of truth).
+      // machine_capabilities is only used to answer "can this machine process this bar?".
+      const { data: queueRows, error: queueErr } = await supabase
+        .from("machine_queue_items")
+        .select("id, task_id, status, machine_id")
+        .eq("machine_id", machineId!)
+        .eq("company_id", companyId!)
+        .in("status", ["queued", "running"]);
+      if (queueErr) throw queueErr;
+
+      console.debug("[useStationData] route machineId=", machineId,
+        "machine_queue_items count=", queueRows?.length ?? 0);
+
+      const taskIds = Array.from(new Set((queueRows || []).map((r: any) => r.task_id).filter(Boolean)));
+      if (taskIds.length === 0) {
+        console.debug("[useStationData] final rendered item count= 0 (no queue rows)");
+        return [] as StationItem[];
+      }
+
+      const { data: tasks, error: tasksErr } = await supabase
+        .from("production_tasks")
+        .select("id, cut_plan_item_id, status, bar_code")
+        .in("id", taskIds);
+      if (tasksErr) throw tasksErr;
+
+      console.debug("[useStationData] joined production_tasks count=", tasks?.length ?? 0);
+
+      const cpiIds = Array.from(new Set((tasks || []).map((t: any) => t.cut_plan_item_id).filter(Boolean)));
+      if (cpiIds.length === 0) {
+        console.debug("[useStationData] final rendered item count= 0 (no cut_plan_item_id on tasks)");
+        return [] as StationItem[];
+      }
+
+      // Advisory capability lookup — used only for debug logging, NOT to gate station membership.
       const { data: caps } = await supabase
         .from("machine_capabilities")
         .select("bar_code")
         .eq("machine_id", machineId!)
         .eq("process", "cut");
-
-      const allowedBarCodes = caps?.length ? caps.map((cap: any) => cap.bar_code) : null;
-      if (!allowedBarCodes || allowedBarCodes.length === 0) return [];
+      const capableBarCodes = new Set((caps || []).map((c: any) => c.bar_code));
 
       let cutterQuery = supabase
         .from("cut_plan_items")
         .select("*, cut_plans!inner(id, name, project_name, project_id, company_id, status, optimization_mode, projects(status, customers(name)))")
-        .in("bar_code", allowedBarCodes)
-        .or("phase.eq.queued,phase.eq.cutting")
+        .in("id", cpiIds)
         .eq("cut_plans.company_id", companyId!)
-        .in("cut_plans.status", ["draft", "queued", "running"]);
+        .in("cut_plans.status", ["draft", "queued", "running", "in_production"]);
 
       if (projectId) {
         cutterQuery = cutterQuery.eq("cut_plans.project_id", projectId);
@@ -115,10 +146,14 @@ export function useStationData(machineId: string | null, machineType?: string, p
       const { data: items, error: itemsError } = await cutterQuery.order("id", { ascending: true });
       if (itemsError) throw itemsError;
 
-      return (items || [])
+      console.debug("[useStationData] joined cut_plan_items count=", items?.length ?? 0);
+
+      const mapped = (items || [])
         .filter((item: Record<string, unknown>) => {
           const proj = (item.cut_plans as any)?.projects;
-          return !proj || proj.status !== "paused";
+          const keep = !proj || proj.status !== "paused";
+          if (!keep) console.debug("[useStationData] excluded cpi", (item as any).id, "reason=project_paused");
+          return keep;
         })
         .map((item: Record<string, unknown>) => ({
           ...item,
@@ -135,16 +170,18 @@ export function useStationData(machineId: string | null, machineType?: string, p
           project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
           optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
         }))
-        .filter((item: any) => allowedBarCodes.includes(item.bar_code))
-        .filter((item: any) => {
-          const CUTTER_01_ID = "e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3";
-          const CUTTER_02_ID = "b0000000-0000-0000-0000-000000000002";
-          const ALLOWED_ON_CUTTER_01 = new Set(["10M", "15M"]);
-          const BLOCKED_ON_CUTTER_02 = new Set(["10M", "15M"]);
-          if (machineId === CUTTER_01_ID && !ALLOWED_ON_CUTTER_01.has(item.bar_code)) return false;
-          if (machineId === CUTTER_02_ID && BLOCKED_ON_CUTTER_02.has(item.bar_code)) return false;
-          return true;
-        }) as StationItem[];
+        // De-dup safety in case the same cut_plan_item is referenced by multiple queue rows.
+        .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.id === item.id) === idx);
+
+      for (const it of mapped as any[]) {
+        if (capableBarCodes.size > 0 && !capableBarCodes.has(it.bar_code)) {
+          console.debug("[useStationData] note: queued item", it.id, "bar_code", it.bar_code,
+            "not listed in machine_capabilities for", machineId, "(membership respected via queue row)");
+        }
+      }
+
+      console.debug("[useStationData] final rendered item count=", mapped.length);
+      return mapped as StationItem[];
     },
   });
 
@@ -169,6 +206,16 @@ export function useStationData(machineId: string | null, machineType?: string, p
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "cut_plans" },
+        debouncedInvalidate
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "machine_queue_items" },
+        debouncedInvalidate
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "production_tasks" },
         debouncedInvalidate
       )
       .subscribe();
