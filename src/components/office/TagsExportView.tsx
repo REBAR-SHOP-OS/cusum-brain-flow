@@ -131,6 +131,7 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
         r.dwg || "", r.row_index, r.grade_mapped || r.grade || "", r.mark || "",
         r.quantity || "", size, shapeType, formattedLength,
         ...DIM_COLS.map((d) => {
+          if (isStraight(shapeType) && d === "A") return "";
           if (srcDims?.[d] != null && srcDims[d] !== "") return String(srcDims[d]);
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
           return r[key] != null ? String(r[key]) : "";
