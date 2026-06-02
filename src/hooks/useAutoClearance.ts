@@ -242,15 +242,30 @@ export function useAutoClearance({
   }, []);
 
   // HARD RULE: only flips to cleared when BOTH photos exist on the row
-  // AND validate-clearance-photo returned valid.
+  // AND validate-clearance-photo returned valid. After evidence is flipped to
+  // status='cleared', the DB pipeline auto-advances cut_plan_items.phase:
+  //   clearance -> cleared (auto_advance_cleared_item)
+  //   cleared   -> complete (auto_bridge_cleared_to_complete)
+  // We then RE-READ the row from the DB and, if the bridge didn't fire for
+  // any reason, we explicitly nudge cleared -> complete (allowed adjacency).
+  // This guarantees a successful Auto Clearance lands at phase='complete'.
   const finalizeVerification = useCallback(async (
     evidenceId: string,
     itemId: string,
     confidence: number,
     ocrMeta: any,
   ) => {
-    // Shared gate — same definition of "complete" used by Manual Verify.
+    // Shared gate — re-reads clearance_evidence; confirms BOTH photos on SAME row.
     await assertEvidenceComplete(evidenceId, itemId);
+
+    // Snapshot previous phase for debug log.
+    const { data: prevItem } = await supabase
+      .from("cut_plan_items")
+      .select("phase")
+      .eq("id", itemId)
+      .maybeSingle();
+    const prevPhase = prevItem?.phase ?? null;
+
     const { error: upErr } = await supabase
       .from("clearance_evidence")
       .update({
@@ -264,8 +279,51 @@ export function useAutoClearance({
       })
       .eq("id", evidenceId);
     if (upErr) throw upErr;
-    // The auto_advance trigger flips cut_plan_items.phase to 'complete'.
-  }, [userId]);
+
+    // Re-read DB to confirm trigger chain landed at 'complete'.
+    const { data: postItem, error: readErr } = await supabase
+      .from("cut_plan_items")
+      .select("phase")
+      .eq("id", itemId)
+      .maybeSingle();
+    if (readErr) throw readErr;
+    let finalPhase = postItem?.phase ?? null;
+
+    // Safety net: if bridge didn't advance cleared -> complete, do it
+    // explicitly. cleared -> complete is an allowed adjacency.
+    if (finalPhase === "cleared") {
+      const { data: fixed, error: fixErr } = await supabase
+        .from("cut_plan_items")
+        .update({ phase: "complete" })
+        .eq("id", itemId)
+        .eq("phase", "cleared")
+        .select("id, phase")
+        .maybeSingle();
+      if (fixErr) throw fixErr;
+      if (fixed?.phase) finalPhase = fixed.phase;
+    }
+
+    // eslint-disable-next-line no-console
+    console.log("[auto-clearance/finalize]", {
+      evidenceId,
+      cut_plan_item_id: itemId,
+      prevPhase,
+      finalPhase,
+      tagPhotoExists: true,
+      productPhotoExists: true,
+      mark: ocrMeta?.ocr?.mark ?? null,
+      dwg: ocrMeta?.ocr?.dwg ?? null,
+      ref: ocrMeta?.ocr?.ref ?? null,
+      selectedZone: selectedZone ?? null,
+      result: finalPhase === "complete" ? "complete" : "stuck",
+    });
+
+    if (finalPhase !== "complete") {
+      throw new Error(
+        `Auto Clearance finalized evidence but item phase did not advance to complete (got: ${finalPhase ?? "null"}).`,
+      );
+    }
+  }, [userId, selectedZone]);
 
   // -------- main captures --------
 
