@@ -144,12 +144,44 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
     URL.revokeObjectURL(url);
   };
 
-  // Print tags — open dedicated print route in new window
-  const handlePrint = useCallback(() => {
+  // Print tags — open dedicated print route in new window AND record print event
+  const handlePrint = useCallback(async () => {
     const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
     const url = `/print-tags?sessionId=${selectedSessionId}&unit=${us}&sort=${sortMode}`;
     window.open(url, "_blank");
-  }, [selectedSession, selectedSessionId, sortMode]);
+    // Record print event (treat opening the print route as a print action)
+    if (selectedSessionId) {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const currentCount = (selectedSession as any)?.tags_print_count ?? 0;
+        await supabase
+          .from("extract_sessions")
+          .update({
+            tags_printed_at: new Date().toISOString(),
+            tags_printed_by: userData?.user?.id ?? null,
+            tags_print_count: currentCount + 1,
+          } as any)
+          .eq("id", selectedSessionId);
+        refresh();
+      } catch (e) {
+        // non-fatal — print window still opened
+        console.warn("Failed to record print event", e);
+      }
+    }
+  }, [selectedSession, selectedSessionId, sortMode, refresh]);
+
+  // Register back-to-list handler so the Office sidebar Back button returns to the
+  // Tags & Export list instead of exiting /office when a session is open.
+  useEffect(() => {
+    if (!onRegisterBackToHistory) return;
+    onRegisterBackToHistory(() => {
+      if (selectedSessionId) {
+        setSelectedSessionId(null);
+        return true;
+      }
+      return false;
+    });
+  }, [onRegisterBackToHistory, selectedSessionId]);
 
   // Intercept Ctrl+P / Cmd+P → redirect to clean print route
   useEffect(() => {
