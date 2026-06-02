@@ -107,8 +107,27 @@ export function useAutoClearance({
   const [busy, setBusy] = useState(false);
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [queuedCount, setQueuedCount] = useState(0);
+  // Optimistic local completion — items we just finalized in this session,
+  // hidden from the active queue immediately so the operator doesn't need to
+  // exit/re-enter to see verified state. DB is the source of truth; this set
+  // only bridges the gap until the clearance-items refetch lands.
+  const [locallyCompletedIds, setLocallyCompletedIds] = useState<Set<string>>(() => new Set());
   const itemsRef = useRef(items);
   useEffect(() => { itemsRef.current = items; }, [items]);
+  // Prune local-completed ids once the DB-backed items list no longer contains
+  // them (i.e. phase moved past `clearance` and useClearanceData filtered them
+  // out). Keeps the set from growing unboundedly across long sessions.
+  useEffect(() => {
+    if (locallyCompletedIds.size === 0) return;
+    const stillPresent = new Set(items.map((i) => i.id));
+    let changed = false;
+    const next = new Set<string>();
+    for (const id of locallyCompletedIds) {
+      if (stillPresent.has(id)) next.add(id);
+      else changed = true;
+    }
+    if (changed) setLocallyCompletedIds(next);
+  }, [items, locallyCompletedIds]);
   // Hard scan lock — guarantees we never run two OCR roundtrips on the same
   // frame, even if React state updates lag the camera shutter.
   const scanLockRef = useRef(false);
