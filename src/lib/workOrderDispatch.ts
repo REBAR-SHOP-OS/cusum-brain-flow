@@ -191,9 +191,11 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
   }
 
   // 1) Load tasks for this WO that are dispatchable
+  const TASK_COLS =
+    "id, task_type, status, company_id, setup_key, bar_code, grade, locked_to_machine_id";
   let { data: tasks, error: tErr } = await supabase
     .from("production_tasks")
-    .select("id, task_type, status, company_id")
+    .select(TASK_COLS)
     .eq("work_order_id", workOrderId)
     .in("status", ["pending", "queued", "on_hold", "in_progress"]);
 
@@ -220,7 +222,7 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
     }
     const reloaded = await supabase
       .from("production_tasks")
-      .select("id, task_type, status, company_id")
+      .select(TASK_COLS)
       .eq("work_order_id", workOrderId)
       .in("status", ["pending", "queued", "on_hold", "in_progress"]);
     if (reloaded.error) {
@@ -246,36 +248,156 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
     return { ok: false, assigned: 0, total: 0, reason: mErr.message };
   }
   const machineRows = (machines || []) as MachineRow[];
+  const machineById = new Map(machineRows.map((m) => [m.id, m]));
 
-  // 3) Bucket idle machines by type; round-robin within type
+  // 2b) Load machine_capabilities for these machines (process + bar_code).
+  // capMap: machineId -> Set of "process:bar_code" strings.
+  const machineIds = machineRows.map((m) => m.id);
+  const capMap = new Map<string, Set<string>>();
+  let capabilitiesKnown = false;
+  if (machineIds.length > 0) {
+    const { data: caps, error: capErr } = await supabase
+      .from("machine_capabilities")
+      .select("machine_id, bar_code, process")
+      .in("machine_id", machineIds);
+    if (capErr) {
+      console.warn("[startWorkOrder] load capabilities failed (falling back to type match):", capErr.message);
+    } else {
+      capabilitiesKnown = (caps || []).length > 0;
+      for (const c of caps || []) {
+        const key = `${(c as any).process}:${(c as any).bar_code}`;
+        const set = capMap.get((c as any).machine_id) ?? new Set<string>();
+        set.add(key);
+        capMap.set((c as any).machine_id, set);
+      }
+    }
+  }
+
+  // 2c) Live queue snapshot across all company machines (queued + running),
+  // joined with production_tasks.setup_key so we can detect existing
+  // same-setup affinity and current load per machine.
+  const liveLoad = new Map<string, number>(); // machineId -> count of active queue rows
+  const setupAffinity = new Map<string, Map<string, number>>(); // setupKey -> Map<machineId, count>
+  if (machineIds.length > 0) {
+    const { data: liveRows, error: liveErr } = await supabase
+      .from("machine_queue_items")
+      .select("machine_id, task_id, production_tasks:task_id(setup_key, task_type, bar_code, grade)")
+      .in("machine_id", machineIds)
+      .in("status", ["queued", "running"]);
+    if (liveErr) {
+      console.warn("[startWorkOrder] live queue snapshot failed:", liveErr.message);
+    } else {
+      for (const row of liveRows || []) {
+        const mid = (row as any).machine_id as string;
+        liveLoad.set(mid, (liveLoad.get(mid) ?? 0) + 1);
+        const pt = (row as any).production_tasks as
+          | { setup_key: string | null; task_type: string | null; bar_code: string | null; grade: string | null }
+          | null;
+        if (!pt) continue;
+        const sk = deriveSetupKey(pt);
+        if (!sk) continue;
+        const inner = setupAffinity.get(sk) ?? new Map<string, number>();
+        inner.set(mid, (inner.get(mid) ?? 0) + 1);
+        setupAffinity.set(sk, inner);
+      }
+    }
+  }
+
+  // 3) Setup-key aware machine picker.
+  // Priority: locked → capable+affinity → capable+least-loaded → round-robin fallback.
+  const idleStatuses = new Set(["idle", "running"]);
+  const isUsable = (m: MachineRow) => idleStatuses.has(m.status);
+
+  // Type-based fallback pool (used only when machine_capabilities is empty).
   const idleByType = new Map<string, MachineRow[]>();
   for (const m of machineRows) {
-    if (m.status !== "idle" && m.status !== "running") continue;
+    if (!isUsable(m)) continue;
     if (!idleByType.has(m.type)) idleByType.set(m.type, []);
     idleByType.get(m.type)!.push(m);
   }
-  // Prefer purely idle first
   for (const [k, arr] of idleByType) {
     arr.sort((a, b) => (a.status === "idle" ? -1 : 1) - (b.status === "idle" ? -1 : 1));
     idleByType.set(k, arr);
   }
-  const cursor = new Map<string, number>();
-  const pickMachine = (taskType: string | null): MachineRow | null => {
-    const wantType = machineTypeForTask(taskType);
-    const tryTypes = wantType
-      ? [wantType, ...[...idleByType.keys()].filter((t) => t !== wantType)]
-      : [...idleByType.keys()];
-    for (const t of tryTypes) {
-      const pool = idleByType.get(t);
-      if (!pool || pool.length === 0) continue;
-      const i = (cursor.get(t) ?? 0) % pool.length;
-      cursor.set(t, i + 1);
-      return pool[i];
+  const rrCursor = new Map<string, number>();
+
+  type Pick = { machine: MachineRow; reason: string; affinityUsed: boolean; rrFallback: boolean };
+
+  const capablePool = (process: "cut" | "bend", barCode: string | null): MachineRow[] => {
+    if (capabilitiesKnown) {
+      const key = `${process}:${(barCode || "").trim()}`;
+      return machineRows.filter((m) => isUsable(m) && capMap.get(m.id)?.has(key));
     }
-    return null;
+    // Back-compat: no capabilities defined → use type buckets.
+    const wantType = process === "cut" ? "cutter" : "bender";
+    return idleByType.get(wantType) ?? [];
   };
 
-  // 4) Load existing active queue rows for these tasks
+  const pickForTask = (task: TaskRow): Pick | null => {
+    // 1) Respect explicit lock.
+    if (task.locked_to_machine_id) {
+      const m = machineById.get(task.locked_to_machine_id);
+      if (m) return { machine: m, reason: "locked_to_machine_id", affinityUsed: false, rrFallback: false };
+    }
+    const process = processForTask(task.task_type);
+    if (!process) {
+      // Unknown task type — fall back to any idle machine via legacy round-robin.
+      const pool = [...idleByType.values()].flat();
+      if (pool.length === 0) return null;
+      const i = (rrCursor.get("__any__") ?? 0) % pool.length;
+      rrCursor.set("__any__", i + 1);
+      return { machine: pool[i], reason: "fallback_any_idle", affinityUsed: false, rrFallback: true };
+    }
+    const pool = capablePool(process, task.bar_code);
+    if (pool.length === 0) {
+      // No capable machine. As a last resort, try type-bucket fallback so the
+      // dispatch does not silently drop the task.
+      const fallback = idleByType.get(process === "cut" ? "cutter" : "bender") ?? [];
+      if (fallback.length === 0) return null;
+      const i = (rrCursor.get(`${process}:fallback`) ?? 0) % fallback.length;
+      rrCursor.set(`${process}:fallback`, i + 1);
+      return {
+        machine: fallback[i],
+        reason: "no_capable_machine_fallback_type",
+        affinityUsed: false,
+        rrFallback: true,
+      };
+    }
+    const setupKey = deriveSetupKey(task);
+    // 2) Same setup_key affinity (running/queued on any capable machine).
+    if (setupKey) {
+      const affinity = setupAffinity.get(setupKey);
+      if (affinity && affinity.size > 0) {
+        const candidates = pool
+          .map((m) => ({ m, count: affinity.get(m.id) ?? 0 }))
+          .filter((c) => c.count > 0)
+          .sort((a, b) => b.count - a.count || (liveLoad.get(a.m.id) ?? 0) - (liveLoad.get(b.m.id) ?? 0));
+        if (candidates.length > 0) {
+          return {
+            machine: candidates[0].m,
+            reason: "same_setup_key_affinity",
+            affinityUsed: true,
+            rrFallback: false,
+          };
+        }
+      }
+    }
+    // 3) Least-loaded capable machine; tiebreak round-robin.
+    const sorted = pool
+      .map((m) => ({ m, load: liveLoad.get(m.id) ?? 0 }))
+      .sort((a, b) => a.load - b.load);
+    const minLoad = sorted[0].load;
+    const tied = sorted.filter((c) => c.load === minLoad).map((c) => c.m);
+    if (tied.length === 1) {
+      return { machine: tied[0], reason: "least_loaded", affinityUsed: false, rrFallback: false };
+    }
+    const cursorKey = `${process}:${(task.bar_code || "").trim()}`;
+    const i = (rrCursor.get(cursorKey) ?? 0) % tied.length;
+    rrCursor.set(cursorKey, i + 1);
+    return { machine: tied[i], reason: "round_robin_tiebreak", affinityUsed: false, rrFallback: true };
+  };
+
+  // 4) Load existing active queue rows for these tasks (to avoid duplicates).
   const taskIds = taskRows.map((t) => t.id);
   const { data: existing } = await supabase
     .from("machine_queue_items")
@@ -300,16 +422,22 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
     return max;
   };
 
-  // 6) Walk tasks, upsert queue rows, flip task status
+  // 6) Walk tasks, upsert queue rows, flip task status, audit each dispatch.
   let assigned = 0;
   for (const task of taskRows) {
     const existingRow = existingByTask.get(task.id);
     let machineId: string | null = existingRow?.machine_id ?? null;
+    let pickReason = "preexisting_queue_row";
+    let affinityUsed = false;
+    let rrFallback = false;
 
     if (!machineId) {
-      const picked = pickMachine(task.task_type);
+      const picked = pickForTask(task);
       if (!picked) continue; // no machine available; leave task alone
-      machineId = picked.id;
+      machineId = picked.machine.id;
+      pickReason = picked.reason;
+      affinityUsed = picked.affinityUsed;
+      rrFallback = picked.rrFallback;
     }
 
     if (existingRow) {
@@ -346,8 +474,50 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
       .eq("id", task.id)
       .select("id");
 
+    // 6b) Update in-memory load + affinity so subsequent tasks in this batch
+    // see the new placement.
+    liveLoad.set(machineId, (liveLoad.get(machineId) ?? 0) + 1);
+    const sk = deriveSetupKey(task);
+    if (sk) {
+      const inner = setupAffinity.get(sk) ?? new Map<string, number>();
+      inner.set(machineId, (inner.get(machineId) ?? 0) + 1);
+      setupAffinity.set(sk, inner);
+    }
+
+    // 6c) Audit — activity_events row per dispatch (best effort, non-blocking).
+    try {
+      const machine = machineById.get(machineId);
+      await supabase.from("activity_events").insert({
+        company_id: companyId,
+        source: "workOrderDispatch",
+        event_type: "task_dispatched",
+        entity_type: "production_task",
+        entity_id: task.id,
+        actor_type: "system",
+        description: `Task ${task.id} → ${machine?.type ?? "machine"} ${machineId} (${pickReason})`,
+        metadata: {
+          dispatch_path: "legacy_setup_key_aware",
+          task_id: task.id,
+          work_order_id: workOrderId,
+          machine_id: machineId,
+          machine_type: machine?.type ?? null,
+          setup_key: sk,
+          bar_code: task.bar_code,
+          grade: task.grade,
+          reason: pickReason,
+          affinity_used: affinityUsed,
+          round_robin_fallback: rrFallback,
+          locked: !!task.locked_to_machine_id,
+          preexisting: !!existingRow,
+        },
+      });
+    } catch (e) {
+      console.warn("[startWorkOrder] audit insert failed:", (e as Error).message);
+    }
+
     assigned += 1;
   }
+
 
   if (assigned === 0) {
     const wantedTypes = new Set(
