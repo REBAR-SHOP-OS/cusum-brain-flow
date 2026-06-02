@@ -148,12 +148,27 @@ export function useStationData(machineId: string | null, machineType?: string, p
 
       console.debug("[useStationData] joined cut_plan_items count=", items?.length ?? 0);
 
+      const FINISHED_PHASES = new Set(["complete", "completed", "cleared", "delivered", "done"]);
       const mapped = (items || [])
         .filter((item: Record<string, unknown>) => {
           const proj = (item.cut_plans as any)?.projects;
           const keep = !proj || proj.status !== "paused";
           if (!keep) console.debug("[useStationData] excluded cpi", (item as any).id, "reason=project_paused");
           return keep;
+        })
+        .filter((item: any) => {
+          const phase = (item.phase as string) || "queued";
+          if (FINISHED_PHASES.has(phase)) {
+            console.debug("[useStationData] excluded cpi", item.id, "reason=phase_finished", phase);
+            return false;
+          }
+          const total = Number(item.total_pieces) || (Number(item.qty_bars) * Number(item.pieces_per_bar)) || 0;
+          const done = Number(item.completed_pieces) || 0;
+          if (total > 0 && done >= total) {
+            console.debug("[useStationData] excluded cpi", item.id, "reason=fully_completed", done, "/", total);
+            return false;
+          }
+          return true;
         })
         .map((item: Record<string, unknown>) => ({
           ...item,
