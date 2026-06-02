@@ -906,6 +906,68 @@ export function PostReviewPanel({
                         <Sparkles className="w-3.5 h-3.5" />
                         AI Image
                       </Button>
+                      {isStory && (
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="shrink-0"
+                          title="Regenerate Story image (9:16)"
+                          aria-label="Regenerate Story image (9:16)"
+                          disabled={regenerating}
+                          onClick={async () => {
+                            if (!post) return;
+                            setRegenerating(true);
+                            try {
+                              const res: any = await invokeEdgeFunction(
+                                "regenerate-post",
+                                { post_id: post.id, image_only: true },
+                                { timeoutMs: 120000 },
+                              );
+                              const newUrl: string | undefined = res?.image_url;
+                              if (!newUrl) throw new Error("No image returned");
+                              const { ensurePortrait } = await import("@/lib/imageWatermark");
+                              let finalUrl = newUrl;
+                              try {
+                                const portraitUrl = await ensurePortrait(newUrl);
+                                if (portraitUrl && portraitUrl !== newUrl) {
+                                  const uploaded = await uploadSocialMediaAsset(portraitUrl, "image");
+                                  const { error: upErr } = await supabase
+                                    .from("social_posts")
+                                    .update({ image_url: uploaded, updated_at: new Date().toISOString() } as any)
+                                    .eq("id", post.id);
+                                  if (upErr) throw upErr;
+                                  finalUrl = uploaded;
+                                }
+                              } catch (portraitErr) {
+                                console.error("Story 9:16 enforcement failed:", portraitErr);
+                                toast({
+                                  title: "Story image rejected",
+                                  description: "Generated image was not valid 9:16 portrait — try again.",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+                              toast({ title: "Story image regenerated", description: "New 9:16 portrait saved." });
+                            } catch (err: any) {
+                              console.error("Story regenerate error:", err);
+                              toast({
+                                title: "Regeneration failed",
+                                description: err?.message || "Could not regenerate story image",
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setRegenerating(false);
+                            }
+                          }}
+                        >
+                          {regenerating ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Smartphone className="w-3.5 h-3.5" />
+                          )}
+                        </Button>
+                      )}
                     </div>
                     <div className="flex gap-2">
                       <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setShowVideoGen(true)}>
