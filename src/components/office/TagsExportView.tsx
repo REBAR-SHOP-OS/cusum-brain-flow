@@ -320,6 +320,15 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
                     >
                       {s.status.toUpperCase()}
                     </Badge>
+                    {(s as any).tags_printed_at && (
+                      <Badge
+                        className="text-[10px] tracking-wider border-0 bg-sky-500/20 text-sky-400 gap-1"
+                        title={`Printed ${(s as any).tags_print_count ?? 1}× — last ${new Date((s as any).tags_printed_at).toLocaleString()}`}
+                      >
+                        <CheckCircle2 className="w-2.5 h-2.5" />
+                        PRINTED
+                      </Badge>
+                    )}
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
                 </button>
