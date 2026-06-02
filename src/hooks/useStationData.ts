@@ -208,6 +208,16 @@ export function useStationData(machineId: string | null, machineType?: string, p
         { event: "*", schema: "public", table: "cut_plans" },
         debouncedInvalidate
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "machine_queue_items" },
+        debouncedInvalidate
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "production_tasks" },
+        debouncedInvalidate
+      )
       .subscribe();
 
     return () => {
