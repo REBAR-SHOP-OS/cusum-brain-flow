@@ -27,6 +27,10 @@ const MASS_KG_PER_M: Record<string, number> = {
 
 const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
+/** Straight bars carry length in column B only — A must be blank. */
+const isStraight = (shapeType: string | null | undefined) =>
+  /^straight$/i.test((shapeType || "").trim());
+
 /** Format a dimension value (always stored in mm in DB) for display.
  *  For imperial: converts mm → inches first, then formats as ft-in. */
 function formatDim(val: number | null | undefined, unitSystem: string): string {
