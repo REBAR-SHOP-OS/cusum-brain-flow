@@ -27,6 +27,10 @@ const MASS_KG_PER_M: Record<string, number> = {
 
 const DIM_COLS = ["A", "B", "C", "D", "E", "F", "G", "H", "J", "K", "O", "R"] as const;
 
+/** Straight bars carry length in column B only — A must be blank. */
+const isStraight = (shapeType: string | null | undefined) =>
+  /^straight$/i.test((shapeType || "").trim());
+
 /** Format a dimension value (always stored in mm in DB) for display.
  *  For imperial: converts mm → inches first, then formats as ft-in. */
 function formatDim(val: number | null | undefined, unitSystem: string): string {
@@ -127,6 +131,7 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
         r.dwg || "", r.row_index, r.grade_mapped || r.grade || "", r.mark || "",
         r.quantity || "", size, shapeType, formattedLength,
         ...DIM_COLS.map((d) => {
+          if (isStraight(shapeType) && d === "A") return "";
           if (srcDims?.[d] != null && srcDims[d] !== "") return String(srcDims[d]);
           const key = `dim_${d.toLowerCase()}` as keyof typeof r;
           return r[key] != null ? String(r[key]) : "";
@@ -206,6 +211,7 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
         const v = row[key];
         dims[d] = typeof v === "number" ? v : null;
       });
+      if (isStraight(row.shape_code_mapped || row.shape_type)) dims.A = null;
       return {
         mark: row.mark || "",
         size,
@@ -488,6 +494,11 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
                           {srcLength || (row.total_length_mm ? String(row.total_length_mm) : "—")}
                         </td>
                         {DIM_COLS.map((d) => {
+                          if (isStraight(shapeType) && d === "A") {
+                            return (
+                              <td key={d} className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap" />
+                            );
+                          }
                           const srcVal = srcDims?.[d];
                           if (srcVal != null && srcVal !== "") {
                             return (
@@ -549,6 +560,10 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
                     sourceDims[d] = String(sourceDimsRaw[d]);
                   }
                 });
+                if (isStraight(shapeType)) {
+                  dims.A = null;
+                  delete sourceDims.A;
+                }
 
                 return (
                   <RebarTagCard

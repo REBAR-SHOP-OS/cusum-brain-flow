@@ -1,47 +1,28 @@
 ## Goal
-Restrict post approval to **only** `neel@rebar.shop`. Currently `sattar@rebar.shop` and `radin@rebar.shop` can also approve (via the "Approve Post" button in `PostReviewPanel`) and any `social_approvals` row can be flipped to `approved` by the marketing team via `ApprovalsPanel`. Both paths must be locked to Neel.
+For rows whose TYPE is `STRAIGHT`, the Tags & Export table currently shows the same value in both column **A** and column **B** (e.g. AAS14 = 6600 / 6600). The convention is: straight bars carry the length in **B only**; **A must be blank**.
 
-## Changes
+## Scope
+UI-only normalization in the Tags & Export view. No DB writes, no extraction changes, no other dim columns touched.
 
-### 1. Frontend — `src/components/social/PostReviewPanel.tsx` (line 1412)
-Tighten the gate from a 3-email allowlist to a single email:
-- `currentUserEmail === "neel@rebar.shop"` only.
-- Sattar / Radin fall through to the disabled **"Awaiting Approval"** button.
+## Change
+File: `src/components/office/TagsExportView.tsx`
 
-### 2. Frontend — `src/components/social/ApprovalsPanel.tsx`
-Hide / disable the **Approve** button (line 139-145) unless `currentUserEmail === "neel@rebar.shop"`. Read the email from the existing auth hook used elsewhere. Reject remains available for all reviewers (only approval is locked).
-
-### 3. Server-side hard gate — new migration
-Add a DB trigger on `public.social_posts` that **rejects any update** flipping `neel_approved` from `false`→`true` unless the acting user's email is `neel@rebar.shop`. This is the real enforcement — frontend changes alone can be bypassed via direct API calls.
-
-```sql
-CREATE OR REPLACE FUNCTION public.enforce_neel_only_approval()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
-DECLARE acting_email text;
-BEGIN
-  IF NEW.neel_approved IS DISTINCT FROM OLD.neel_approved AND NEW.neel_approved = true THEN
-    SELECT lower(email) INTO acting_email FROM auth.users WHERE id = auth.uid();
-    IF acting_email <> 'neel@rebar.shop' THEN
-      RAISE EXCEPTION 'Only neel@rebar.shop can approve social posts';
-    END IF;
-  END IF;
-  RETURN NEW;
-END $$;
-
-CREATE TRIGGER trg_enforce_neel_only_approval
-  BEFORE UPDATE ON public.social_posts
-  FOR EACH ROW EXECUTE FUNCTION public.enforce_neel_only_approval();
+Add a helper:
+```ts
+const isStraight = (shapeType: string) =>
+  /^straight$/i.test(shapeType?.trim() || "");
 ```
 
-Service-role / cron paths are unaffected because `auth.uid()` is null there — the trigger will block those too, so cron publish (which reads `neel_approved`, doesn't flip it) is fine. Auto-generate inserts with `neel_approved=false` so INSERTs are not gated.
+Apply in three render/export paths so the rule is consistent:
 
-### 4. Regression test — `tests/regression/social/neel-only-approval.test.ts`
-Static check: assert `PostReviewPanel.tsx` only references `neel@rebar.shop` in the approve gate (no `sattar`, no `radin` in that conditional), and `ApprovalsPanel` guards `handleApprove` by email.
+1. **Table view** (lines ~490–506) — inside the `DIM_COLS.map`, when `isStraight(shapeType) && d === "A"`, render an empty cell regardless of `srcDims.A` / `dim_a`.
+2. **CSV export** (`handleExportCSV`, lines ~129–133) — when straight, emit `""` for column A.
+3. **Zebra ZPL export** (`handleZebraZPL`, lines ~203–208) — when straight, set `dims.A = null`.
+4. **Cards view** (lines ~541–551) — when straight, force `dims.A = null` and delete `sourceDims.A` so `RebarTagCard` matches the table.
 
-### 5. Memory update
-Update the existing **Neel Approval Gate (HARD)** core rule in `mem://index.md` to add: "Only `neel@rebar.shop` may set `neel_approved=true`. No other admin/marketing user, ever. Enforced by DB trigger + frontend gate."
+Column **B** and all other dims stay exactly as they are today. Bent rows (types `2`, `6`, `10`, `C3`, `T1`, etc.) are unaffected.
 
-## Out of scope
-- Reject flow stays open to the marketing team.
-- Auto-generate / Vizzy paths unchanged (they never set `neel_approved=true`).
-- No changes to publish gate logic itself (it already requires `neel_approved=true`).
+## Validation
+- AAS14 / AAS15 / AAS03 etc.: A blank, B = 6600 / 3500 / 6000.
+- D1511 (type 6): unchanged — A=4239, B=2228, C=2512.
+- CSV download + Zebra ZPL preview reflect the same blanking.
