@@ -148,6 +148,7 @@ export function useStationData(machineId: string | null, machineType?: string, p
 
       console.debug("[useStationData] joined cut_plan_items count=", items?.length ?? 0);
 
+      const FINISHED_PHASES = new Set(["complete", "completed", "cleared", "delivered", "done"]);
       const mapped = (items || [])
         .filter((item: Record<string, unknown>) => {
           const proj = (item.cut_plans as any)?.projects;
@@ -155,20 +156,22 @@ export function useStationData(machineId: string | null, machineType?: string, p
           if (!keep) console.debug("[useStationData] excluded cpi", (item as any).id, "reason=project_paused");
           return keep;
         })
+        .filter((item: any) => {
+          const phase = (item.phase as string) || "queued";
+          if (FINISHED_PHASES.has(phase)) {
+            console.debug("[useStationData] excluded cpi", item.id, "reason=phase_finished", phase);
+            return false;
+          }
+          const total = Number(item.total_pieces) || (Number(item.qty_bars) * Number(item.pieces_per_bar)) || 0;
+          const done = Number(item.completed_pieces) || 0;
+          if (total > 0 && done >= total) {
+            console.debug("[useStationData] excluded cpi", item.id, "reason=fully_completed", done, "/", total);
+            return false;
+          }
+          return true;
+        })
         .map((item: Record<string, unknown>) => ({
-          ...item,
-          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
-          phase: (item.phase as string) || "queued",
-          bend_dimensions: item.bend_dimensions as Record<string, number> | null,
-          source_dims: ((item as any).source_dims_json as Record<string, string> | null) ?? null,
-          source_total_length_text: (item as any).source_total_length_text || null,
-          unit_system: (item as any).unit_system ?? null,
-          plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
-          project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
-          project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
-          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
-          project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
-          optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
+...
         }))
         // De-dup safety in case the same cut_plan_item is referenced by multiple queue rows.
         .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.id === item.id) === idx);
