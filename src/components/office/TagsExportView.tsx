@@ -494,6 +494,11 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
                           {srcLength || (row.total_length_mm ? String(row.total_length_mm) : "—")}
                         </td>
                         {DIM_COLS.map((d) => {
+                          if (isStraight(shapeType) && d === "A") {
+                            return (
+                              <td key={d} className="text-xs text-muted-foreground text-right px-3 py-2.5 whitespace-nowrap" />
+                            );
+                          }
                           const srcVal = srcDims?.[d];
                           if (srcVal != null && srcVal !== "") {
                             return (
