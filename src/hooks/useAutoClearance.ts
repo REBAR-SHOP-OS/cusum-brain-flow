@@ -673,6 +673,8 @@ export function useAutoClearance({
 
       // Both photos uploaded + validated. Finalize.
       const tFinal = tNow();
+      const finalizedItemId = activeItemId;
+      const finalizedEvidenceId = evId;
       await finalizeVerification(evId, activeItemId, lastConfidence ?? 0, {
         ocr: lastOcr,
         validation,
@@ -680,15 +682,83 @@ export function useAutoClearance({
       perfLog("finalize", tNow() - tFinal);
       perfLog("cycle_product_total", tNow() - tStartProduct);
       perfLog("cycle_item_total", tNow() - cycleStartRef.current);
+
+      // Post-finalize re-read — confirm DB landed at the expected end state
+      // BEFORE we flip local UI. finalizeVerification already throws if phase
+      // didn't reach 'complete', but we re-read evidence here for logs and so
+      // the UI never lies about completion.
+      const { data: evAfter } = await supabase
+        .from("clearance_evidence")
+        .select("id, status, verification_state, tag_scan_url, material_photo_url")
+        .eq("id", finalizedEvidenceId)
+        .maybeSingle();
+      const { data: itemAfter } = await supabase
+        .from("cut_plan_items")
+        .select("id, phase")
+        .eq("id", finalizedItemId)
+        .maybeSingle();
+      const beforeActive = pendingItems.length;
+      const evidenceOk =
+        !!evAfter?.tag_scan_url &&
+        !!evAfter?.material_photo_url &&
+        evAfter?.status === "cleared" &&
+        evAfter?.verification_state === "complete";
+      const phaseOk = itemAfter?.phase === "complete" || itemAfter?.phase === "cleared";
+
+      // Only optimistically remove from active list if DB confirms completion.
+      // This preserves the "do not complete from React state alone" rule.
+      if (evidenceOk && phaseOk) {
+        setLocallyCompletedIds((prev) => {
+          const next = new Set(prev);
+          next.add(finalizedItemId);
+          return next;
+        });
+      }
+
+      // eslint-disable-next-line no-console
+      console.log("[auto-clearance/post-finalize]", {
+        evidence_id: finalizedEvidenceId,
+        cut_plan_item_id: finalizedItemId,
+        evidence_status: evAfter?.status ?? null,
+        verification_state: evAfter?.verification_state ?? null,
+        item_phase: itemAfter?.phase ?? null,
+        tag_scan_url: !!evAfter?.tag_scan_url,
+        material_photo_url: !!evAfter?.material_photo_url,
+        active_before: beforeActive,
+        active_after: Math.max(0, beforeActive - (evidenceOk && phaseOk ? 1 : 0)),
+        ok: evidenceOk && phaseOk,
+      });
+
       setState("completed");
       speak("Verified");
       vibrate(120);
+
+      // Staggered refetches — don't rely on realtime alone. Refetch now, at
+      // 500ms, and at 2s so the canonical clearance-items list catches up
+      // even if the realtime channel is slow or dropped.
+      const refetch = () => {
+        queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+        queryClient.refetchQueries({ queryKey: ["clearance-items"] });
+      };
+      refetch();
+      window.setTimeout(refetch, 500);
+      window.setTimeout(refetch, 2000);
+
       // Snap back to next item quickly. Voice/animation don't block.
       window.setTimeout(() => {
         setActiveItemId(null);
         setActiveEvidenceId(null);
         setPickCandidates([]);
-        setState("waiting_tag");
+        // If everything in this session is done, hold on the completion
+        // screen; otherwise resume scanning.
+        const remaining = itemsRef.current.filter(
+          (i) => i.evidence_status !== "cleared" && i.id !== finalizedItemId,
+        ).length;
+        if (remaining === 0) {
+          setState("manifest_complete");
+        } else {
+          setState("waiting_tag");
+        }
       }, 450);
     } catch (e: any) {
       console.error("product capture failed", e);
