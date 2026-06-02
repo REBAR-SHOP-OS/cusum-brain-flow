@@ -13,7 +13,44 @@ import { supabase } from "@/integrations/supabase/client";
  */
 
 type MachineRow = { id: string; type: string; status: string; company_id: string };
-type TaskRow = { id: string; task_type: string | null; status: string | null; company_id: string };
+type TaskRow = {
+  id: string;
+  task_type: string | null;
+  status: string | null;
+  company_id: string;
+  setup_key: string | null;
+  bar_code: string | null;
+  grade: string | null;
+  locked_to_machine_id: string | null;
+};
+
+/**
+ * Setup-key affinity helpers (legacy dispatch path).
+ * A "setup key" identifies a unique machine setup — operation + bar size +
+ * grade. Cut tasks with the same setup_key should cluster on the same cutter
+ * when capacity allows, instead of being scattered round-robin.
+ */
+function processForTask(taskType: string | null): "cut" | "bend" | null {
+  switch ((taskType || "").toLowerCase()) {
+    case "cut":
+    case "shear":
+      return "cut";
+    case "bend":
+    case "spiral":
+      return "bend";
+    default:
+      return null;
+  }
+}
+
+function deriveSetupKey(t: Pick<TaskRow, "setup_key" | "task_type" | "bar_code" | "grade">): string | null {
+  if (t.setup_key && t.setup_key.trim().length > 0) return t.setup_key.trim();
+  const proc = processForTask(t.task_type);
+  if (!proc) return null;
+  const bar = (t.bar_code || "").trim() || "NA";
+  const grade = (t.grade || "").trim() || "NA";
+  return `${proc}:${bar}:${grade}`;
+}
 type WorkOrderRow = {
   id: string;
   status: string | null;
