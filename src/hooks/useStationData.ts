@@ -171,7 +171,19 @@ export function useStationData(machineId: string | null, machineType?: string, p
           return true;
         })
         .map((item: Record<string, unknown>) => ({
-...
+          ...item,
+          bend_completed_pieces: (item.bend_completed_pieces as number) || 0,
+          phase: (item.phase as string) || "queued",
+          bend_dimensions: item.bend_dimensions as Record<string, number> | null,
+          source_dims: ((item as any).source_dims_json as Record<string, string> | null) ?? null,
+          source_total_length_text: (item as any).source_total_length_text || null,
+          unit_system: (item as any).unit_system ?? null,
+          plan_name: (item.cut_plans as Record<string, unknown>)?.name || "",
+          project_name: (item.cut_plans as Record<string, unknown>)?.project_name || null,
+          project_id: (item.cut_plans as Record<string, unknown>)?.project_id || null,
+          customer_name: ((item.cut_plans as any)?.projects?.customers?.name as string) || null,
+          project_status: ((item.cut_plans as any)?.projects?.status as string) || null,
+          optimization_mode: (item.cut_plans as Record<string, unknown>)?.optimization_mode as string || null,
         }))
         // De-dup safety in case the same cut_plan_item is referenced by multiple queue rows.
         .filter((item: any, idx: number, arr: any[]) => arr.findIndex((x) => x.id === item.id) === idx);
