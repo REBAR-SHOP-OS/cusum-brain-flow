@@ -52,7 +52,7 @@ export default function OfficePortal() {
 
   const nav = useNavigate();
   const handleBack = useCallback(() => {
-    if (activeSection === "ai-extract") {
+    if (activeSection === "ai-extract" || activeSection === "tags-export") {
       const handledInternally = backToHistoryRef.current?.() ?? false;
       if (handledInternally) {
         return;
@@ -140,6 +140,8 @@ export default function OfficePortal() {
             <DetailedListView initialPlanId={activePlanId} />
           ) : activeSection === "ai-extract" ? (
             <AIExtractView onRegisterBackToHistory={handleRegisterBack} />
+          ) : activeSection === "tags-export" ? (
+            <TagsExportView onRegisterBackToHistory={handleRegisterBack} />
           ) : (
             <ActiveComponent />
           )}

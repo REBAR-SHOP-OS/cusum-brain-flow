@@ -5423,6 +5423,9 @@ export type Database = {
           progress: number | null
           site_address: string | null
           status: string
+          tags_print_count: number
+          tags_printed_at: string | null
+          tags_printed_by: string | null
           target_eta: string | null
           unit_system: string
           updated_at: string
@@ -5443,6 +5446,9 @@ export type Database = {
           progress?: number | null
           site_address?: string | null
           status?: string
+          tags_print_count?: number
+          tags_printed_at?: string | null
+          tags_printed_by?: string | null
           target_eta?: string | null
           unit_system?: string
           updated_at?: string
@@ -5463,6 +5469,9 @@ export type Database = {
           progress?: number | null
           site_address?: string | null
           status?: string
+          tags_print_count?: number
+          tags_printed_at?: string | null
+          tags_printed_by?: string | null
           target_eta?: string | null
           unit_system?: string
           updated_at?: string

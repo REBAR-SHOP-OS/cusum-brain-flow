@@ -16,7 +16,7 @@ import { sessionUnitToDisplay } from "@/lib/unitSystem";
 import { toast } from "sonner";
 import {
   LayoutGrid, Table as TableIcon, Download, Printer,
-  Zap, Sparkles, ChevronRight, ChevronDown, Tag, Trash2,
+  Zap, Sparkles, ChevronRight, ChevronDown, Tag, Trash2, ArrowLeft, CheckCircle2,
 } from "lucide-react";
 
 // Mass per meter by bar code (RSIC Canada)
@@ -65,7 +65,11 @@ function getWeight(size: string | null, lengthVal: number | null, qty: number | 
   return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
 }
 
-export function TagsExportView() {
+interface TagsExportViewProps {
+  onRegisterBackToHistory?: (cb: () => boolean) => void;
+}
+
+export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps = {}) {
   const { sessions, loading: sessionsLoading, refresh } = useExtractSessions();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { rows, loading: rowsLoading } = useExtractRows(selectedSessionId);
@@ -140,12 +144,44 @@ export function TagsExportView() {
     URL.revokeObjectURL(url);
   };
 
-  // Print tags — open dedicated print route in new window
-  const handlePrint = useCallback(() => {
+  // Print tags — open dedicated print route in new window AND record print event
+  const handlePrint = useCallback(async () => {
     const us = sessionUnitToDisplay((selectedSession as any)?.unit_system);
     const url = `/print-tags?sessionId=${selectedSessionId}&unit=${us}&sort=${sortMode}`;
     window.open(url, "_blank");
-  }, [selectedSession, selectedSessionId, sortMode]);
+    // Record print event (treat opening the print route as a print action)
+    if (selectedSessionId) {
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const currentCount = (selectedSession as any)?.tags_print_count ?? 0;
+        await supabase
+          .from("extract_sessions")
+          .update({
+            tags_printed_at: new Date().toISOString(),
+            tags_printed_by: userData?.user?.id ?? null,
+            tags_print_count: currentCount + 1,
+          } as any)
+          .eq("id", selectedSessionId);
+        refresh();
+      } catch (e) {
+        // non-fatal — print window still opened
+        console.warn("Failed to record print event", e);
+      }
+    }
+  }, [selectedSession, selectedSessionId, sortMode, refresh]);
+
+  // Register back-to-list handler so the Office sidebar Back button returns to the
+  // Tags & Export list instead of exiting /office when a session is open.
+  useEffect(() => {
+    if (!onRegisterBackToHistory) return;
+    onRegisterBackToHistory(() => {
+      if (selectedSessionId) {
+        setSelectedSessionId(null);
+        return true;
+      }
+      return false;
+    });
+  }, [onRegisterBackToHistory, selectedSessionId]);
 
   // Intercept Ctrl+P / Cmd+P → redirect to clean print route
   useEffect(() => {
@@ -284,6 +320,15 @@ export function TagsExportView() {
                     >
                       {s.status.toUpperCase()}
                     </Badge>
+                    {(s as any).tags_printed_at && (
+                      <Badge
+                        className="text-[10px] tracking-wider border-0 bg-sky-500/20 text-sky-400 gap-1"
+                        title={`Printed ${(s as any).tags_print_count ?? 1}× — last ${new Date((s as any).tags_printed_at).toLocaleString()}`}
+                      >
+                        <CheckCircle2 className="w-2.5 h-2.5" />
+                        PRINTED
+                      </Badge>
+                    )}
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
                 </button>
@@ -300,6 +345,15 @@ export function TagsExportView() {
       {/* Header — hidden in print */}
       <div className="no-print-tag px-6 py-4 flex items-center justify-between border-b border-border">
         <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1.5 text-xs"
+            onClick={() => setSelectedSessionId(null)}
+            aria-label="Back to Tags & Export list"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
               <LayoutGrid className="w-4 h-4 text-primary" />
