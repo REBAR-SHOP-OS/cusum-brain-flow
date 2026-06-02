@@ -140,6 +140,8 @@ export default function OfficePortal() {
             <DetailedListView initialPlanId={activePlanId} />
           ) : activeSection === "ai-extract" ? (
             <AIExtractView onRegisterBackToHistory={handleRegisterBack} />
+          ) : activeSection === "tags-export" ? (
+            <TagsExportView onRegisterBackToHistory={handleRegisterBack} />
           ) : (
             <ActiveComponent />
           )}
