@@ -158,8 +158,8 @@ export function useAutoClearance({
   useEffect(() => { refreshQueueCount(); }, [refreshQueueCount]);
 
   const pendingItems = useMemo(
-    () => items.filter((i) => i.evidence_status !== "cleared"),
-    [items]
+    () => items.filter((i) => i.evidence_status !== "cleared" && !locallyCompletedIds.has(i.id)),
+    [items, locallyCompletedIds]
   );
   const verifiedCount = items.length - pendingItems.length;
   const totalCount = items.length;
