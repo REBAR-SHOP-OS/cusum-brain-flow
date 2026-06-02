@@ -65,7 +65,11 @@ function getWeight(size: string | null, lengthVal: number | null, qty: number | 
   return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
 }
 
-export function TagsExportView() {
+interface TagsExportViewProps {
+  onRegisterBackToHistory?: (cb: () => boolean) => void;
+}
+
+export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps = {}) {
   const { sessions, loading: sessionsLoading, refresh } = useExtractSessions();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const { rows, loading: rowsLoading } = useExtractRows(selectedSessionId);
