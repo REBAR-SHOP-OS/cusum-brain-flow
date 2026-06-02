@@ -1,12 +1,20 @@
 import { supabase } from "@/integrations/supabase/client";
 
 /**
- * Work Order ↔ Machine dispatch service.
+ * Work Order ↔ Machine dispatch service (legacy, setup_key-aware).
  *
  * Start  → upserts machine_queue_items for every production_task on the WO,
- *          auto-picking the first IDLE machine whose type matches the task
- *          (cut→cutter, bend→bender, spiral→bender, fallback→any idle).
- *          Sets those queue rows to `running` and tasks to `in_progress`.
+ *          picking a capable machine in priority order:
+ *            1. task.locked_to_machine_id (hard lock)
+ *            2. capable + same setup_key already running/queued (affinity)
+ *            3. capable + least-loaded
+ *            4. round-robin within tied least-loaded set (fallback)
+ *          Capability comes from machine_capabilities (process + bar_code).
+ *          When that table is empty for a company, falls back to type buckets
+ *          (cut→cutter, bend/spiral→bender) for backwards compatibility.
+ *          Sets queue rows to `running` and tasks to `in_progress`. Each
+ *          dispatch decision is logged to activity_events with
+ *          dispatch_path='legacy_setup_key_aware'.
  *
  * Pause  → flips matching queue rows back to `queued` (same machine, same
  *          position, qty_completed untouched) and tasks back to `pending`.
