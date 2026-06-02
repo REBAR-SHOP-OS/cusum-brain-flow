@@ -52,7 +52,7 @@ export default function OfficePortal() {
 
   const nav = useNavigate();
   const handleBack = useCallback(() => {
-    if (activeSection === "ai-extract") {
+    if (activeSection === "ai-extract" || activeSection === "tags-export") {
       const handledInternally = backToHistoryRef.current?.() ?? false;
       if (handledInternally) {
         return;
