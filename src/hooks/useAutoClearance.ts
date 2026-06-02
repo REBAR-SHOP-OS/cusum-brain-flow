@@ -697,7 +697,7 @@ export function useAutoClearance({
         .select("id, phase")
         .eq("id", finalizedItemId)
         .maybeSingle();
-      const beforeActive = pendingItems.length;
+      const beforeActive = itemsRef.current.filter((i) => i.evidence_status !== "cleared").length;
       const evidenceOk =
         !!evAfter?.tag_scan_url &&
         !!evAfter?.material_photo_url &&
