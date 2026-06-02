@@ -211,6 +211,7 @@ export function TagsExportView({ onRegisterBackToHistory }: TagsExportViewProps 
         const v = row[key];
         dims[d] = typeof v === "number" ? v : null;
       });
+      if (isStraight(row.shape_code_mapped || row.shape_type)) dims.A = null;
       return {
         mark: row.mark || "",
         size,
