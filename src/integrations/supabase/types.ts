@@ -17562,6 +17562,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      claim_extract_session: {
+        Args: { _session_id: string; _stale_cutoff: string }
+        Returns: boolean
+      }
       cleanup_rate_limit_entries: { Args: never; Returns: undefined }
       clearance_evidence_company_check: {
         Args: { p_cut_plan_item_id: string }
