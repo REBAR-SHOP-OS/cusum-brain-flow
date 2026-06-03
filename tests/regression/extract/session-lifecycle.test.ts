@@ -76,7 +76,7 @@ describe("extract session lifecycle — no infinite extracting", () => {
     // If a user refreshes or opens a recent EXTRACTING session, no upload
     // promise is active. The component must still poll the active session id,
     // count rows for that same id, self-promote after rows land, or timeout.
-    const lifecycleBlock = aiExtractView.match(/\[extract-lifecycle\][\s\S]{0,2600}?window\.setInterval/);
+    const lifecycleBlock = aiExtractView.match(/useEffect\(\(\) => \{[\s\S]{0,4200}?\[extract-lifecycle\][\s\S]{0,2600}?window\.setInterval/);
     expect(lifecycleBlock, "active-session lifecycle poll missing").not.toBeNull();
     const block = lifecycleBlock![0];
     expect(block).toMatch(/activeSessionId/);
