@@ -1018,6 +1018,9 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   };
 
   const loadSession = (session: any) => {
+    setProcessing(false);
+    setProcessingStep("");
+    extractRunRef.current = { sessionId: null, invokedAt: null, lastResponse: null, lastError: null };
     setActiveSessionId(session.id);
     setManifestName(session.name);
     setCustomer(session.customer || "");
@@ -1040,6 +1043,9 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   };
 
   const startNew = () => {
+    setProcessing(false);
+    setProcessingStep("");
+    extractRunRef.current = { sessionId: null, invokedAt: null, lastResponse: null, lastError: null };
     setActiveSessionId(null);
     setUploadedFile(null);
     setManifestName("");
