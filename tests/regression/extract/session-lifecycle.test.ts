@@ -69,7 +69,7 @@ describe("extract session lifecycle — no infinite extracting", () => {
     const runExtractBlock = extractService.match(/export async function runExtract[\s\S]*?\n}\n/);
     expect(runExtractBlock, "runExtract block missing").not.toBeNull();
     expect(runExtractBlock![0]).not.toMatch(/\.update\(\{\s*status:\s*["']extracting["']/);
-    expect(runExtractBlock![0]).toMatch(/invokeEdgeFunction\(["']extract-manifest["']/);
+    expect(runExtractBlock![0]).toMatch(/invokeEdgeFunction(?:<[^>]+>)?\(["']extract-manifest["']/);
   });
 
   it("active-session lifecycle polling runs on the rendered stuck session, not only during upload", () => {
