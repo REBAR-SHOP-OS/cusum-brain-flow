@@ -199,12 +199,12 @@ export async function runExtract(params: {
     address: string;
     type: string;
   };
-}): Promise<void> {
+}): Promise<{ status?: string; sessionId?: string; error?: string }> {
   // Use project-standard invokeEdgeFunction for reliable error bodies & timeout
   // The edge function owns the extracting claim. Do not pre-set status here:
   // doing so makes the backend's stale/concurrent-run guard exit as
   // "already_running" before it can process the file.
-  const data = await invokeEdgeFunction("extract-manifest", {
+  const data = await invokeEdgeFunction<{ status?: string; sessionId?: string; error?: string }>("extract-manifest", {
     sessionId: params.sessionId,
     fileUrl: params.fileUrl,
     fileName: params.fileName,
@@ -215,6 +215,7 @@ export async function runExtract(params: {
     console.error("Extract returned error:", data.error);
     throw new Error(data.error || "Extraction failed");
   }
+  return data || {};
 }
 
 export interface DuplicatePreviewItem {

@@ -149,10 +149,17 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   // Active session
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const lifecycleRef = useRef<{ sessionId: string | null; rowsSeenAt: number | null; extractingStartedAt: number | null }>({
+  const lifecycleRef = useRef<{ sessionId: string | null; rowsSeenAt: number | null; extractStartedAt: number | null; lastPollAt: string | null }>({
     sessionId: null,
     rowsSeenAt: null,
-    extractingStartedAt: null,
+    extractStartedAt: null,
+    lastPollAt: null,
+  });
+  const extractRunRef = useRef<{ sessionId: string | null; invokedAt: number | null; lastResponse: any; lastError: string | null }>({
+    sessionId: null,
+    invokedAt: null,
+    lastResponse: null,
+    lastError: null,
   });
 
   // Register back-to-history callback for parent
@@ -263,21 +270,26 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
   useEffect(() => {
-    if (!activeSessionId || activeSession?.status !== "extracting") return;
+    if (!activeSessionId || !activeSession || !["uploaded", "extracting"].includes(activeSession.status)) return;
 
     if (lifecycleRef.current.sessionId !== activeSessionId) {
       lifecycleRef.current = {
         sessionId: activeSessionId,
         rowsSeenAt: null,
-        extractingStartedAt: new Date(activeSession.updated_at || activeSession.created_at).getTime() || Date.now(),
+        extractStartedAt: extractRunRef.current.sessionId === activeSessionId && extractRunRef.current.invokedAt
+          ? extractRunRef.current.invokedAt
+          : new Date(activeSession.updated_at || activeSession.created_at).getTime() || Date.now(),
+        lastPollAt: null,
       };
     }
 
     let cancelled = false;
     const tick = async () => {
       const sessionId = activeSessionId;
-      const startedAt = lifecycleRef.current.extractingStartedAt ?? Date.now();
-      const secondsInExtracting = Math.floor((Date.now() - startedAt) / 1000);
+      const startedAt = lifecycleRef.current.extractStartedAt ?? Date.now();
+      const secondsSinceExtractStarted = Math.floor((Date.now() - startedAt) / 1000);
+      const lastPollAt = new Date().toISOString();
+      lifecycleRef.current.lastPollAt = lastPollAt;
       const [{ data: sess }, { count: rowCount }] = await Promise.all([
         supabase
           .from("extract_sessions")
@@ -293,16 +305,23 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
       const status = (sess as any).status;
       const extractRowsCount = rowCount ?? 0;
-      const selfPromoteReady = status === "extracting" && extractRowsCount > 0;
-      const timeoutReady = status === "extracting" && extractRowsCount === 0 && secondsInExtracting >= 300;
+      const selfPromoteReady = ["uploaded", "extracting"].includes(status) && extractRowsCount > 0;
+      const timeoutReady = ["uploaded", "extracting"].includes(status) && extractRowsCount === 0 && secondsSinceExtractStarted >= 300;
+      const startFailedReady = status === "uploaded" && processing && secondsSinceExtractStarted >= 20;
       console.debug("[extract-lifecycle]", {
         activeSessionId: sessionId,
         status,
+        localProcessing: processing,
+        processingStep,
         extractRowsCount,
-        secondsInExtracting,
-        lastPollAt: new Date().toISOString(),
+        secondsSinceExtractStarted,
+        lastPollAt,
+        extractManifestInvoked: extractRunRef.current.sessionId === sessionId,
+        latestExtractManifestResponse: extractRunRef.current.lastResponse,
+        latestExtractManifestError: extractRunRef.current.lastError,
         selfPromoteReady,
         timeoutReady,
+        timeoutKeyedOff: "db status plus local processing",
       });
 
       if (status === "extracted") {
@@ -313,6 +332,19 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         return;
       }
       if (status === "error" || status === "failed") {
+        setProcessing(false);
+        setProcessingStep("");
+        await refreshSessions();
+        return;
+      }
+      if (status === "uploaded" && processing) {
+        setProcessingStep("Starting extraction...");
+      }
+      if (startFailedReady) {
+        await supabase
+          .from("extract_sessions")
+          .update({ status: "error", error_message: "Extraction did not start. Please retry." } as any)
+          .eq("id", sessionId);
         setProcessing(false);
         setProcessingStep("");
         await refreshSessions();
@@ -642,14 +674,32 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         file: uploadedFile,
       });
 
-      // 3. Run AI extraction (fire-and-forget — edge fn processes in background)
-      setProcessingStep("AI extracting... (processing in background)");
-      await runExtract({
+      // 3. Start extraction. The backend owns the DB transition to
+      // status="extracting"; while the invocation is in flight the UI only
+      // shows a short "Starting" state so it cannot disagree with the stepper.
+      setProcessingStep("Starting extraction...");
+      extractRunRef.current = { sessionId: session.id, invokedAt: Date.now(), lastResponse: null, lastError: null };
+      const extractResponse = await runExtract({
         sessionId: session.id,
         fileUrl,
         fileName: uploadedFile.name,
         manifestContext: { name: manifestName, customer, address: siteAddress, type: manifestType },
+      }).catch((err) => {
+        extractRunRef.current.lastError = err instanceof Error ? err.message : String(err);
+        throw err;
       });
+      extractRunRef.current.lastResponse = extractResponse;
+
+      if (extractResponse?.status === "already_running") {
+        const [{ data: startState }, { count: startRowCount }] = await Promise.all([
+          supabase.from("extract_sessions").select("status, error_message").eq("id", session.id).maybeSingle(),
+          supabase.from("extract_rows").select("id", { count: "exact", head: true }).eq("session_id", session.id),
+        ]);
+        const dbStatus = (startState as any)?.status;
+        if (dbStatus !== "extracting" && (startRowCount ?? 0) === 0) {
+          throw new Error("Extraction did not start. Please retry.");
+        }
+      }
 
       // Poll for completion — realtime subscription will also trigger refresh.
       // We also self-reconcile: if rows have already been saved but the session
@@ -668,26 +718,32 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
             .single();
           if (!sess) continue;
           const s = sess as any;
-          if (s.progress) {
+          const { count: rowCount } = await supabase
+            .from("extract_rows")
+            .select("id", { count: "exact", head: true })
+            .eq("session_id", session.id);
+          const extractRowsCount = rowCount ?? 0;
+
+          if (s.status === "uploaded") {
+            setProcessingStep("Starting extraction...");
+          } else if (s.status === "extracting") {
+            setProcessingStep(s.progress ? `AI extracting... ${s.progress}%` : "AI extracting... (processing in background)");
+          } else if (s.progress) {
             setProcessingStep(`AI extracting... ${s.progress}%`);
           }
           if (s.status === "extracted") return "extracted";
           if (s.status === "error") throw new Error(s.error_message || "Extraction failed");
 
           // Reconciliation: rows landed but status didn't advance.
-          if (s.status === "extracting") {
-            const { count: rowCount } = await supabase
-              .from("extract_rows")
-              .select("id", { count: "exact", head: true })
-              .eq("session_id", session.id);
-            if ((rowCount ?? 0) > 0) {
+          if (s.status === "uploaded" || s.status === "extracting") {
+            if (extractRowsCount > 0) {
               if (rowsSeenAt === null) {
                 rowsSeenAt = Date.now();
-                setProcessingStep(`Rows extracted (${rowCount}), finalizing...`);
+                setProcessingStep(`Rows extracted (${extractRowsCount}), finalizing...`);
               } else if (Date.now() - rowsSeenAt > 15_000) {
                 // Rows have been present for >15s and the worker hasn't flipped
                 // status — finalize from the client so the user isn't stuck.
-                console.warn(`[extract] self-promoting session ${session.id} to "extracted" (${rowCount} rows present, status stuck on extracting)`);
+                console.warn(`[extract] self-promoting session ${session.id} to "extracted" (${extractRowsCount} rows present, status stuck on ${s.status})`);
                 await supabase
                   .from("extract_sessions")
                   .update({ status: "extracted", progress: 100, error_message: null } as any)
@@ -962,6 +1018,9 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   };
 
   const loadSession = (session: any) => {
+    setProcessing(false);
+    setProcessingStep("");
+    extractRunRef.current = { sessionId: null, invokedAt: null, lastResponse: null, lastError: null };
     setActiveSessionId(session.id);
     setManifestName(session.name);
     setCustomer(session.customer || "");
@@ -984,6 +1043,9 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   };
 
   const startNew = () => {
+    setProcessing(false);
+    setProcessingStep("");
+    extractRunRef.current = { sessionId: null, invokedAt: null, lastResponse: null, lastError: null };
     setActiveSessionId(null);
     setUploadedFile(null);
     setManifestName("");

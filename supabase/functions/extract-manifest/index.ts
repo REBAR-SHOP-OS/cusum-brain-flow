@@ -243,7 +243,10 @@ Deno.serve((req) =>
       .eq("id", sessionId)
       .or(`status.neq.extracting,updated_at.lt.${staleCutoff}`)
       .select("id");
-    if (statusErr) console.error("Failed to update session status:", statusErr);
+    if (statusErr) {
+      console.error("Failed to claim extract session:", statusErr);
+      throw new Error(`Could not start extraction: ${statusErr.message}`);
+    }
     if (!claimed || claimed.length === 0) {
       console.log(`Session ${sessionId} already being extracted by another invocation — exiting`);
       return new Response(
