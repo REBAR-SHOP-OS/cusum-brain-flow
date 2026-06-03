@@ -177,11 +177,9 @@ describe("useExtractRows polling/refresh guards", () => {
   it("re-uploading the same file starts a fresh session (refresh clears rows when sessionId is null)", () => {
     // Each upload creates a new extract_sessions row; switching to it must
     // reset local rows so we cannot bleed previous-session data into the
-    // new session's view.
-    const refreshBlock = HOOK.match(/const refresh = useCallback\(async \(\) => \{[\s\S]{0,400}/);
-    expect(refreshBlock).not.toBeNull();
-    const block = refreshBlock![0];
-    expect(block).toMatch(/if\s*\(!sessionId\)/);
-    expect(block).toMatch(/setRows\(\[\]\)/);
+    // new session's view. Scope to the useExtractRows hook block.
+    const hookBlock = HOOK.split(/export function useExtractRows/)[1] ?? "";
+    expect(hookBlock.length).toBeGreaterThan(0);
+    expect(hookBlock).toMatch(/if\s*\(!sessionId\)\s*\{[\s\S]{0,200}setRows\(\[\]\)/);
   });
 });
