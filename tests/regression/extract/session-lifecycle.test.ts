@@ -85,6 +85,29 @@ describe("extract session lifecycle — no infinite extracting", () => {
     expect(block).toMatch(/timeoutReady/);
   });
 
+  it("prevents local overlay from spinning while DB status remains uploaded", () => {
+    // Regression for the manual UI inconsistency: local processing showed
+    // "AI extracting..." while the stepper still read Uploaded. Uploaded +
+    // local processing must be polled, diagnosed, and converted to a clear
+    // start failure instead of an indefinite spinner.
+    expect(aiExtractView).toMatch(/\["uploaded",\s*"extracting"\]\.includes\(activeSession\.status\)/);
+    expect(aiExtractView).toMatch(/status === ["']uploaded["'] && processing/);
+    expect(aiExtractView).toMatch(/Extraction did not start\. Please retry\./);
+    expect(aiExtractView).toMatch(/setProcessingStep\(["']Starting extraction\.\.\.["']\)/);
+    expect(aiExtractView).toMatch(/localProcessing:\s*processing/);
+    expect(aiExtractView).toMatch(/latestExtractManifestResponse/);
+  });
+
+  it("extract-manifest claim errors are fatal, not mislabeled as already_running", () => {
+    // If the backend cannot update extract_sessions.status, the client must get
+    // an actual start failure so Retry appears. Returning already_running here
+    // hides the real error and leaves the UI in a false processing state.
+    const claimBlock = extractManifest.match(/const \{ data: claimed, error: statusErr \}[\s\S]*?Session \$\{sessionId\} already being extracted/);
+    expect(claimBlock, "claim block missing").not.toBeNull();
+    expect(claimBlock![0]).toMatch(/throw new Error\(`Could not start extraction:/);
+    expect(claimBlock![0]).toMatch(/statusErr\.message/);
+  });
+
   it("useExtractRows reconciles a stuck session on plain refresh (no upload flow)", () => {
     // A browser refresh hits the hook directly, without the AIExtractView
     // poll loop. The hook itself must promote "extracting" → "extracted"
