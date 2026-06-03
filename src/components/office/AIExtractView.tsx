@@ -1814,7 +1814,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                         if (!rawFile) throw new Error("No file found for this session");
                         await supabase
                           .from("extract_sessions")
-                          .update({ status: "extracting", error_message: null } as any)
+                          .update({ status: "uploaded", progress: 0, error_message: null } as any)
                           .eq("id", activeSession.id);
                         await refreshSessions();
                         await runExtract({
@@ -1933,7 +1933,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                       if (!rawFile) throw new Error("No file found for this session");
                       await supabase
                         .from("extract_sessions")
-                        .update({ status: "extracting", error_message: null } as any)
+                        .update({ status: "uploaded", progress: 0, error_message: null } as any)
                         .eq("id", activeSession.id);
                       await refreshSessions();
                       await runExtract({
