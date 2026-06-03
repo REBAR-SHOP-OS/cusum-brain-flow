@@ -551,9 +551,14 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         manifestContext: { name: manifestName, customer, address: siteAddress, type: manifestType },
       });
 
-      // Poll for completion — realtime subscription will also trigger refresh
+      // Poll for completion — realtime subscription will also trigger refresh.
+      // We also self-reconcile: if rows have already been saved but the session
+      // status is still "extracting" (worker killed between row save and the
+      // final status update), promote the session to "extracted" so the UI
+      // never gets stuck on "AI extracting... (processing in background)".
       const pollForCompletion = async (): Promise<string> => {
-        const maxAttempts = 120; // 6 minutes max
+        const maxAttempts = 100; // ~5 minutes — aligns with the 5-min stale claim cutoff
+        let rowsSeenAt: number | null = null;
         for (let i = 0; i < maxAttempts; i++) {
           await new Promise(r => setTimeout(r, 3000));
           const { data: sess } = await supabase
@@ -568,7 +573,36 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
           }
           if (s.status === "extracted") return "extracted";
           if (s.status === "error") throw new Error(s.error_message || "Extraction failed");
+
+          // Reconciliation: rows landed but status didn't advance.
+          if (s.status === "extracting") {
+            const { count: rowCount } = await supabase
+              .from("extract_rows")
+              .select("id", { count: "exact", head: true })
+              .eq("session_id", session.id);
+            if ((rowCount ?? 0) > 0) {
+              if (rowsSeenAt === null) {
+                rowsSeenAt = Date.now();
+                setProcessingStep(`Rows extracted (${rowCount}), finalizing...`);
+              } else if (Date.now() - rowsSeenAt > 15_000) {
+                // Rows have been present for >15s and the worker hasn't flipped
+                // status — finalize from the client so the user isn't stuck.
+                console.warn(`[extract] self-promoting session ${session.id} to "extracted" (${rowCount} rows present, status stuck on extracting)`);
+                await supabase
+                  .from("extract_sessions")
+                  .update({ status: "extracted", progress: 100, error_message: null } as any)
+                  .eq("id", session.id);
+                return "extracted";
+              }
+            }
+          }
         }
+        // Timed out — mark the session so the UI shows a clear failure + Retry
+        // rather than spinning forever.
+        await supabase
+          .from("extract_sessions")
+          .update({ status: "error", error_message: "Extraction timed out after 5 minutes" } as any)
+          .eq("id", session.id);
         throw new Error("Extraction timed out");
       };
 

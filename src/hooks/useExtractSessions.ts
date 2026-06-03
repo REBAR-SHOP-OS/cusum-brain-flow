@@ -88,6 +88,25 @@ export function useExtractRows(sessionId: string | null) {
         rowsRef.current = data;
       }
 
+      // Reconcile a stuck session: if rows are present but the session is
+      // still "extracting" (worker died between row save and final status
+      // update), flip it to "extracted" so the UI advances on a plain
+      // browser refresh — not only inside the upload poll loop.
+      if (data.length > 0) {
+        const { data: sess } = await supabase
+          .from("extract_sessions")
+          .select("status")
+          .eq("id", sessionId)
+          .maybeSingle();
+        if (sess && (sess as any).status === "extracting") {
+          console.warn(`[useExtractRows] reconciling session ${sessionId}: ${data.length} rows present, status stuck on "extracting" → "extracted"`);
+          await supabase
+            .from("extract_sessions")
+            .update({ status: "extracted", progress: 100, error_message: null } as any)
+            .eq("id", sessionId);
+        }
+      }
+
       // Poll up to 3 times at 2s intervals if 0 rows returned (handles transient RLS / race)
       if (data.length === 0 && rowsRef.current.length === 0 && !retryRef.current) {
         let attempts = 0;
