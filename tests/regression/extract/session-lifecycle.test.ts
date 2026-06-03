@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression: extract session lifecycle must always reach a terminal state.
  *
