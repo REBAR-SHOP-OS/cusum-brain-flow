@@ -270,21 +270,26 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
 
   useEffect(() => {
-    if (!activeSessionId || activeSession?.status !== "extracting") return;
+    if (!activeSessionId || !activeSession || !["uploaded", "extracting"].includes(activeSession.status)) return;
 
     if (lifecycleRef.current.sessionId !== activeSessionId) {
       lifecycleRef.current = {
         sessionId: activeSessionId,
         rowsSeenAt: null,
-        extractingStartedAt: new Date(activeSession.updated_at || activeSession.created_at).getTime() || Date.now(),
+        extractStartedAt: extractRunRef.current.sessionId === activeSessionId && extractRunRef.current.invokedAt
+          ? extractRunRef.current.invokedAt
+          : new Date(activeSession.updated_at || activeSession.created_at).getTime() || Date.now(),
+        lastPollAt: null,
       };
     }
 
     let cancelled = false;
     const tick = async () => {
       const sessionId = activeSessionId;
-      const startedAt = lifecycleRef.current.extractingStartedAt ?? Date.now();
-      const secondsInExtracting = Math.floor((Date.now() - startedAt) / 1000);
+      const startedAt = lifecycleRef.current.extractStartedAt ?? Date.now();
+      const secondsSinceExtractStarted = Math.floor((Date.now() - startedAt) / 1000);
+      const lastPollAt = new Date().toISOString();
+      lifecycleRef.current.lastPollAt = lastPollAt;
       const [{ data: sess }, { count: rowCount }] = await Promise.all([
         supabase
           .from("extract_sessions")
@@ -301,15 +306,22 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       const status = (sess as any).status;
       const extractRowsCount = rowCount ?? 0;
       const selfPromoteReady = status === "extracting" && extractRowsCount > 0;
-      const timeoutReady = status === "extracting" && extractRowsCount === 0 && secondsInExtracting >= 300;
+      const timeoutReady = ["uploaded", "extracting"].includes(status) && extractRowsCount === 0 && secondsSinceExtractStarted >= 300;
+      const startFailedReady = status === "uploaded" && processing && secondsSinceExtractStarted >= 20;
       console.debug("[extract-lifecycle]", {
         activeSessionId: sessionId,
         status,
+        localProcessing: processing,
+        processingStep,
         extractRowsCount,
-        secondsInExtracting,
-        lastPollAt: new Date().toISOString(),
+        secondsSinceExtractStarted,
+        lastPollAt,
+        extractManifestInvoked: extractRunRef.current.sessionId === sessionId,
+        latestExtractManifestResponse: extractRunRef.current.lastResponse,
+        latestExtractManifestError: extractRunRef.current.lastError,
         selfPromoteReady,
         timeoutReady,
+        timeoutKeyedOff: "db status plus local processing",
       });
 
       if (status === "extracted") {
@@ -320,6 +332,19 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         return;
       }
       if (status === "error" || status === "failed") {
+        setProcessing(false);
+        setProcessingStep("");
+        await refreshSessions();
+        return;
+      }
+      if (status === "uploaded" && processing) {
+        setProcessingStep("Starting extraction...");
+      }
+      if (startFailedReady) {
+        await supabase
+          .from("extract_sessions")
+          .update({ status: "error", error_message: "Extraction did not start. Please retry." } as any)
+          .eq("id", sessionId);
         setProcessing(false);
         setProcessingStep("");
         await refreshSessions();
