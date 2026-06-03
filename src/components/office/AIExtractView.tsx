@@ -444,6 +444,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const handleExtract = async () => {
     if (!uploadedFile || !profile?.company_id) return;
     setProcessing(true);
+    let createdSessionId: string | null = null;
 
     try {
       // Resolve project
@@ -524,6 +525,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         invoiceDate,
         createdBy: user?.id,
       });
+      createdSessionId = session.id;
       setActiveSessionId(session.id);
 
       // Link barlist to session
@@ -636,18 +638,18 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       });
     } catch (err: any) {
       // Only revert to error if the edge function hasn't already succeeded in the background
-      if (activeSessionId) {
+      if (createdSessionId) {
         const { data: currentSession } = await supabase
           .from("extract_sessions")
           .select("status")
-          .eq("id", activeSessionId)
+          .eq("id", createdSessionId)
           .maybeSingle();
 
         if (!currentSession || (currentSession as any).status !== "extracted") {
           await supabase
             .from("extract_sessions")
             .update({ status: "error", error_message: err.message || "Extraction failed" } as any)
-            .eq("id", activeSessionId);
+            .eq("id", createdSessionId);
         }
         await refreshSessions();
         await refreshRows();
