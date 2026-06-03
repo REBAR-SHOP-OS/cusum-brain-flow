@@ -58,7 +58,10 @@ function normHeader(s: string): string {
 
 async function loadPdf(bytes: Uint8Array): Promise<any> {
   // Use the legacy ESM build — works in Deno without canvas/worker.
-  const pdfjs: any = await import("https://esm.sh/pdfjs-dist@4.0.379/legacy/build/pdf.mjs");
+  // Pin to 3.11.174 because newer versions transitively pull `canvas.node`
+  // through esm.sh, which fails to resolve in the edge runtime and blocks
+  // every deploy of this function.
+  const pdfjs: any = await import("https://esm.sh/pdfjs-dist@3.11.174/legacy/build/pdf.mjs");
   // @ts-ignore — disable worker; Deno has no DOM Worker
   pdfjs.GlobalWorkerOptions.workerSrc = "";
   const loadingTask = pdfjs.getDocument({
