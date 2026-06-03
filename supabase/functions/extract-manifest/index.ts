@@ -238,16 +238,15 @@ Deno.serve((req) =>
     console.log(`Starting extraction for session ${sessionId}`);
     const staleCutoff = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     const { data: claimed, error: statusErr } = await svcClient
-      .from("extract_sessions")
-      .update({ status: "extracting", progress: 0, error_message: null, updated_at: new Date().toISOString() })
-      .eq("id", sessionId)
-      .or(`status.neq.extracting,updated_at.lt.${staleCutoff}`)
-      .select("id");
+      .rpc("claim_extract_session", {
+        _session_id: sessionId,
+        _stale_cutoff: staleCutoff,
+      });
     if (statusErr) {
       console.error("Failed to claim extract session:", statusErr);
       throw new Error(`Could not start extraction: ${statusErr.message}`);
     }
-    if (!claimed || claimed.length === 0) {
+    if (claimed !== true) {
       console.log(`Session ${sessionId} already being extracted by another invocation — exiting`);
       return new Response(
         JSON.stringify({ status: "already_running", sessionId }),

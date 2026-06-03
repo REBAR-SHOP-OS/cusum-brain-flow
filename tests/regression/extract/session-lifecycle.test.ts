@@ -98,14 +98,27 @@ describe("extract session lifecycle — no infinite extracting", () => {
     expect(aiExtractView).toMatch(/latestExtractManifestResponse/);
   });
 
-  it("extract-manifest claim errors are fatal, not mislabeled as already_running", () => {
-    // If the backend cannot update extract_sessions.status, the client must get
-    // an actual start failure so Retry appears. Returning already_running here
-    // hides the real error and leaves the UI in a false processing state.
+  it("extract-manifest claims sessions through the DB helper, not a brittle REST status filter", () => {
+    // Regression for the production 500: the live schema has extract_sessions.status,
+    // but the REST claim filter produced "column extract_sessions.status does not exist".
+    // The worker must use the typed database helper for the atomic claim instead.
     const claimBlock = extractManifest.match(/const \{ data: claimed, error: statusErr \}[\s\S]*?Session \$\{sessionId\} already being extracted/);
     expect(claimBlock, "claim block missing").not.toBeNull();
+    expect(claimBlock![0]).toMatch(/\.rpc\(["']claim_extract_session["']/);
+    expect(claimBlock![0]).not.toMatch(/\.or\([\s\S]*status\.neq\.extracting/);
     expect(claimBlock![0]).toMatch(/throw new Error\(`Could not start extraction:/);
     expect(claimBlock![0]).toMatch(/statusErr\.message/);
+  });
+
+  it("generated database types expose the real extract_sessions lifecycle column", () => {
+    const generatedTypes = readFileSync(
+      join(repoRoot, "src/integrations/supabase/types.ts"),
+      "utf8"
+    );
+    const extractSessionTypes = generatedTypes.match(/extract_sessions:\s*\{[\s\S]*?Relationships:/)?.[0] ?? "";
+    expect(extractSessionTypes).toMatch(/status:\s*string/);
+    expect(extractSessionTypes).not.toMatch(/\b(stage|state|processing_status|current_step):/);
+    expect(generatedTypes).toMatch(/claim_extract_session:\s*\{[\s\S]*Returns:\s*boolean/);
   });
 
   it("useExtractRows reconciles a stuck session on plain refresh (no upload flow)", () => {
