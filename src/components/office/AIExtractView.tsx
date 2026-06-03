@@ -305,7 +305,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
 
       const status = (sess as any).status;
       const extractRowsCount = rowCount ?? 0;
-      const selfPromoteReady = status === "extracting" && extractRowsCount > 0;
+      const selfPromoteReady = ["uploaded", "extracting"].includes(status) && extractRowsCount > 0;
       const timeoutReady = ["uploaded", "extracting"].includes(status) && extractRowsCount === 0 && secondsSinceExtractStarted >= 300;
       const startFailedReady = status === "uploaded" && processing && secondsSinceExtractStarted >= 20;
       console.debug("[extract-lifecycle]", {
