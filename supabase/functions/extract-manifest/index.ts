@@ -256,12 +256,17 @@ Deno.serve((req) =>
     // Clear any rows left over from a previous (failed or stale) extraction run.
     // Without this, a retry can collide with existing rows on the
     // (session_id,row_index) unique index when the new row set has a different
-    // count/ordering than the old one.
+    // count/ordering than the old one. We surface failures here as fatal —
+    // a swallowed delete error was the root cause of repeated
+    // "extract_rows_session_row_unique" violations on retried uploads.
     const { error: clearErr } = await svcClient
       .from("extract_rows")
       .delete()
       .eq("session_id", sessionId);
-    if (clearErr) console.error(`Failed to clear prior extract_rows for ${sessionId}:`, clearErr);
+    if (clearErr) {
+      console.error(`Failed to clear prior extract_rows for ${sessionId}:`, clearErr);
+      throw new Error(`Could not clear stale rows for retry: ${clearErr.message}`);
+    }
 
     // Run extraction synchronously — edge function stays alive up to 150s
     try {
