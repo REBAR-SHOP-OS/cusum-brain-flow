@@ -256,12 +256,17 @@ Deno.serve((req) =>
     // Clear any rows left over from a previous (failed or stale) extraction run.
     // Without this, a retry can collide with existing rows on the
     // (session_id,row_index) unique index when the new row set has a different
-    // count/ordering than the old one.
+    // count/ordering than the old one. We surface failures here as fatal —
+    // a swallowed delete error was the root cause of repeated
+    // "extract_rows_session_row_unique" violations on retried uploads.
     const { error: clearErr } = await svcClient
       .from("extract_rows")
       .delete()
       .eq("session_id", sessionId);
-    if (clearErr) console.error(`Failed to clear prior extract_rows for ${sessionId}:`, clearErr);
+    if (clearErr) {
+      console.error(`Failed to clear prior extract_rows for ${sessionId}:`, clearErr);
+      throw new Error(`Could not clear stale rows for retry: ${clearErr.message}`);
+    }
 
     // Run extraction synchronously — edge function stays alive up to 150s
     try {
@@ -840,7 +845,23 @@ Rules:
             const { error: insertErr } = await svcClient
               .from("extract_rows")
               .upsert(batch, { onConflict: "session_id,row_index", ignoreDuplicates: false });
-            if (insertErr) throw new Error(`Failed to save rows batch ${i}: ${insertErr.message}`);
+            if (insertErr) {
+              // Self-heal: if a residual row from a previous run wasn't cleared
+              // (e.g. service-role race) and the upsert conflict-target inference
+              // didn't fire, delete this batch's row_index range and retry once.
+              console.warn(`[extract-manifest] Upsert batch ${i} failed (${insertErr.message}); retrying after targeted delete`);
+              const indexes = batch.map((b: any) => b.row_index);
+              const { error: delErr } = await svcClient
+                .from("extract_rows")
+                .delete()
+                .eq("session_id", sessionId)
+                .in("row_index", indexes);
+              if (delErr) throw new Error(`Failed to save rows batch ${i}: ${insertErr.message} (and cleanup failed: ${delErr.message})`);
+              const { error: retryErr } = await svcClient
+                .from("extract_rows")
+                .upsert(batch, { onConflict: "session_id,row_index", ignoreDuplicates: false });
+              if (retryErr) throw new Error(`Failed to save rows batch ${i}: ${retryErr.message}`);
+            }
             const pct = 85 + Math.round(((i + batch.length) / dedupedRows.length) * 14);
             await svcClient.from("extract_sessions").update({ progress: pct }).eq("id", sessionId);
           }
