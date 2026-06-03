@@ -674,14 +674,32 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         file: uploadedFile,
       });
 
-      // 3. Run AI extraction (fire-and-forget — edge fn processes in background)
-      setProcessingStep("AI extracting... (processing in background)");
-      await runExtract({
+      // 3. Start extraction. The backend owns the DB transition to
+      // status="extracting"; while the invocation is in flight the UI only
+      // shows a short "Starting" state so it cannot disagree with the stepper.
+      setProcessingStep("Starting extraction...");
+      extractRunRef.current = { sessionId: session.id, invokedAt: Date.now(), lastResponse: null, lastError: null };
+      const extractResponse = await runExtract({
         sessionId: session.id,
         fileUrl,
         fileName: uploadedFile.name,
         manifestContext: { name: manifestName, customer, address: siteAddress, type: manifestType },
+      }).catch((err) => {
+        extractRunRef.current.lastError = err instanceof Error ? err.message : String(err);
+        throw err;
       });
+      extractRunRef.current.lastResponse = extractResponse;
+
+      if (extractResponse?.status === "already_running") {
+        const [{ data: startState }, { count: startRowCount }] = await Promise.all([
+          supabase.from("extract_sessions").select("status, error_message").eq("id", session.id).maybeSingle(),
+          supabase.from("extract_rows").select("id", { count: "exact", head: true }).eq("session_id", session.id),
+        ]);
+        const dbStatus = (startState as any)?.status;
+        if (dbStatus !== "extracting" && (startRowCount ?? 0) === 0) {
+          throw new Error("Extraction did not start. Please retry.");
+        }
+      }
 
       // Poll for completion — realtime subscription will also trigger refresh.
       // We also self-reconcile: if rows have already been saved but the session
@@ -700,26 +718,32 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
             .single();
           if (!sess) continue;
           const s = sess as any;
-          if (s.progress) {
+          const { count: rowCount } = await supabase
+            .from("extract_rows")
+            .select("id", { count: "exact", head: true })
+            .eq("session_id", session.id);
+          const extractRowsCount = rowCount ?? 0;
+
+          if (s.status === "uploaded") {
+            setProcessingStep("Starting extraction...");
+          } else if (s.status === "extracting") {
+            setProcessingStep(s.progress ? `AI extracting... ${s.progress}%` : "AI extracting... (processing in background)");
+          } else if (s.progress) {
             setProcessingStep(`AI extracting... ${s.progress}%`);
           }
           if (s.status === "extracted") return "extracted";
           if (s.status === "error") throw new Error(s.error_message || "Extraction failed");
 
           // Reconciliation: rows landed but status didn't advance.
-          if (s.status === "extracting") {
-            const { count: rowCount } = await supabase
-              .from("extract_rows")
-              .select("id", { count: "exact", head: true })
-              .eq("session_id", session.id);
-            if ((rowCount ?? 0) > 0) {
+          if (s.status === "uploaded" || s.status === "extracting") {
+            if (extractRowsCount > 0) {
               if (rowsSeenAt === null) {
                 rowsSeenAt = Date.now();
-                setProcessingStep(`Rows extracted (${rowCount}), finalizing...`);
+                setProcessingStep(`Rows extracted (${extractRowsCount}), finalizing...`);
               } else if (Date.now() - rowsSeenAt > 15_000) {
                 // Rows have been present for >15s and the worker hasn't flipped
                 // status — finalize from the client so the user isn't stuck.
-                console.warn(`[extract] self-promoting session ${session.id} to "extracted" (${rowCount} rows present, status stuck on extracting)`);
+                console.warn(`[extract] self-promoting session ${session.id} to "extracted" (${extractRowsCount} rows present, status stuck on ${s.status})`);
                 await supabase
                   .from("extract_sessions")
                   .update({ status: "extracted", progress: 100, error_message: null } as any)
