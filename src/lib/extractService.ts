@@ -200,13 +200,10 @@ export async function runExtract(params: {
     type: string;
   };
 }): Promise<void> {
-  // Update session to extracting client-side first as a safety net
-  await supabase
-    .from("extract_sessions")
-    .update({ status: "extracting", progress: 0 } as any)
-    .eq("id", params.sessionId);
-
   // Use project-standard invokeEdgeFunction for reliable error bodies & timeout
+  // The edge function owns the extracting claim. Do not pre-set status here:
+  // doing so makes the backend's stale/concurrent-run guard exit as
+  // "already_running" before it can process the file.
   const data = await invokeEdgeFunction("extract-manifest", {
     sessionId: params.sessionId,
     fileUrl: params.fileUrl,

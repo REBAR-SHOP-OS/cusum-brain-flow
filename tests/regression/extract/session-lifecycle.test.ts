@@ -30,6 +30,10 @@ const extractSessionsHook = readFileSync(
   join(repoRoot, "src/hooks/useExtractSessions.ts"),
   "utf8"
 );
+const extractService = readFileSync(
+  join(repoRoot, "src/lib/extractService.ts"),
+  "utf8"
+);
 const extractManifest = readFileSync(
   join(repoRoot, "supabase/functions/extract-manifest/index.ts"),
   "utf8"
@@ -55,6 +59,30 @@ describe("extract session lifecycle — no infinite extracting", () => {
       /status:\s*["']error["'][\s\S]{0,200}timed out[\s\S]{0,200}\.eq\(["']id["'],\s*session\.id\)/i
     );
     expect(aiExtractView).toMatch(/throw new Error\(["']Extraction timed out["']\)/);
+  });
+
+  it("runExtract does not pre-mark the session as extracting before the backend claim", () => {
+    // Regression for the manual UI failure: the client set status="extracting"
+    // immediately before invoking extract-manifest. The backend claim guard then
+    // saw a fresh extracting session and exited as "already_running", leaving
+    // zero rows and no terminal status.
+    const runExtractBlock = extractService.match(/export async function runExtract[\s\S]*?\n}\n/);
+    expect(runExtractBlock, "runExtract block missing").not.toBeNull();
+    expect(runExtractBlock![0]).not.toMatch(/\.update\(\{\s*status:\s*["']extracting["']/);
+    expect(runExtractBlock![0]).toMatch(/invokeEdgeFunction\(["']extract-manifest["']/);
+  });
+
+  it("active-session lifecycle polling runs on the rendered stuck session, not only during upload", () => {
+    // If a user refreshes or opens a recent EXTRACTING session, no upload
+    // promise is active. The component must still poll the active session id,
+    // count rows for that same id, self-promote after rows land, or timeout.
+    const lifecycleBlock = aiExtractView.match(/useEffect\(\(\) => \{[\s\S]{0,4200}?\[extract-lifecycle\][\s\S]{0,2600}?window\.setInterval/);
+    expect(lifecycleBlock, "active-session lifecycle poll missing").not.toBeNull();
+    const block = lifecycleBlock![0];
+    expect(block).toMatch(/activeSessionId/);
+    expect(block).toMatch(/from\(["']extract_rows["']\)[\s\S]{0,220}\.eq\(["']session_id["'],\s*sessionId\)/);
+    expect(block).toMatch(/selfPromoteReady/);
+    expect(block).toMatch(/timeoutReady/);
   });
 
   it("useExtractRows reconciles a stuck session on plain refresh (no upload flow)", () => {

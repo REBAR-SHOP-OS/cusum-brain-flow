@@ -149,6 +149,11 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   // Active session
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
+  const lifecycleRef = useRef<{ sessionId: string | null; rowsSeenAt: number | null; extractingStartedAt: number | null }>({
+    sessionId: null,
+    rowsSeenAt: null,
+    extractingStartedAt: null,
+  });
 
   // Register back-to-history callback for parent
   useEffect(() => {
@@ -256,6 +261,99 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const activeSession = sessions.find((s) => s.id === activeSessionId);
   const currentStepIndex = activeSession ? getStepIndex(activeSession.status, activeSession.optimization_mode) : -1;
   const dedupeResolved = activeSession ? ["merged", "skipped", "none", "complete"].includes(activeSession.dedupe_status) : false;
+
+  useEffect(() => {
+    if (!activeSessionId || activeSession?.status !== "extracting") return;
+
+    if (lifecycleRef.current.sessionId !== activeSessionId) {
+      lifecycleRef.current = {
+        sessionId: activeSessionId,
+        rowsSeenAt: null,
+        extractingStartedAt: new Date(activeSession.updated_at || activeSession.created_at).getTime() || Date.now(),
+      };
+    }
+
+    let cancelled = false;
+    const tick = async () => {
+      const sessionId = activeSessionId;
+      const startedAt = lifecycleRef.current.extractingStartedAt ?? Date.now();
+      const secondsInExtracting = Math.floor((Date.now() - startedAt) / 1000);
+      const [{ data: sess }, { count: rowCount }] = await Promise.all([
+        supabase
+          .from("extract_sessions")
+          .select("status, progress, error_message, updated_at")
+          .eq("id", sessionId)
+          .maybeSingle(),
+        supabase
+          .from("extract_rows")
+          .select("id", { count: "exact", head: true })
+          .eq("session_id", sessionId),
+      ]);
+      if (cancelled || activeSessionId !== sessionId || !sess) return;
+
+      const status = (sess as any).status;
+      const extractRowsCount = rowCount ?? 0;
+      const selfPromoteReady = status === "extracting" && extractRowsCount > 0;
+      const timeoutReady = status === "extracting" && extractRowsCount === 0 && secondsInExtracting >= 300;
+      console.debug("[extract-lifecycle]", {
+        activeSessionId: sessionId,
+        status,
+        extractRowsCount,
+        secondsInExtracting,
+        lastPollAt: new Date().toISOString(),
+        selfPromoteReady,
+        timeoutReady,
+      });
+
+      if (status === "extracted") {
+        setProcessing(false);
+        setProcessingStep("");
+        await refreshRows();
+        await refreshSessions();
+        return;
+      }
+      if (status === "error" || status === "failed") {
+        setProcessing(false);
+        setProcessingStep("");
+        await refreshSessions();
+        return;
+      }
+      if (selfPromoteReady) {
+        setProcessingStep(`Rows extracted (${extractRowsCount}), finalizing...`);
+        if (lifecycleRef.current.rowsSeenAt === null) {
+          lifecycleRef.current.rowsSeenAt = Date.now();
+          return;
+        }
+        if (Date.now() - lifecycleRef.current.rowsSeenAt > 15_000) {
+          await supabase
+            .from("extract_sessions")
+            .update({ status: "extracted", progress: 100, error_message: null } as any)
+            .eq("id", sessionId);
+          setProcessing(false);
+          setProcessingStep("");
+          await refreshRows();
+          await refreshSessions();
+        }
+        return;
+      }
+      if (timeoutReady) {
+        await supabase
+          .from("extract_sessions")
+          .update({ status: "error", error_message: "Extraction timed out after 5 minutes" } as any)
+          .eq("id", sessionId);
+        setProcessing(false);
+        setProcessingStep("");
+        await refreshSessions();
+      }
+    };
+
+    tick().catch((err) => console.warn("[extract-lifecycle] poll failed", err));
+    const interval = window.setInterval(() => tick().catch((err) => console.warn("[extract-lifecycle] poll failed", err)), 3000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [activeSessionId, activeSession?.status, activeSession?.updated_at, refreshRows, refreshSessions]);
 
   // Helper: session's normalised source unit
   const sessionSourceUnit = activeSession?.unit_system === "metric" ? "mm" : (activeSession?.unit_system ?? "mm");
@@ -444,6 +542,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   const handleExtract = async () => {
     if (!uploadedFile || !profile?.company_id) return;
     setProcessing(true);
+    let createdSessionId: string | null = null;
 
     try {
       // Resolve project
@@ -524,6 +623,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
         invoiceDate,
         createdBy: user?.id,
       });
+      createdSessionId = session.id;
       setActiveSessionId(session.id);
 
       // Link barlist to session
@@ -636,18 +736,18 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
       });
     } catch (err: any) {
       // Only revert to error if the edge function hasn't already succeeded in the background
-      if (activeSessionId) {
+      if (createdSessionId) {
         const { data: currentSession } = await supabase
           .from("extract_sessions")
           .select("status")
-          .eq("id", activeSessionId)
+          .eq("id", createdSessionId)
           .maybeSingle();
 
         if (!currentSession || (currentSession as any).status !== "extracted") {
           await supabase
             .from("extract_sessions")
             .update({ status: "error", error_message: err.message || "Extraction failed" } as any)
-            .eq("id", activeSessionId);
+            .eq("id", createdSessionId);
         }
         await refreshSessions();
         await refreshRows();
@@ -1714,7 +1814,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                         if (!rawFile) throw new Error("No file found for this session");
                         await supabase
                           .from("extract_sessions")
-                          .update({ status: "extracting", error_message: null } as any)
+                          .update({ status: "uploaded", progress: 0, error_message: null } as any)
                           .eq("id", activeSession.id);
                         await refreshSessions();
                         await runExtract({
@@ -1833,7 +1933,7 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
                       if (!rawFile) throw new Error("No file found for this session");
                       await supabase
                         .from("extract_sessions")
-                        .update({ status: "extracting", error_message: null } as any)
+                        .update({ status: "uploaded", progress: 0, error_message: null } as any)
                         .eq("id", activeSession.id);
                       await refreshSessions();
                       await runExtract({
