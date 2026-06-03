@@ -149,10 +149,17 @@ export function AIExtractView({ onRegisterBackToHistory }: { onRegisterBackToHis
   // Active session
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showHistory, setShowHistory] = useState(false);
-  const lifecycleRef = useRef<{ sessionId: string | null; rowsSeenAt: number | null; extractingStartedAt: number | null }>({
+  const lifecycleRef = useRef<{ sessionId: string | null; rowsSeenAt: number | null; extractStartedAt: number | null; lastPollAt: string | null }>({
     sessionId: null,
     rowsSeenAt: null,
-    extractingStartedAt: null,
+    extractStartedAt: null,
+    lastPollAt: null,
+  });
+  const extractRunRef = useRef<{ sessionId: string | null; invokedAt: number | null; lastResponse: any; lastError: string | null }>({
+    sessionId: null,
+    invokedAt: null,
+    lastResponse: null,
+    lastError: null,
   });
 
   // Register back-to-history callback for parent
