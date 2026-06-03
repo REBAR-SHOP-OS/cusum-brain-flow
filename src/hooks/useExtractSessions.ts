@@ -56,32 +56,54 @@ export function useExtractRows(sessionId: string | null) {
   const [loading, setLoading] = useState(!!sessionId);
   const [hasFetched, setHasFetched] = useState(false);
   const retryRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track the session this hook is currently bound to so async callbacks
+  // (initial fetch, retry poll) can't write rows for a session the user
+  // already navigated away from, and refresh() can't blank out rows that
+  // the background poll just successfully loaded.
+  const sessionRef = useRef<string | null>(sessionId);
+  const rowsRef = useRef<ExtractRow[]>([]);
+  useEffect(() => { sessionRef.current = sessionId; }, [sessionId]);
+  useEffect(() => { rowsRef.current = rows; }, [rows]);
 
   const refresh = useCallback(async () => {
     if (!sessionId) {
       setRows([]);
+      rowsRef.current = [];
       setHasFetched(false);
       setLoading(false);
       return;
     }
-    
+
     setLoading(true);
     try {
       const data = await fetchExtractRows(sessionId);
-      
-      setRows(data);
+      if (sessionRef.current !== sessionId) return; // stale — user switched session
+      console.info(`[useExtractRows] fetched ${data.length} rows`);
+
+      // Never overwrite good rows with an empty result — the extracted rows can
+      // arrive via the background poll first, and a follow-up refresh that races
+      // an RLS lag would otherwise blank the table and re-trigger "Loading…".
+      if (data.length > 0 || rowsRef.current.length === 0) {
+        setRows(data);
+        rowsRef.current = data;
+      }
 
       // Poll up to 3 times at 2s intervals if 0 rows returned (handles transient RLS / race)
-      if (data.length === 0 && !retryRef.current) {
+      if (data.length === 0 && rowsRef.current.length === 0 && !retryRef.current) {
         let attempts = 0;
         const poll = async () => {
+          if (sessionRef.current !== sessionId) { retryRef.current = null; return; }
           if (attempts >= 3) { retryRef.current = null; return; }
           attempts++;
           try {
             const retryData = await fetchExtractRows(sessionId);
-            
+            if (sessionRef.current !== sessionId) { retryRef.current = null; return; }
+            console.info(`[useExtractRows] retry fetched ${retryData.length} rows`);
             if (retryData.length > 0) {
               setRows(retryData);
+              rowsRef.current = retryData;
+              setHasFetched(true);
+              setLoading(false);
               retryRef.current = null;
               return;
             }
