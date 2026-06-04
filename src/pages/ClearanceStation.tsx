@@ -41,7 +41,19 @@ const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5", "Zone 6
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { items, byProjectKey, clearedCount, totalCount, isLoading, error } = useClearanceData();
+  const {
+    items,
+    byProjectKey,
+    clearedCount,
+    totalCount,
+    isLoading,
+    error,
+    hasLive,
+    sampleCount,
+    triageCounts,
+    dataUpdatedAt,
+    isFetching,
+  } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const { manifestStateById } = useReleaseState();
@@ -53,6 +65,14 @@ export default function ClearanceStation() {
   const [autoMode, setAutoMode] = useState(false);
   const [listTab, setListTab] = useState<"manifests" | "archive">("manifests");
   const [zoneSaving, setZoneSaving] = useState(false);
+  // Sample-data toggle: OFF by default when live data exists.
+  // Forced ON when no live data exists, so the operator still sees something.
+  const [showSamples, setShowSamples] = useState(false);
+  const samplesVisible = showSamples || !hasLive;
+  // Live-data health: green/amber/red derived from query freshness + error.
+  const ageSec = Math.floor((Date.now() - (dataUpdatedAt || 0)) / 1000);
+  const health: "live" | "stale" | "offline" =
+    error ? "offline" : ageSec > 60 && !isFetching ? "stale" : "live";
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
