@@ -33,7 +33,29 @@ export interface ClearanceItem {
   verified_at: string | null;
   verified_by_name: string | null;
   created_at: string | null;
+  // ---- Triage / sample-data extensions (derived, never written) ----
+  is_sample: boolean;
+  verification_state: string | null;
+  mismatch_reason: string | null;
+  triage: "cleared" | "needs_fix" | "stale" | "upstream_not_ready" | "pending";
+  urgency: number; // higher = more urgent; used for sort
 }
+
+// Sample/demo data heuristic — single source of truth.
+// Matches labels that start with sample / demo / test / seed (case-insensitive).
+export function isSampleLabel(...parts: Array<string | null | undefined>): boolean {
+  const re = /^\s*(sample|demo|test|seed)\b/i;
+  return parts.some((p) => typeof p === "string" && re.test(p));
+}
+
+const STALE_HOURS = 24;
+const TRIAGE_PRIORITY: Record<ClearanceItem["triage"], number> = {
+  needs_fix: 100,
+  stale: 80,
+  upstream_not_ready: 60,
+  pending: 40,
+  cleared: 0,
+};
 
 export function useClearanceData() {
   const { user } = useAuth();
