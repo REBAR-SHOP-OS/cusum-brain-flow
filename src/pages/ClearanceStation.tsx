@@ -556,9 +556,15 @@ export default function ClearanceStation() {
                         toast({ title: "Select zone before clearance.", variant: "destructive" });
                         return;
                       }
+                      // Block Auto Clearance when every pending item is a sample —
+                      // there is nothing real to verify against.
+                      if (pendingItems.length > 0 && pendingItems.every((i) => i.is_sample)) {
+                        toast({ title: "Sample manifest — Auto Clearance disabled.", variant: "destructive" });
+                        return;
+                      }
                       setAutoMode(true);
                     }}
-                    disabled={!manifestZone}
+                    disabled={!manifestZone || (pendingItems.length > 0 && pendingItems.every((i) => i.is_sample))}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border disabled:opacity-40 disabled:cursor-not-allowed ${autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
                   >
                     <Zap className="w-3.5 h-3.5" /> Auto Clearance
