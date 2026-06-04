@@ -62,7 +62,7 @@ export function useClearanceData() {
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["clearance-items", companyId],
     enabled: !!user && !!companyId,
     queryFn: async () => {
