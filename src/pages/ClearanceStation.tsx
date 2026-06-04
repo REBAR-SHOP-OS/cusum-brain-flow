@@ -84,7 +84,15 @@ export default function ClearanceStation() {
   // operator stays on the manifest page after clearing the last item.
   const activeItems = useMemo(() => {
     if (!selectedProjectKey) return [];
-    return items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey);
+    const filtered = items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey);
+    // Urgency sort: needs_fix > stale > upstream_not_ready > pending > cleared,
+    // then oldest first so the longest-waiting item floats to the top.
+    return [...filtered].sort((a, b) => {
+      if (b.urgency !== a.urgency) return b.urgency - a.urgency;
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return ta - tb;
+    });
   }, [items, selectedProjectKey]);
   const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
 
