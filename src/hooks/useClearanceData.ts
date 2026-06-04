@@ -108,8 +108,39 @@ export function useClearanceData() {
         return ka.localeCompare(kb);
       });
 
+      const nowMs = Date.now();
       return sortedItems.map((item: any) => {
-        const ev = evidenceMap.get(item.id);
+        const ev = evidenceMap.get(item.id) as any;
+        const plan_name = item.cut_plans?.name || "";
+        const project_name = item.cut_plans?.projects?.name || item.cut_plans?.project_name || null;
+        const customer_name = item.cut_plans?.projects?.customers?.name || null;
+        const barlist_name = item.cut_plans?.barlists?.name || item.cut_plans?.name || null;
+        const barlist_status = item.cut_plans?.barlists?.status || null;
+        const cut_plan_status = item.cut_plans?.status || null;
+        const evidence_status = ev?.status || "pending";
+        const verification_state = ev?.verification_state || null;
+        const mismatch_reason = ev?.mismatch_reason || null;
+        const is_sample = isSampleLabel(plan_name, project_name, customer_name, barlist_name);
+
+        // Triage bucket
+        let triage: ClearanceItem["triage"] = "pending";
+        if (evidence_status === "cleared") {
+          triage = "cleared";
+        } else if (mismatch_reason || verification_state === "manual_review") {
+          triage = "needs_fix";
+        } else {
+          const blOk = !barlist_status || ["released", "approved"].includes(barlist_status);
+          const cpOk = !cut_plan_status || ["cutting", "clearance", "complete"].includes(cut_plan_status);
+          if (!blOk || !cpOk) {
+            triage = "upstream_not_ready";
+          } else {
+            const createdMs = item.created_at ? new Date(item.created_at).getTime() : nowMs;
+            const ageHrs = (nowMs - createdMs) / 36e5;
+            if (ageHrs > STALE_HOURS) triage = "stale";
+          }
+        }
+        const urgency = TRIAGE_PRIORITY[triage];
+
         return {
           id: item.id,
           cut_plan_id: item.cut_plan_id,
@@ -124,23 +155,28 @@ export function useClearanceData() {
           asa_shape_code: item.asa_shape_code,
           total_pieces: item.total_pieces,
           bend_completed_pieces: item.bend_completed_pieces,
-          plan_name: item.cut_plans?.name || "",
-          project_name: item.cut_plans?.projects?.name || item.cut_plans?.project_name || null,
-          customer_name: item.cut_plans?.projects?.customers?.name || null,
-          barlist_name: item.cut_plans?.barlists?.name || item.cut_plans?.name || null,
+          plan_name,
+          project_name,
+          customer_name,
+          barlist_name,
           barlist_revision_no: typeof item.cut_plans?.barlists?.revision_no === "number"
             ? item.cut_plans.barlists.revision_no
             : null,
-          barlist_status: item.cut_plans?.barlists?.status || null,
-          cut_plan_status: item.cut_plans?.status || null,
+          barlist_status,
+          cut_plan_status,
           evidence_id: ev?.id || null,
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
-          evidence_status: ev?.status || "pending",
+          evidence_status,
           storage_zone: ev?.storage_zone ?? null,
           verified_at: ev?.verified_at || null,
           verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
           created_at: item.created_at || null,
+          is_sample,
+          verification_state,
+          mismatch_reason,
+          triage,
+          urgency,
         } as ClearanceItem;
       });
     },
