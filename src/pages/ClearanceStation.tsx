@@ -262,13 +262,72 @@ export default function ClearanceStation() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Live-data health pill */}
+          <Badge
+            variant="outline"
+            data-testid="clearance-health-pill"
+            className={`gap-1.5 text-[10px] px-2 py-1 tracking-wider uppercase font-bold ${
+              health === "live"
+                ? "border-primary/40 text-primary"
+                : health === "stale"
+                ? "border-amber-500/40 text-amber-600"
+                : "border-destructive/40 text-destructive"
+            }`}
+            title={`Last refresh ${ageSec}s ago`}
+          >
+            {health === "offline" ? (
+              <WifiOff className="w-3.5 h-3.5" />
+            ) : (
+              <Activity className={`w-3.5 h-3.5 ${health === "live" ? "animate-pulse" : ""}`} />
+            )}
+            {health === "live" ? `Live · ${totalCount}` : health === "stale" ? `Stale · ${ageSec}s` : "Offline"}
+          </Badge>
+          {/* Triage breakdown */}
+          <div className="hidden sm:flex items-center gap-1" data-testid="triage-badges">
+            <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive" title="Needs fix">
+              FIX {triageCounts.needs_fix}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1 border-amber-500/40 text-amber-600" title="Stale > 24h">
+              STALE {triageCounts.stale}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1 border-muted-foreground/40 text-muted-foreground" title="Upstream not ready">
+              UPSTREAM {triageCounts.upstream_not_ready}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1" title="Pending">
+              PEND {triageCounts.pending}
+            </Badge>
+            <Badge variant="default" className="text-[10px] gap-1" title="Cleared">
+              OK {triageCounts.cleared}
+            </Badge>
+          </div>
+          {/* Sample toggle */}
+          {sampleCount > 0 && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-border" title="Show sample / demo rows">
+              <Beaker className="w-3.5 h-3.5 text-muted-foreground" />
+              <Label htmlFor="sample-toggle" className="text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer">
+                Samples ({sampleCount})
+              </Label>
+              <Switch
+                id="sample-toggle"
+                checked={samplesVisible}
+                disabled={!hasLive}
+                onCheckedChange={setShowSamples}
+                aria-label="Show sample data"
+              />
+            </div>
+          )}
           <Badge variant="outline" className="gap-1.5 text-sm px-3 py-1">
             <ShieldCheck className="w-4 h-4" />
             {clearedCount} / {totalCount} Cleared
           </Badge>
         </div>
       </div>
+      {!hasLive && sampleCount > 0 && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 text-[11px] text-amber-700 dark:text-amber-400 text-center">
+          Showing sample data — no live clearance items yet.
+        </div>
+      )}
 
       {/* Content */}
       <ScrollArea className="flex-1">
