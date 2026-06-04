@@ -22,7 +22,12 @@ import {
   Loader2,
   ChevronRight,
   AlertTriangle,
+  Activity,
+  WifiOff,
+  Beaker,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
 import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
