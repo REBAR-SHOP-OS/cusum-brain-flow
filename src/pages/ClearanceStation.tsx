@@ -184,18 +184,21 @@ export default function ClearanceStation() {
   // Group ALL barlists/cut-plans for the same customer together — across projects.
   type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
   const customerGroups = useMemo(() => {
-    const map = new Map<string, { customerName: string; latest: number; plans: Array<[string, GroupVal]> }>();
+    const map = new Map<string, { customerName: string; latest: number; urgency: number; plans: Array<[string, GroupVal]> }>();
     for (const [key, group] of projectEntries) {
       const cname = group.customerName || "Unassigned";
-      if (!map.has(cname)) map.set(cname, { customerName: cname, latest: 0, plans: [] });
+      if (!map.has(cname)) map.set(cname, { customerName: cname, latest: 0, urgency: 0, plans: [] });
       const bucket = map.get(cname)!;
       bucket.plans.push([key, group as GroupVal]);
       if ((group.latestCreatedAt || 0) > bucket.latest) bucket.latest = group.latestCreatedAt || 0;
+      const groupUrg = group.items.reduce((m, i) => Math.max(m, i.urgency || 0), 0);
+      if (groupUrg > bucket.urgency) bucket.urgency = groupUrg;
     }
-    // Newest customer first; Unassigned last
+    // Urgent customers first (needs_fix / stale), then newest; Unassigned last.
     return [...map.values()].sort((a, b) => {
       if (a.customerName === "Unassigned") return 1;
       if (b.customerName === "Unassigned") return -1;
+      if (b.urgency !== a.urgency) return b.urgency - a.urgency;
       return b.latest - a.latest;
     });
   }, [projectEntries]);
