@@ -162,16 +162,23 @@ export default function ClearanceStation() {
   }, [manifestComplete]);
 
   // Sort plans by newest first (latestCreatedAt desc); fallback to label for stability.
+  // Filters out sample-only groups when the toggle is off and live data exists.
   const projectEntries = useMemo(
     () =>
-      [...byProjectKey.entries()].sort(([, a], [, b]) => {
-        const diff = (b.latestCreatedAt || 0) - (a.latestCreatedAt || 0);
-        if (diff !== 0) return diff;
-        const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
-        const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
-        return sa.localeCompare(sb);
-      }),
-    [byProjectKey]
+      [...byProjectKey.entries()]
+        .filter(([, g]) => {
+          if (samplesVisible) return true;
+          // Drop groups where every item is sample.
+          return g.items.some((i) => !i.is_sample);
+        })
+        .sort(([, a], [, b]) => {
+          const diff = (b.latestCreatedAt || 0) - (a.latestCreatedAt || 0);
+          if (diff !== 0) return diff;
+          const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
+          const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
+          return sa.localeCompare(sb);
+        }),
+    [byProjectKey, samplesVisible]
   );
 
   // Group ALL barlists/cut-plans for the same customer together — across projects.
