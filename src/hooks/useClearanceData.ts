@@ -249,8 +249,29 @@ export function useClearanceData() {
     }
   }
 
+  const all = data ?? [];
+  const liveItems = all.filter((i) => !i.is_sample);
+  const sampleItems = all.filter((i) => i.is_sample);
+  const hasLive = liveItems.length > 0;
+
+  // Triage breakdown counts (over the LIVE set when live data exists,
+  // otherwise over the sample set so the operator still sees buckets).
+  const triageSource = hasLive ? liveItems : sampleItems;
+  const triageCounts = {
+    pending: triageSource.filter((i) => i.triage === "pending").length,
+    cleared: triageSource.filter((i) => i.triage === "cleared").length,
+    needs_fix: triageSource.filter((i) => i.triage === "needs_fix").length,
+    upstream_not_ready: triageSource.filter((i) => i.triage === "upstream_not_ready").length,
+    stale: triageSource.filter((i) => i.triage === "stale").length,
+  };
+
   return {
-    items: data ?? [],
+    items: all,
+    liveItems,
+    sampleItems,
+    hasLive,
+    sampleCount: sampleItems.length,
+    triageCounts,
     clearedCount,
     totalCount,
     byProject: byProjectLabel,
@@ -258,6 +279,8 @@ export function useClearanceData() {
     // label changes and last-item completion without losing context.
     byProjectKey: byProject,
     isLoading,
+    isFetching,
+    dataUpdatedAt,
     error,
   };
 }
