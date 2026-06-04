@@ -1,10 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useAuth } from "@/lib/auth";
 import { getTourSteps } from "@/components/tour/tourSteps";
 import type { Step, CallBackProps } from "react-joyride";
 
 const TOUR_STORAGE_KEY = "rsos_tour_completed";
+const AUTO_TOUR_BLOCKED_PREFIXES = [
+  "/shopfloor/clearance",
+  "/shopfloor/station",
+  "/shopfloor/loading",
+  "/shopfloor/delivery-ops",
+  "/timeclock",
+];
 
 function hasCompletedTour(userId: string): boolean {
   try {
@@ -28,6 +36,7 @@ function markTourCompleted(userId: string) {
 export function useTour() {
   const { user } = useAuth();
   const { roles, isLoading } = useUserRole();
+  const location = useLocation();
   const [run, setRun] = useState(false);
   const [steps, setSteps] = useState<Step[]>([]);
 
@@ -35,6 +44,7 @@ export function useTour() {
   useEffect(() => {
     if (!user || isLoading) return;
     if (hasCompletedTour(user.id)) return;
+    if (AUTO_TOUR_BLOCKED_PREFIXES.some((prefix) => location.pathname.startsWith(prefix))) return;
 
     // Small delay so DOM elements mount with data-tour attributes
     const timer = setTimeout(() => {
@@ -44,7 +54,7 @@ export function useTour() {
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [user, roles, isLoading]);
+  }, [user, roles, isLoading, location.pathname]);
 
   const handleCallback = useCallback(
     (data: CallBackProps) => {
