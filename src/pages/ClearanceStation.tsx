@@ -611,12 +611,22 @@ export default function ClearanceStation() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeItems.map((item) => (
-                  <ClearanceCard
-                    key={item.id}
-                    item={item}
-                    canWrite={canWrite}
-                    userId={user?.id}
-                  />
+                  <div key={item.id} className="relative">
+                    {item.is_sample && (
+                      <div className="absolute top-2 right-2 z-10">
+                        <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 bg-card/80">
+                          SAMPLE · READ-ONLY
+                        </Badge>
+                      </div>
+                    )}
+                    <ClearanceCard
+                      item={item}
+                      // Sample rows are read-only: evidence-gated manual clear
+                      // is bypassed by disabling write actions at the source.
+                      canWrite={canWrite && !item.is_sample}
+                      userId={user?.id}
+                    />
+                  </div>
                 ))}
               </div>
             )}
