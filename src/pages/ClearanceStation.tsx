@@ -22,7 +22,12 @@ import {
   Loader2,
   ChevronRight,
   AlertTriangle,
+  Activity,
+  WifiOff,
+  Beaker,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { ClearanceCard } from "@/components/clearance/ClearanceCard";
 import { AutoClearanceMode } from "@/components/clearance/AutoClearanceMode";
 import { ClearanceArchive } from "@/components/clearance/ClearanceArchive";
@@ -36,7 +41,19 @@ const STORAGE_ZONES = ["Zone 1", "Zone 2", "Zone 3", "Zone 4", "Zone 5", "Zone 6
 export default function ClearanceStation() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { items, byProjectKey, clearedCount, totalCount, isLoading, error } = useClearanceData();
+  const {
+    items,
+    byProjectKey,
+    clearedCount,
+    totalCount,
+    isLoading,
+    error,
+    hasLive,
+    sampleCount,
+    triageCounts,
+    dataUpdatedAt,
+    isFetching,
+  } = useClearanceData();
   const { isAdmin, isWorkshop } = useUserRole();
   const canWrite = isAdmin || isWorkshop;
   const { manifestStateById } = useReleaseState();
@@ -48,6 +65,14 @@ export default function ClearanceStation() {
   const [autoMode, setAutoMode] = useState(false);
   const [listTab, setListTab] = useState<"manifests" | "archive">("manifests");
   const [zoneSaving, setZoneSaving] = useState(false);
+  // Sample-data toggle: OFF by default when live data exists.
+  // Forced ON when no live data exists, so the operator still sees something.
+  const [showSamples, setShowSamples] = useState(false);
+  const samplesVisible = showSamples || !hasLive;
+  // Live-data health: green/amber/red derived from query freshness + error.
+  const ageSec = Math.floor((Date.now() - (dataUpdatedAt || 0)) / 1000);
+  const health: "live" | "stale" | "offline" =
+    error ? "offline" : ageSec > 60 && !isFetching ? "stale" : "live";
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -59,7 +84,15 @@ export default function ClearanceStation() {
   // operator stays on the manifest page after clearing the last item.
   const activeItems = useMemo(() => {
     if (!selectedProjectKey) return [];
-    return items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey);
+    const filtered = items.filter((i) => (i.cut_plan_id || "__unassigned__") === selectedProjectKey);
+    // Urgency sort: needs_fix > stale > upstream_not_ready > pending > cleared,
+    // then oldest first so the longest-waiting item floats to the top.
+    return [...filtered].sort((a, b) => {
+      if (b.urgency !== a.urgency) return b.urgency - a.urgency;
+      const ta = a.created_at ? new Date(a.created_at).getTime() : 0;
+      const tb = b.created_at ? new Date(b.created_at).getTime() : 0;
+      return ta - tb;
+    });
   }, [items, selectedProjectKey]);
   const activeClearedCount = activeItems.filter((i) => i.evidence_status === "cleared").length;
 
@@ -129,33 +162,43 @@ export default function ClearanceStation() {
   }, [manifestComplete]);
 
   // Sort plans by newest first (latestCreatedAt desc); fallback to label for stability.
+  // Filters out sample-only groups when the toggle is off and live data exists.
   const projectEntries = useMemo(
     () =>
-      [...byProjectKey.entries()].sort(([, a], [, b]) => {
-        const diff = (b.latestCreatedAt || 0) - (a.latestCreatedAt || 0);
-        if (diff !== 0) return diff;
-        const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
-        const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
-        return sa.localeCompare(sb);
-      }),
-    [byProjectKey]
+      [...byProjectKey.entries()]
+        .filter(([, g]) => {
+          if (samplesVisible) return true;
+          // Drop groups where every item is sample.
+          return g.items.some((i) => !i.is_sample);
+        })
+        .sort(([, a], [, b]) => {
+          const diff = (b.latestCreatedAt || 0) - (a.latestCreatedAt || 0);
+          if (diff !== 0) return diff;
+          const sa = `${a.customerName || "~"}|${a.barlistName || a.label}`;
+          const sb = `${b.customerName || "~"}|${b.barlistName || b.label}`;
+          return sa.localeCompare(sb);
+        }),
+    [byProjectKey, samplesVisible]
   );
 
   // Group ALL barlists/cut-plans for the same customer together — across projects.
   type GroupVal = NonNullable<ReturnType<typeof byProjectKey.get>>;
   const customerGroups = useMemo(() => {
-    const map = new Map<string, { customerName: string; latest: number; plans: Array<[string, GroupVal]> }>();
+    const map = new Map<string, { customerName: string; latest: number; urgency: number; plans: Array<[string, GroupVal]> }>();
     for (const [key, group] of projectEntries) {
       const cname = group.customerName || "Unassigned";
-      if (!map.has(cname)) map.set(cname, { customerName: cname, latest: 0, plans: [] });
+      if (!map.has(cname)) map.set(cname, { customerName: cname, latest: 0, urgency: 0, plans: [] });
       const bucket = map.get(cname)!;
       bucket.plans.push([key, group as GroupVal]);
       if ((group.latestCreatedAt || 0) > bucket.latest) bucket.latest = group.latestCreatedAt || 0;
+      const groupUrg = group.items.reduce((m, i) => Math.max(m, i.urgency || 0), 0);
+      if (groupUrg > bucket.urgency) bucket.urgency = groupUrg;
     }
-    // Newest customer first; Unassigned last
+    // Urgent customers first (needs_fix / stale), then newest; Unassigned last.
     return [...map.values()].sort((a, b) => {
       if (a.customerName === "Unassigned") return 1;
       if (b.customerName === "Unassigned") return -1;
+      if (b.urgency !== a.urgency) return b.urgency - a.urgency;
       return b.latest - a.latest;
     });
   }, [projectEntries]);
@@ -219,13 +262,72 @@ export default function ClearanceStation() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Live-data health pill */}
+          <Badge
+            variant="outline"
+            data-testid="clearance-health-pill"
+            className={`gap-1.5 text-[10px] px-2 py-1 tracking-wider uppercase font-bold ${
+              health === "live"
+                ? "border-primary/40 text-primary"
+                : health === "stale"
+                ? "border-amber-500/40 text-amber-600"
+                : "border-destructive/40 text-destructive"
+            }`}
+            title={`Last refresh ${ageSec}s ago`}
+          >
+            {health === "offline" ? (
+              <WifiOff className="w-3.5 h-3.5" />
+            ) : (
+              <Activity className={`w-3.5 h-3.5 ${health === "live" ? "animate-pulse" : ""}`} />
+            )}
+            {health === "live" ? `Live · ${totalCount}` : health === "stale" ? `Stale · ${ageSec}s` : "Offline"}
+          </Badge>
+          {/* Triage breakdown */}
+          <div className="hidden sm:flex items-center gap-1" data-testid="triage-badges">
+            <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive" title="Needs fix">
+              FIX {triageCounts.needs_fix}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1 border-amber-500/40 text-amber-600" title="Stale > 24h">
+              STALE {triageCounts.stale}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1 border-muted-foreground/40 text-muted-foreground" title="Upstream not ready">
+              UPSTREAM {triageCounts.upstream_not_ready}
+            </Badge>
+            <Badge variant="outline" className="text-[10px] gap-1" title="Pending">
+              PEND {triageCounts.pending}
+            </Badge>
+            <Badge variant="default" className="text-[10px] gap-1" title="Cleared">
+              OK {triageCounts.cleared}
+            </Badge>
+          </div>
+          {/* Sample toggle */}
+          {sampleCount > 0 && (
+            <div className="flex items-center gap-1.5 pl-2 border-l border-border" title="Show sample / demo rows">
+              <Beaker className="w-3.5 h-3.5 text-muted-foreground" />
+              <Label htmlFor="sample-toggle" className="text-[10px] uppercase tracking-wider text-muted-foreground cursor-pointer">
+                Samples ({sampleCount})
+              </Label>
+              <Switch
+                id="sample-toggle"
+                checked={samplesVisible}
+                disabled={!hasLive}
+                onCheckedChange={setShowSamples}
+                aria-label="Show sample data"
+              />
+            </div>
+          )}
           <Badge variant="outline" className="gap-1.5 text-sm px-3 py-1">
             <ShieldCheck className="w-4 h-4" />
             {clearedCount} / {totalCount} Cleared
           </Badge>
         </div>
       </div>
+      {!hasLive && sampleCount > 0 && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30 px-4 py-1.5 text-[11px] text-amber-700 dark:text-amber-400 text-center">
+          Showing sample data — no live clearance items yet.
+        </div>
+      )}
 
       {/* Content */}
       <ScrollArea className="flex-1">
@@ -263,6 +365,9 @@ export default function ClearanceStation() {
               const totalPlanItems = allItems.length;
               const isSingle = plans.length === 1;
               const isExpanded = expandedCustomers.has(customerName) || isSingle;
+              const customerIsSample = allItems.length > 0 && allItems.every((i) => i.is_sample);
+              const needsFixCount = allItems.filter((i) => i.triage === "needs_fix").length;
+              const staleCount = allItems.filter((i) => i.triage === "stale").length;
 
               return (
                 <div
@@ -284,8 +389,13 @@ export default function ClearanceStation() {
                     <div className="flex items-center gap-3 min-w-0">
                       <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                       <div className="min-w-0 flex flex-col">
-                        <span className="text-base font-bold uppercase tracking-wider text-white truncate">
+                        <span className="text-base font-bold uppercase tracking-wider text-white truncate flex items-center gap-2">
                           {customerName}
+                          {customerIsSample && (
+                            <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                              SAMPLE
+                            </Badge>
+                          )}
                         </span>
                         <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate">
                           {plans.length} manifest{plans.length !== 1 ? "s" : ""} · {totalPlanItems} item{totalPlanItems !== 1 ? "s" : ""}
@@ -293,6 +403,16 @@ export default function ClearanceStation() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {needsFixCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive">
+                          FIX {needsFixCount}
+                        </Badge>
+                      )}
+                      {staleCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600">
+                          STALE {staleCount}
+                        </Badge>
+                      )}
                       <Badge
                         variant={cleared === totalPlanItems ? "default" : "secondary"}
                         className="text-[10px]"
@@ -304,6 +424,7 @@ export default function ClearanceStation() {
                       />
                     </div>
                   </button>
+
 
                   {isExpanded && !isSingle && (
                     <div className="border-t border-border bg-background/40">
@@ -435,9 +556,15 @@ export default function ClearanceStation() {
                         toast({ title: "Select zone before clearance.", variant: "destructive" });
                         return;
                       }
+                      // Block Auto Clearance when every pending item is a sample —
+                      // there is nothing real to verify against.
+                      if (pendingItems.length > 0 && pendingItems.every((i) => i.is_sample)) {
+                        toast({ title: "Sample manifest — Auto Clearance disabled.", variant: "destructive" });
+                        return;
+                      }
                       setAutoMode(true);
                     }}
-                    disabled={!manifestZone}
+                    disabled={!manifestZone || (pendingItems.length > 0 && pendingItems.every((i) => i.is_sample))}
                     className={`flex items-center gap-1.5 px-3 py-1.5 text-[10px] font-bold tracking-wider uppercase border-l border-border disabled:opacity-40 disabled:cursor-not-allowed ${autoMode ? "bg-primary text-primary-foreground" : "bg-card text-muted-foreground hover:bg-muted/50"}`}
                   >
                     <Zap className="w-3.5 h-3.5" /> Auto Clearance
@@ -490,12 +617,22 @@ export default function ClearanceStation() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeItems.map((item) => (
-                  <ClearanceCard
-                    key={item.id}
-                    item={item}
-                    canWrite={canWrite}
-                    userId={user?.id}
-                  />
+                  <div key={item.id} className="relative">
+                    {item.is_sample && (
+                      <div className="absolute top-2 right-2 z-10">
+                        <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600 bg-card/80">
+                          SAMPLE · READ-ONLY
+                        </Badge>
+                      </div>
+                    )}
+                    <ClearanceCard
+                      item={item}
+                      // Sample rows are read-only: evidence-gated manual clear
+                      // is bypassed by disabling write actions at the source.
+                      canWrite={canWrite && !item.is_sample}
+                      userId={user?.id}
+                    />
+                  </div>
                 ))}
               </div>
             )}

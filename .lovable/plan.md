@@ -1,48 +1,58 @@
-## Root cause found
+## Scope
 
-- The old failed ALA sessions show the backend error:
-  - `duplicate key value violates unique constraint "extract_rows_session_row_unique"`
-- The latest ALA upload did eventually extract 68 rows, but the UI is stuck at `Loading extracted rows…` while the page already shows duplicate preview data.
-- The uploaded `ALA.xls` itself contains pairs of rows for SD02 and SD03, so the 34 duplicate groups are source/data duplicates, not a save failure.
-- The current extraction path still has two weak points:
-  1. It depends on the AI model to turn an Excel table into rows, then overlays spreadsheet dimensions afterward. This is slow and fragile for RebarCAD `.xls` files.
-  2. The row hook can leave `loading=true` during retry polling, so the table can keep showing `Loading extracted rows…` even when rows are already available or after delayed refetches.
+Re-implement the requested clearance audit upgrades inside the existing files — no new module layout, no route rename. The canonical route stays `/shopfloor/clearance` (`src/pages/ClearanceStation.tsx`), wired through `src/App.tsx`.
 
-## Fix plan
+## Files touched
 
-1. **Add deterministic spreadsheet extraction for RebarCAD XLS/XLSX/CSV**
-   - In `supabase/functions/extract-manifest/index.ts`, detect the schedule header row (`Item`, `No. Pcs`, `Dwg.No`, `Size`, `Length`, `Mark`, `Type`, `A/B/C...`).
-   - Parse rows directly from the spreadsheet by header position.
-   - Preserve exact source text for lengths/dimensions, including `0'-4"` format.
-   - Skip blank/footer rows.
-   - Keep dimension `I` skipped as required by rebar standards.
-   - For straight rows, put length in `B` and leave `A` blank/null.
-   - Use this deterministic result instead of calling AI for spreadsheet files when the table is recognized.
+- `src/hooks/useClearanceData.ts` — derive `is_sample`, triage bucket, urgency score per item.
+- `src/pages/ClearanceStation.tsx` — header health pill, sample toggle, triage badges, urgency sort, sample-action gating.
+- `src/components/clearance/ClearanceCard.tsx` — accept `disabledReason` prop; hide Manual Verify when sample-only / read-only. Evidence gate (`assertEvidenceComplete`) already enforced — left as-is.
+- `tests/regression/shopfloor/clearance-triage-and-sample-gate.test.ts` — new regression locking the new behavior in source.
 
-2. **Keep the existing AI path as fallback only**
-   - If a spreadsheet does not match the RebarCAD schedule layout, keep the current AI extraction + overlay behavior.
-   - This preserves support for unusual spreadsheets without changing unrelated flows.
+No DB migration. No router changes. No new routes/redirects (commit referenced a module layout that does not exist here).
 
-3. **Make saving idempotent and clean for retries**
-   - Keep the current upsert on `(session_id,row_index)`.
-   - Ensure stale/prior rows are cleared before a retry so the same session cannot fail with duplicate-key errors again.
-   - Do not delete or alter any approved production/clearance data; this only affects extract rows for the active extraction session.
+## Behavior
 
-4. **Fix the stuck `Loading extracted rows…` UI state**
-   - In `useExtractRows`, finish loading after the first fetch even if background retry polling continues.
-   - If retry polling later finds rows, update rows without re-locking the UI in loading state.
-   - Add a guard so switching sessions cannot let an old retry update the wrong session.
+1. **Live-data health indicator (header pill)**
+   - Green "LIVE · N items" when at least one non-sample item is present and the last query refetched within 60s.
+   - Amber "STALE · Xs" when refetch is older than 60s.
+   - Red "OFFLINE" when `error` is set or `items` is empty AND realtime channel is `CLOSED`.
+   - Uses existing `useClearanceData` query meta + `dataUpdatedAt` from `useQuery`.
 
-5. **Add regression coverage**
-   - Add/extend tests to lock in:
-     - spreadsheet extraction has a deterministic path and does not require AI for RebarCAD tables;
-     - `.upsert(... onConflict: "session_id,row_index")` remains in place;
-     - `useExtractRows` does not stay loading forever while retry polling.
+2. **Sample-data detection + toggle**
+   - `is_sample` derived in the hook by heuristic on `plan_name`/`customer_name`/`barlist_name` matching `/^(sample|demo|test|seed)\b/i`. Centralized in one helper.
+   - New "Show sample data" toggle in the header (off by default).
+   - When live (non-sample) items exist, sample rows are hidden by default; toggling shows them with a "SAMPLE" badge on each card and customer row.
+   - When only sample data exists, they are shown automatically with a banner "Showing sample data — no live clearance items".
 
-## Validation after implementation
+3. **Disabled sample actions**
+   - `ClearanceCard` for `is_sample` rows: Manual Verify, photo upload, and storage-zone edits are disabled with tooltip "Sample row — actions disabled".
+   - Auto Clearance mode entry is blocked when only sample items are pending on the manifest.
 
-- Deploy/test `extract-manifest`.
-- Re-run extraction for `ALA.xls` through the backend using the current preview user session.
-- Confirm session reaches `status=extracted`, `progress=100`, and row count is 68.
-- Confirm the UI no longer stays on `Loading extracted rows…` after rows exist.
-- Confirm duplicate preview still shows the 34 source duplicate groups so the operator can choose merge/skip deliberately.
+4. **Evidence-gated manual clear** — already enforced via `assertEvidenceComplete` in `ClearanceCard` (line 258). Plan adds a regression test that asserts the call site still precedes the `status: "cleared"` update, and that sample rows never reach that path.
+
+5. **Triage breakdown badges** (header strip on list view + per-manifest summary)
+   - Buckets derived per item:
+     - `cleared` — `evidence_status === "cleared"`.
+     - `needs_fix` — evidence row exists with `mismatch_reason` populated or `verification_state === "manual_review"`.
+     - `upstream_not_ready` — parent `barlist_status` not in (`released`,`approved`) OR `cut_plan_status` not in (`cutting`,`clearance`,`complete`).
+     - `stale` — pending > 24h since `created_at` (workspace TZ via existing `useWorkspaceSettings`, falls back to local).
+     - `pending` — everything else not cleared.
+   - Render as 5 small badges using existing `Badge` variants + semantic tokens.
+
+6. **Urgency sorting**
+   - Within a manifest: sort by bucket priority `needs_fix > stale > upstream_not_ready > pending > cleared`, then oldest `created_at` first.
+   - Customer/manifest list: bump customers with any `needs_fix` to the top, then `stale`, then existing newest-first order.
+
+## Technical notes
+
+- All new colors via existing semantic tokens (`destructive`, `amber-500/40` already used, `primary`, `muted-foreground`). No new CSS variables.
+- Hook returns add `is_sample`, `triage`, `urgency` on each `ClearanceItem` — purely additive, existing consumers untouched.
+- Realtime channel UUID pattern unchanged.
+- No backend write paths added; sample rows are read-only by UI guard, not DB constraint.
+
+## Verification
+
+- Re-read both edited files after change.
+- `bunx vitest run tests/regression/shopfloor/clearance-triage-and-sample-gate.test.ts tests/regression/shopfloor/auto-clearance-tag-gate.test.ts tests/regression/shopfloor/clearance-strict-3field-match.test.ts`.
+- Navigate preview to `/shopfloor/clearance`, confirm: health pill renders, badges count correctly, toggle hides/shows sample rows, Manual Verify disabled on sample card.

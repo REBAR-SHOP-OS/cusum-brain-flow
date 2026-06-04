@@ -33,14 +33,36 @@ export interface ClearanceItem {
   verified_at: string | null;
   verified_by_name: string | null;
   created_at: string | null;
+  // ---- Triage / sample-data extensions (derived, never written) ----
+  is_sample: boolean;
+  verification_state: string | null;
+  mismatch_reason: string | null;
+  triage: "cleared" | "needs_fix" | "stale" | "upstream_not_ready" | "pending";
+  urgency: number; // higher = more urgent; used for sort
 }
+
+// Sample/demo data heuristic — single source of truth.
+// Matches labels that start with sample / demo / test / seed (case-insensitive).
+export function isSampleLabel(...parts: Array<string | null | undefined>): boolean {
+  const re = /^\s*(sample|demo|test|seed)\b/i;
+  return parts.some((p) => typeof p === "string" && re.test(p));
+}
+
+const STALE_HOURS = 24;
+const TRIAGE_PRIORITY: Record<ClearanceItem["triage"], number> = {
+  needs_fix: 100,
+  stale: 80,
+  upstream_not_ready: 60,
+  pending: 40,
+  cleared: 0,
+};
 
 export function useClearanceData() {
   const { user } = useAuth();
   const { companyId } = useCompanyId();
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, dataUpdatedAt, isFetching } = useQuery({
     queryKey: ["clearance-items", companyId],
     enabled: !!user && !!companyId,
     queryFn: async () => {
@@ -86,8 +108,39 @@ export function useClearanceData() {
         return ka.localeCompare(kb);
       });
 
+      const nowMs = Date.now();
       return sortedItems.map((item: any) => {
-        const ev = evidenceMap.get(item.id);
+        const ev = evidenceMap.get(item.id) as any;
+        const plan_name = item.cut_plans?.name || "";
+        const project_name = item.cut_plans?.projects?.name || item.cut_plans?.project_name || null;
+        const customer_name = item.cut_plans?.projects?.customers?.name || null;
+        const barlist_name = item.cut_plans?.barlists?.name || item.cut_plans?.name || null;
+        const barlist_status = item.cut_plans?.barlists?.status || null;
+        const cut_plan_status = item.cut_plans?.status || null;
+        const evidence_status = ev?.status || "pending";
+        const verification_state = ev?.verification_state || null;
+        const mismatch_reason = ev?.mismatch_reason || null;
+        const is_sample = isSampleLabel(plan_name, project_name, customer_name, barlist_name);
+
+        // Triage bucket
+        let triage: ClearanceItem["triage"] = "pending";
+        if (evidence_status === "cleared") {
+          triage = "cleared";
+        } else if (mismatch_reason || verification_state === "manual_review") {
+          triage = "needs_fix";
+        } else {
+          const blOk = !barlist_status || ["released", "approved"].includes(barlist_status);
+          const cpOk = !cut_plan_status || ["cutting", "clearance", "complete"].includes(cut_plan_status);
+          if (!blOk || !cpOk) {
+            triage = "upstream_not_ready";
+          } else {
+            const createdMs = item.created_at ? new Date(item.created_at).getTime() : nowMs;
+            const ageHrs = (nowMs - createdMs) / 36e5;
+            if (ageHrs > STALE_HOURS) triage = "stale";
+          }
+        }
+        const urgency = TRIAGE_PRIORITY[triage];
+
         return {
           id: item.id,
           cut_plan_id: item.cut_plan_id,
@@ -102,23 +155,28 @@ export function useClearanceData() {
           asa_shape_code: item.asa_shape_code,
           total_pieces: item.total_pieces,
           bend_completed_pieces: item.bend_completed_pieces,
-          plan_name: item.cut_plans?.name || "",
-          project_name: item.cut_plans?.projects?.name || item.cut_plans?.project_name || null,
-          customer_name: item.cut_plans?.projects?.customers?.name || null,
-          barlist_name: item.cut_plans?.barlists?.name || item.cut_plans?.name || null,
+          plan_name,
+          project_name,
+          customer_name,
+          barlist_name,
           barlist_revision_no: typeof item.cut_plans?.barlists?.revision_no === "number"
             ? item.cut_plans.barlists.revision_no
             : null,
-          barlist_status: item.cut_plans?.barlists?.status || null,
-          cut_plan_status: item.cut_plans?.status || null,
+          barlist_status,
+          cut_plan_status,
           evidence_id: ev?.id || null,
           material_photo_url: ev?.material_photo_url || null,
           tag_scan_url: ev?.tag_scan_url || null,
-          evidence_status: ev?.status || "pending",
+          evidence_status,
           storage_zone: ev?.storage_zone ?? null,
           verified_at: ev?.verified_at || null,
           verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
           created_at: item.created_at || null,
+          is_sample,
+          verification_state,
+          mismatch_reason,
+          triage,
+          urgency,
         } as ClearanceItem;
       });
     },
@@ -191,8 +249,29 @@ export function useClearanceData() {
     }
   }
 
+  const all = data ?? [];
+  const liveItems = all.filter((i) => !i.is_sample);
+  const sampleItems = all.filter((i) => i.is_sample);
+  const hasLive = liveItems.length > 0;
+
+  // Triage breakdown counts (over the LIVE set when live data exists,
+  // otherwise over the sample set so the operator still sees buckets).
+  const triageSource = hasLive ? liveItems : sampleItems;
+  const triageCounts = {
+    pending: triageSource.filter((i) => i.triage === "pending").length,
+    cleared: triageSource.filter((i) => i.triage === "cleared").length,
+    needs_fix: triageSource.filter((i) => i.triage === "needs_fix").length,
+    upstream_not_ready: triageSource.filter((i) => i.triage === "upstream_not_ready").length,
+    stale: triageSource.filter((i) => i.triage === "stale").length,
+  };
+
   return {
-    items: data ?? [],
+    items: all,
+    liveItems,
+    sampleItems,
+    hasLive,
+    sampleCount: sampleItems.length,
+    triageCounts,
     clearedCount,
     totalCount,
     byProject: byProjectLabel,
@@ -200,6 +279,8 @@ export function useClearanceData() {
     // label changes and last-item completion without losing context.
     byProjectKey: byProject,
     isLoading,
+    isFetching,
+    dataUpdatedAt,
     error,
   };
 }
