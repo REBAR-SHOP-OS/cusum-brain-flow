@@ -28,6 +28,7 @@ export default defineConfig(({ mode }) => ({
     }),
     VitePWA({
       registerType: "autoUpdate",
+      injectRegister: null,
       includeAssets: ["favicon.png", "pwa-icon-192.png", "pwa-icon-512.png"],
       manifest: {
         name: "REBAR SHOP OS",
@@ -59,6 +60,9 @@ export default defineConfig(({ mode }) => ({
         ],
       },
       workbox: {
+        cleanupOutdatedCaches: true,
+        clientsClaim: true,
+        skipWaiting: true,
         maximumFileSizeToCacheInBytes: 16 * 1024 * 1024,
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         globIgnores: ["**/pwa-icon-*.png", "**/favicon.png"],
@@ -71,8 +75,9 @@ export default defineConfig(({ mode }) => ({
               cacheName: "supabase-cache",
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24,
+                maxAgeSeconds: 60,
               },
+              networkTimeoutSeconds: 5,
             },
           },
         ],
