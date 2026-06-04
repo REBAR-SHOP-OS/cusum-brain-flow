@@ -365,6 +365,9 @@ export default function ClearanceStation() {
               const totalPlanItems = allItems.length;
               const isSingle = plans.length === 1;
               const isExpanded = expandedCustomers.has(customerName) || isSingle;
+              const customerIsSample = allItems.length > 0 && allItems.every((i) => i.is_sample);
+              const needsFixCount = allItems.filter((i) => i.triage === "needs_fix").length;
+              const staleCount = allItems.filter((i) => i.triage === "stale").length;
 
               return (
                 <div
@@ -386,8 +389,13 @@ export default function ClearanceStation() {
                     <div className="flex items-center gap-3 min-w-0">
                       <ShieldCheck className="w-5 h-5 text-primary shrink-0" />
                       <div className="min-w-0 flex flex-col">
-                        <span className="text-base font-bold uppercase tracking-wider text-white truncate">
+                        <span className="text-base font-bold uppercase tracking-wider text-white truncate flex items-center gap-2">
                           {customerName}
+                          {customerIsSample && (
+                            <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                              SAMPLE
+                            </Badge>
+                          )}
                         </span>
                         <span className="text-[10px] font-bold tracking-wide uppercase text-primary truncate">
                           {plans.length} manifest{plans.length !== 1 ? "s" : ""} · {totalPlanItems} item{totalPlanItems !== 1 ? "s" : ""}
@@ -395,6 +403,16 @@ export default function ClearanceStation() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      {needsFixCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] border-destructive/40 text-destructive">
+                          FIX {needsFixCount}
+                        </Badge>
+                      )}
+                      {staleCount > 0 && (
+                        <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600">
+                          STALE {staleCount}
+                        </Badge>
+                      )}
                       <Badge
                         variant={cleared === totalPlanItems ? "default" : "secondary"}
                         className="text-[10px]"
@@ -406,6 +424,7 @@ export default function ClearanceStation() {
                       />
                     </div>
                   </button>
+
 
                   {isExpanded && !isSingle && (
                     <div className="border-t border-border bg-background/40">
