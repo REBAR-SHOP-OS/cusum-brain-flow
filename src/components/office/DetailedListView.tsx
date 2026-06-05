@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ChevronDown, ChevronRight, Check, X, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
