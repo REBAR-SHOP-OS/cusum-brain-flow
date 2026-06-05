@@ -229,10 +229,30 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
       <div className="p-6 space-y-4">
         <h1 className="text-2xl font-black italic text-foreground uppercase">Detailed List</h1>
         <p className="text-sm text-muted-foreground">Select a manifest to view its detailed item list.</p>
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search manifest, customer, status…"
+            className="pl-9 pr-9 h-9"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
         {plansLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">No manifests found.</p>
+        ) : activePlans.length === 0 && completedPlans.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No results for "{search}".</p>
         ) : (
           <div className="space-y-6">
             {/* Active / Running section */}
