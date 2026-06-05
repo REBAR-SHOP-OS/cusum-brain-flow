@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Pencil, Trash2, ChevronDown, ChevronRight, Check, X } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, ChevronDown, ChevronRight, Check, X, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -116,11 +116,19 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
+  const [search, setSearch] = useState("");
+
   // Separate plans into active (running/draft/ready/queued) and completed
   const { activePlans, completedPlans } = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const matches = (p: typeof plans[number]) =>
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      (p.customer_name || "").toLowerCase().includes(q) ||
+      (p.status || "").toLowerCase().includes(q);
     const active: typeof plans = [];
     const completed: typeof plans = [];
-    for (const plan of plans.filter(p => !p.name.endsWith("(Small)"))) {
+    for (const plan of plans.filter(p => !p.name.endsWith("(Small)") && matches(p))) {
       if (plan.status === "completed") {
         completed.push(plan);
       } else {
@@ -128,7 +136,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
       }
     }
     return { activePlans: active, completedPlans: completed };
-  }, [plans]);
+  }, [plans, search]);
 
   // Group plans by customer_name, sorted alphabetically
   const groupByCustomer = (list: typeof plans) => {
@@ -221,10 +229,30 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
       <div className="p-6 space-y-4">
         <h1 className="text-2xl font-black italic text-foreground uppercase">Detailed List</h1>
         <p className="text-sm text-muted-foreground">Select a manifest to view its detailed item list.</p>
+        <div className="relative max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search manifest, customer, status…"
+            className="pl-9 pr-9 h-9"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
         {plansLoading ? (
           <p className="text-sm text-muted-foreground">Loading...</p>
         ) : plans.length === 0 ? (
           <p className="text-sm text-muted-foreground">No manifests found.</p>
+        ) : activePlans.length === 0 && completedPlans.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No results for "{search}".</p>
         ) : (
           <div className="space-y-6">
             {/* Active / Running section */}
