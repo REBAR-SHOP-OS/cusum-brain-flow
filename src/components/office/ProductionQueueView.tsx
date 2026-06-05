@@ -1,11 +1,12 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useCutPlans } from "@/hooks/useCutPlans";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { 
-  Pencil, RotateCcw, CheckCircle2, Trash2, 
+  Pencil, RotateCcw, CheckCircle2, Trash2, Search, X,
   Clock, Activity, FolderOpen, FileText, ChevronRight, ChevronDown, Users
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
