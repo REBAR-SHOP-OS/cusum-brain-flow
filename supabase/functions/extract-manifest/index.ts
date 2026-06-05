@@ -81,9 +81,128 @@ function parseDimension(val: any): number | null {
 
 const DIMS = ["A","B","C","D","E","F","G","H","J","K","O","R"] as const;
 
+function normalizeHeader(raw: any): string {
+  return String(raw ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s*\(.*?\)\s*/g, " ")
+    .replace(/[^A-Z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function findHeaderIndex(headers: string[], candidates: string[]): number {
+  return headers.findIndex((header) => candidates.includes(header));
+}
+
+function cellText(sheet: any, row: number, col: number): string | null {
+  const cell = sheet[XLSX.utils.encode_cell({ r: row, c: col })];
+  if (!cell) return null;
+  const text = cell.w != null ? String(cell.w) : String(cell.v ?? "");
+  return text.trim() || null;
+}
+
+function extractRebarRowsFromWorkbook(workbook: any, manifestContext?: any): { items: any[]; reason?: string } {
+  const items: any[] = [];
+  for (const sheetName of workbook.SheetNames || []) {
+    const sheet = workbook.Sheets[sheetName];
+    const rows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null });
+    if (!rows.length) continue;
+
+    let bestHeader = -1;
+    let bestScore = 0;
+    for (let r = 0; r < Math.min(rows.length, 40); r++) {
+      const headers = rows[r].map(normalizeHeader);
+      const score = [
+        findHeaderIndex(headers, ["MARK", "BAR MARK", "BAR MARKS", "ITEM MARK"]) >= 0,
+        findHeaderIndex(headers, ["QTY", "QUANTITY", "NO", "NUMBER"]) >= 0,
+        findHeaderIndex(headers, ["SIZE", "BAR SIZE", "BAR", "BAR DIA", "DIAMETER"]) >= 0,
+        findHeaderIndex(headers, ["SHAPE", "SHAPE TYPE", "TYPE", "ASA", "ASA SHAPE"]) >= 0,
+        findHeaderIndex(headers, ["LENGTH", "CUT LENGTH", "TOTAL LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"]) >= 0,
+        headers.some((h) => normalizeDimHeader(h) !== null),
+      ].filter(Boolean).length;
+      if (score > bestScore) {
+        bestScore = score;
+        bestHeader = r;
+      }
+    }
+
+    if (bestHeader < 0 || bestScore < 4) continue;
+
+    const headerRow = rows[bestHeader].map(normalizeHeader);
+    const dimCols = new Map<string, number>();
+    headerRow.forEach((header, idx) => {
+      const dim = normalizeDimHeader(header);
+      if (dim) dimCols.set(dim, idx);
+    });
+
+    const idx = {
+      dwg: findHeaderIndex(headerRow, ["DWG", "DRAWING", "DRAWING NO", "DRAWING NUMBER", "DWG NO"]),
+      item: findHeaderIndex(headerRow, ["ITEM", "ITEM NO", "ITEM NUMBER", "BAR NO", "BAR NUMBER"]),
+      grade: findHeaderIndex(headerRow, ["GRADE", "STEEL GRADE"]),
+      mark: findHeaderIndex(headerRow, ["MARK", "BAR MARK", "BAR MARKS", "ITEM MARK"]),
+      quantity: findHeaderIndex(headerRow, ["QTY", "QUANTITY", "NO", "NUMBER"]),
+      size: findHeaderIndex(headerRow, ["SIZE", "BAR SIZE", "BAR", "BAR DIA", "DIAMETER"]),
+      type: findHeaderIndex(headerRow, ["SHAPE", "SHAPE TYPE", "TYPE", "ASA", "ASA SHAPE"]),
+      total_length: findHeaderIndex(headerRow, ["LENGTH", "CUT LENGTH", "TOTAL LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"]),
+      weight: findHeaderIndex(headerRow, ["WEIGHT", "WT", "WEIGHT KG", "KG"]),
+      customer: findHeaderIndex(headerRow, ["CUSTOMER", "CLIENT"]),
+      ref: findHeaderIndex(headerRow, ["REF", "REFERENCE", "PROJECT", "PROJECT REF", "BARLIST"]),
+      address: findHeaderIndex(headerRow, ["ADDRESS", "SITE ADDRESS", "LOCATION"]),
+    };
+
+    const valueAt = (row: any[], col: number) => col >= 0 ? row[col] : null;
+    const textAt = (rowNum: number, row: any[], col: number) =>
+      col >= 0 ? (cellText(sheet, rowNum, col) ?? (valueAt(row, col) != null ? String(valueAt(row, col)).trim() : null)) : null;
+
+    for (let r = bestHeader + 1; r < rows.length; r++) {
+      const row = rows[r];
+      if (!row || row.every((cell) => cell == null || String(cell).trim() === "")) continue;
+
+      const mark = textAt(r, row, idx.mark);
+      const qty = textAt(r, row, idx.quantity);
+      const size = textAt(r, row, idx.size);
+      const length = textAt(r, row, idx.total_length);
+      const hasDims = [...dimCols.values()].some((col) => textAt(r, row, col));
+      if (!mark && !qty && !size && !length && !hasDims) continue;
+
+      const item: any = {
+        dwg: textAt(r, row, idx.dwg),
+        item: textAt(r, row, idx.item) || String(items.length + 1),
+        grade: textAt(r, row, idx.grade),
+        mark,
+        quantity: qty,
+        size,
+        type: textAt(r, row, idx.type),
+        total_length: length,
+        weight: textAt(r, row, idx.weight),
+        customer: textAt(r, row, idx.customer) || manifestContext?.customer || null,
+        ref: textAt(r, row, idx.ref) || manifestContext?.name || sheetName,
+        address: textAt(r, row, idx.address) || manifestContext?.address || null,
+        I: null,
+        __source_length: length,
+        __source_dims: {},
+      };
+
+      for (const d of DIMS) {
+        const col = dimCols.get(d);
+        const source = col == null ? null : textAt(r, row, col);
+        item[d] = source;
+        if (source != null) item.__source_dims[d] = source;
+      }
+
+      items.push(item);
+    }
+  }
+
+  return items.length > 0
+    ? { items }
+    : { items: [], reason: "No recognizable rebar schedule headers found" };
+}
+
 /** Normalize a header cell to a single dimension letter (A-R), handling "DIM A", "Dim. B", "A (FT-IN)", etc. */
 function normalizeDimHeader(raw: string): string | null {
-  let s = String(raw).trim().toUpperCase();
+  let s = normalizeHeader(raw);
   // Strip parenthesized unit suffixes like "(FT-IN)", "(MM)", "(IN)" first
   s = s.replace(/\s*\(.*?\)\s*/g, " ").trim();
   // Strip leading "DIM" or "DIM."
@@ -370,6 +489,7 @@ Rules:
         // be read directly from PDF text streams (header + coordinate mapping).
         // When set, we skip the AI vision call entirely to prevent column shifts.
         let deterministicPdfItems: any[] | null = null;
+        let deterministicSpreadsheetItems: any[] | null = null;
         if (isSpreadsheet) {
           console.log(`Parsing spreadsheet: ${fileName}`);
           const fileResp = await fetch(fileUrl);
@@ -378,21 +498,28 @@ Rules:
           parsedWorkbook = XLSX.read(fileBytes, { type: "array", cellText: true });
           const workbook = parsedWorkbook;
 
-          const csvParts: string[] = [];
-          for (const sheetName of workbook.SheetNames) {
-            const sheet = workbook.Sheets[sheetName];
-            const csv = XLSX.utils.sheet_to_csv(sheet);
-            if (csv.trim()) {
-              csvParts.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+          const deterministicSheet = extractRebarRowsFromWorkbook(workbook, manifestContext);
+          if (deterministicSheet.items.length > 0) {
+            deterministicSpreadsheetItems = deterministicSheet.items;
+            console.log(`[extract-manifest] Deterministic spreadsheet parse OK: ${deterministicSpreadsheetItems.length} items - skipping AI`);
+          } else {
+            console.log(`[extract-manifest] Deterministic spreadsheet parse skipped: ${deterministicSheet.reason} - falling back to AI`);
+            const csvParts: string[] = [];
+            for (const sheetName of workbook.SheetNames) {
+              const sheet = workbook.Sheets[sheetName];
+              const csv = XLSX.utils.sheet_to_csv(sheet);
+              if (csv.trim()) {
+                csvParts.push(`--- Sheet: ${sheetName} ---\n${csv}`);
+              }
             }
-          }
-          const allCsv = csvParts.join("\n\n");
-          console.log(`Parsed ${csvParts.length} sheet(s), ${allCsv.length} chars of CSV`);
+            const allCsv = csvParts.join("\n\n");
+            console.log(`Parsed ${csvParts.length} sheet(s), ${allCsv.length} chars of CSV`);
 
-          userContent.push({
-            type: "text",
-            text: `Here is the spreadsheet content as CSV:\n\n${allCsv}`,
-          });
+            userContent.push({
+              type: "text",
+              text: `Here is the spreadsheet content as CSV:\n\n${allCsv}`,
+            });
+          }
         } else if (isImage || isPdf) {
           console.log(`Fetching file for AI: ${fileName} (${isImage ? "image" : "pdf"})`);
           const fileResp = await fetch(fileUrl);
@@ -439,7 +566,26 @@ Rules:
         // Parsed payload — populated either by deterministic PDF parser or AI call below.
         let extractedData: any;
 
-        if (deterministicPdfItems) {
+        if (deterministicSpreadsheetItems) {
+          await svcClient
+            .from("extract_sessions")
+            .update({ progress: 70 })
+            .eq("id", sessionId);
+          const barSizes = [...new Set(deterministicSpreadsheetItems.map((i: any) => i.size).filter(Boolean))];
+          const shapeTypes = [...new Set(deterministicSpreadsheetItems.map((i: any) => i.type).filter(Boolean))];
+          extractedData = {
+            items: deterministicSpreadsheetItems,
+            summary: {
+              total_items: deterministicSpreadsheetItems.length,
+              total_pieces: deterministicSpreadsheetItems.reduce((s: number, i: any) => s + (safeInt(i.quantity, 0) || 0), 0),
+              bar_sizes_found: barSizes,
+              shape_types_found: shapeTypes,
+              customer: manifestContext?.customer || deterministicSpreadsheetItems[0]?.customer || null,
+              project: manifestContext?.name || deterministicSpreadsheetItems[0]?.ref || null,
+            },
+            _source: "deterministic_spreadsheet",
+          };
+        } else if (deterministicPdfItems) {
           // Skip the AI entirely — we have a trustworthy column-mapped table.
           await svcClient
             .from("extract_sessions")
@@ -837,11 +983,12 @@ Rules:
           savedCount = dedupedRows.length;
           console.log(`Rows to insert: ${savedCount}`);
 
-          // Batch upsert rows (50 at a time). Upsert on (session_id,row_index)
+          // Batch upsert rows. Upsert on (session_id,row_index)
           // makes a retried extract-manifest invocation idempotent: a second
           // run for the same session updates rows in place instead of
           // double-inserting them (the source of the /office duplicate bug).
-          const BATCH_SIZE = 50;
+          const BATCH_SIZE = 250;
+          let lastProgressPct = 85;
           for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
             const batch = dedupedRows.slice(i, i + BATCH_SIZE);
             const { error: insertErr } = await svcClient
@@ -865,7 +1012,10 @@ Rules:
               if (retryErr) throw new Error(`Failed to save rows batch ${i}: ${retryErr.message}`);
             }
             const pct = 85 + Math.round(((i + batch.length) / dedupedRows.length) * 14);
-            await svcClient.from("extract_sessions").update({ progress: pct }).eq("id", sessionId);
+            if (pct >= lastProgressPct + 5 || i + batch.length >= dedupedRows.length) {
+              lastProgressPct = pct;
+              await svcClient.from("extract_sessions").update({ progress: pct }).eq("id", sessionId);
+            }
           }
         }
 
