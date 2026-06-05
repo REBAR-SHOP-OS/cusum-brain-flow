@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { X, ShieldCheck, CheckCircle2, AlertTriangle, WifiOff, Volume2, VolumeX, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +45,21 @@ export function AutoClearanceMode({
 
   const [voiceOn, setVoiceOn] = useState(isVoiceEnabled());
   const [showPanel, setShowPanel] = useState(false);
+
+  useEffect(() => {
+    if (state !== "completed") return;
+    const closeTimer = window.setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.log("[clearance-camera-flow]", {
+        step: "camera_close_callback_fired",
+        reason: "item_completed",
+        manifestKey,
+        activeItemId: activeItem?.id ?? null,
+      });
+      onExit();
+    }, 300);
+    return () => window.clearTimeout(closeTimer);
+  }, [activeItem?.id, manifestKey, onExit, state]);
 
   // Stage drives which camera mode is active. PRODUCT mode is only reached
   // after the DB-confirmed tag gate passes (state === 'waiting_product').

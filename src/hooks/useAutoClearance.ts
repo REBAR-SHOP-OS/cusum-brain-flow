@@ -38,6 +38,11 @@ type RankedMatch = {
   reasons: string[];
 };
 
+function clearanceFlowLog(step: string, details: Record<string, any>) {
+  // eslint-disable-next-line no-console
+  console.log("[clearance-camera-flow]", { step, ...details });
+}
+
 // ---------- perf logging ----------
 const PERF = true;
 const tNow = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
@@ -237,15 +242,34 @@ export function useAutoClearance({
     // Prefer locally-tracked id (set right after tag scan) — avoids race with
     // React Query cache refetch which can cause a duplicate INSERT.
     const existingLocal = itemsRef.current.find((i) => i.id === itemId);
-    if (existingLocal?.evidence_id) return existingLocal.evidence_id;
+    const zone = (selectedZone || existingLocal?.storage_zone || "").trim() || null;
+    if (existingLocal?.evidence_id) {
+      if (zone) {
+        const { error: zoneErr } = await supabase
+          .from("clearance_evidence")
+          .update({ storage_zone: zone })
+          .eq("id", existingLocal.evidence_id);
+        if (zoneErr) throw zoneErr;
+      }
+      return existingLocal.evidence_id;
+    }
     // Authoritative check against DB before inserting.
     const { data: found, error: findErr } = await supabase
       .from("clearance_evidence")
-      .select("id")
+      .select("id, storage_zone")
       .eq("cut_plan_item_id", itemId)
       .maybeSingle();
     if (findErr) throw findErr;
-    if (found?.id) return found.id as string;
+    if (found?.id) {
+      if (zone && !found.storage_zone) {
+        const { error: zoneErr } = await supabase
+          .from("clearance_evidence")
+          .update({ storage_zone: zone })
+          .eq("id", found.id);
+        if (zoneErr) throw zoneErr;
+      }
+      return found.id as string;
+    }
     const { data, error } = await supabase
       .from("clearance_evidence")
       .insert({
@@ -253,12 +277,13 @@ export function useAutoClearance({
         status: "pending",
         verification_method: "auto",
         verification_state: "pending",
+        storage_zone: zone,
       })
       .select("id")
       .single();
     if (error) throw error;
     return data.id as string;
-  }, []);
+  }, [selectedZone]);
 
   // HARD RULE: only flips to cleared when BOTH photos exist on the row
   // AND validate-clearance-photo returned valid. After evidence is flipped to
@@ -285,7 +310,12 @@ export function useAutoClearance({
       .maybeSingle();
     const prevPhase = prevItem?.phase ?? null;
 
-    const { error: upErr } = await supabase
+    clearanceFlowLog("completion_mutation_called", {
+      evidenceId,
+      cut_plan_item_id: itemId,
+      selectedZone: selectedZone ?? null,
+    });
+    const { data: completedEvidence, error: upErr } = await supabase
       .from("clearance_evidence")
       .update({
         status: "cleared",
@@ -295,9 +325,21 @@ export function useAutoClearance({
         ocr_metadata: ocrMeta,
         verified_by: userId,
         verified_at: new Date().toISOString(),
+        storage_zone: selectedZone || undefined,
       })
-      .eq("id", evidenceId);
+      .eq("id", evidenceId)
+      .select("id, status, verification_state, storage_zone")
+      .maybeSingle();
     if (upErr) throw upErr;
+    if (!completedEvidence) {
+      throw new Error("Clearance completion update returned no row. Check RLS/auth/company access.");
+    }
+    clearanceFlowLog("completion_mutation_response", {
+      evidenceId,
+      status: completedEvidence.status,
+      verification_state: completedEvidence.verification_state,
+      storage_zone: completedEvidence.storage_zone,
+    });
 
     // Re-read DB to confirm trigger chain landed at 'complete'.
     const { data: postItem, error: readErr } = await supabase
@@ -307,6 +349,10 @@ export function useAutoClearance({
       .maybeSingle();
     if (readErr) throw readErr;
     let finalPhase = postItem?.phase ?? null;
+    clearanceFlowLog("clearance_item_refetch_result", {
+      cut_plan_item_id: itemId,
+      phase: finalPhase,
+    });
 
     // Safety net: if bridge didn't advance cleared -> complete, do it
     // explicitly. cleared -> complete is an allowed adjacency.
@@ -479,8 +525,14 @@ export function useAutoClearance({
         ensureEvidenceRow(matchedItem.id),
         uploadToStorage(matchedItem.id, "tag", blob),
       ]);
+      clearanceFlowLog("storage_upload_success", {
+        cut_plan_item_id: matchedItem.id,
+        evidenceId: evId,
+        photo_type: "tag",
+        path,
+      });
       const tRowUp = tNow();
-      const { error: tagUpErr } = await supabase
+      const { data: tagEvidence, error: tagUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           tag_scan_url: path,
@@ -488,11 +540,23 @@ export function useAutoClearance({
           verification_method: "auto",
           ai_confidence: best.score,
           ocr_metadata: { ocr, ranked, decision },
+          storage_zone: selectedZone || matchedItem.storage_zone || undefined,
           ...evidenceMatchPatch,
         })
-        .eq("id", evId);
+        .eq("id", evId)
+        .select("id, cut_plan_item_id, tag_scan_url, storage_zone, verification_state")
+        .maybeSingle();
       perfLog("tag_row_update", tNow() - tRowUp);
       if (tagUpErr) throw tagUpErr;
+      if (!tagEvidence) throw new Error("Tag evidence update returned no row. Check RLS/auth/company access.");
+      clearanceFlowLog("db_image_row_created", {
+        evidenceId: evId,
+        cut_plan_item_id: tagEvidence.cut_plan_item_id,
+        photo_type: "tag",
+        has_tag_scan_url: !!tagEvidence.tag_scan_url,
+        storage_zone: tagEvidence.storage_zone,
+        verification_state: tagEvidence.verification_state,
+      });
       // HARD GATE — re-read the row; do NOT trust the local update result.
       await assertTagEvidenceReady(evId, matchedItem.id);
       setActiveEvidenceId(evId);
@@ -517,7 +581,7 @@ export function useAutoClearance({
       // Background refetch — never blocks the next state.
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-  }, [busy, ensureEvidenceRow, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
+  }, [busy, ensureEvidenceRow, manifestKey, queryClient, refreshQueueCount, selectedZone, showBanner, uploadToStorage]);
 
   const confirmPick = useCallback(async (candidateId: string) => {
     const match = itemsRef.current.find((i) => i.id === candidateId);
@@ -540,9 +604,15 @@ export function useAutoClearance({
         ensureEvidenceRow(candidateId),
         uploadToStorage(candidateId, "tag", blob),
       ]);
+      clearanceFlowLog("storage_upload_success", {
+        cut_plan_item_id: candidateId,
+        evidenceId: evId,
+        photo_type: "tag",
+        path,
+      });
       const ocrHeld: any = pendingTagOcrRef.current?.ocr || lastOcr || {};
       const mismatchHeld: string | null = pendingTagOcrRef.current?.mismatchReason ?? null;
-      const { error: pickUpErr } = await supabase
+      const { data: pickEvidence, error: pickUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           tag_scan_url: path,
@@ -550,6 +620,7 @@ export function useAutoClearance({
           verification_method: "assisted",
           ai_confidence: lastConfidence,
           ocr_metadata: { ...(pendingTagOcrRef.current || { ocr: lastOcr }), picked: candidateId },
+          storage_zone: selectedZone || match.storage_zone || undefined,
           ocr_mark: ocrHeld.mark || ocrHeld.tag_number || null,
           ocr_dwg: ocrHeld.dwg || null,
           ocr_ref: ocrHeld.ref || null,
@@ -559,8 +630,19 @@ export function useAutoClearance({
           match_confidence: lastConfidence,
           mismatch_reason: mismatchHeld,
         })
-        .eq("id", evId);
+        .eq("id", evId)
+        .select("id, cut_plan_item_id, tag_scan_url, storage_zone, verification_state")
+        .maybeSingle();
       if (pickUpErr) throw pickUpErr;
+      if (!pickEvidence) throw new Error("Assisted tag evidence update returned no row. Check RLS/auth/company access.");
+      clearanceFlowLog("db_image_row_created", {
+        evidenceId: evId,
+        cut_plan_item_id: pickEvidence.cut_plan_item_id,
+        photo_type: "tag",
+        has_tag_scan_url: !!pickEvidence.tag_scan_url,
+        storage_zone: pickEvidence.storage_zone,
+        verification_state: pickEvidence.verification_state,
+      });
       await assertTagEvidenceReady(evId, candidateId);
       setActiveEvidenceId(evId);
       setState("tag_evidence_saved");
@@ -578,7 +660,7 @@ export function useAutoClearance({
       setBusy(false);
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-  }, [ensureEvidenceRow, lastConfidence, lastOcr, queryClient, showBanner, uploadToStorage]);
+  }, [ensureEvidenceRow, lastConfidence, lastOcr, queryClient, selectedZone, showBanner, uploadToStorage]);
 
 
   const handleProductCapture = useCallback(async (blob: Blob) => {
@@ -627,18 +709,37 @@ export function useAutoClearance({
       const item = itemsRef.current.find((i) => i.id === activeItemId);
       const evId = activeEvidenceId;
       const path = await uploadToStorage(activeItemId, "product", blob);
+      clearanceFlowLog("storage_upload_success", {
+        cut_plan_item_id: activeItemId,
+        evidenceId: evId,
+        photo_type: "product",
+        path,
+      });
       // Row update first (so DB has product photo), then validation. Keeping
       // them parallel previously meant validation could pass before the row
       // existed if the row update silently failed.
       const tParallel = tNow();
-      const { error: prodUpErr } = await supabase
+      const { data: productEvidence, error: prodUpErr } = await supabase
         .from("clearance_evidence")
         .update({
           material_photo_url: path,
           verification_state: "product_captured",
+          storage_zone: selectedZone || item?.storage_zone || undefined,
         })
-        .eq("id", evId);
+        .eq("id", evId)
+        .select("id, cut_plan_item_id, tag_scan_url, material_photo_url, storage_zone, verification_state")
+        .maybeSingle();
       if (prodUpErr) throw prodUpErr;
+      if (!productEvidence) throw new Error("Product evidence update returned no row. Check RLS/auth/company access.");
+      clearanceFlowLog("db_image_row_created", {
+        evidenceId: evId,
+        cut_plan_item_id: productEvidence.cut_plan_item_id,
+        photo_type: "product",
+        has_tag_scan_url: !!productEvidence.tag_scan_url,
+        has_material_photo_url: !!productEvidence.material_photo_url,
+        storage_zone: productEvidence.storage_zone,
+        verification_state: productEvidence.verification_state,
+      });
       setState("product_validating");
       const { data: vData, error: vErr } = await supabase.functions.invoke(
         "validate-clearance-photo",
@@ -656,6 +757,14 @@ export function useAutoClearance({
 
       const validation = vData || { valid: true, confidence: "unreadable" };
       const validationOk = validation.valid !== false;
+      clearanceFlowLog("required_image_validation_result", {
+        evidenceId: evId,
+        cut_plan_item_id: activeItemId,
+        has_tag_scan_url: !!productEvidence.tag_scan_url,
+        has_material_photo_url: !!productEvidence.material_photo_url,
+        validationOk,
+        validation,
+      });
       if (!validationOk) {
         await supabase
           .from("clearance_evidence")
@@ -704,6 +813,16 @@ export function useAutoClearance({
         evAfter?.status === "cleared" &&
         evAfter?.verification_state === "complete";
       const phaseOk = itemAfter?.phase === "complete" || itemAfter?.phase === "cleared";
+      clearanceFlowLog("completion_refetch_result", {
+        evidence_id: finalizedEvidenceId,
+        cut_plan_item_id: finalizedItemId,
+        evidence_status: evAfter?.status ?? null,
+        verification_state: evAfter?.verification_state ?? null,
+        item_phase: itemAfter?.phase ?? null,
+        has_tag_scan_url: !!evAfter?.tag_scan_url,
+        has_material_photo_url: !!evAfter?.material_photo_url,
+        ok: evidenceOk && phaseOk,
+      });
 
       // Only optimistically remove from active list if DB confirms completion.
       // This preserves the "do not complete from React state alone" rule.
@@ -770,7 +889,7 @@ export function useAutoClearance({
       // Background refetch — never blocks the next state.
       queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
     }
-  }, [activeItemId, activeEvidenceId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, showBanner, uploadToStorage]);
+  }, [activeItemId, activeEvidenceId, busy, ensureEvidenceRow, finalizeVerification, lastConfidence, lastOcr, manifestKey, queryClient, refreshQueueCount, selectedZone, showBanner, uploadToStorage]);
 
   // -------- offline drain --------
   const drainQueue = useCallback(async () => {
