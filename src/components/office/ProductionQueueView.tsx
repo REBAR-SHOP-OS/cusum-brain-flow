@@ -188,14 +188,62 @@ export function ProductionQueueView() {
   const activePlans = plans.filter(p => ["draft", "ready", "running", "queued"].includes(p.status));
   const tree = buildCustomerTree(customers || [], projects, barlists, plans, fileNames || {});
 
+  const [search, setSearch] = useState("");
+  const filteredTree = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return tree;
+    const matches = (s?: string | null) => !!s && s.toLowerCase().includes(q);
+    return tree
+      .map(c => {
+        const customerHit = matches(c.customerName);
+        const projects = c.projects
+          .map(p => {
+            const projectHit = matches(p.projectName);
+            const barlists = p.barlists.filter(b =>
+              customerHit || projectHit || matches(b.barlistName) || matches(b.fileName) ||
+              b.plans.some(pl => matches(pl.name))
+            );
+            const loosePlans = p.loosePlans.filter(pl =>
+              customerHit || projectHit || matches(pl.name)
+            );
+            if (customerHit || projectHit || barlists.length || loosePlans.length) {
+              return { ...p, barlists, loosePlans };
+            }
+            return null;
+          })
+          .filter(Boolean) as typeof c.projects;
+        if (customerHit || projects.length) return { ...c, projects };
+        return null;
+      })
+      .filter(Boolean) as typeof tree;
+  }, [tree, search]);
+
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-black italic text-foreground uppercase">Production Queue</h1>
           <p className="text-sm text-muted-foreground">Customer → Projects → Barlists → Manifests</p>
         </div>
-        <Badge className="bg-primary/10 text-primary border-primary/30 gap-1">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search customer, project, barlist, manifest…"
+            className="pl-9 pr-9 h-9"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded hover:bg-muted"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
+            </button>
+          )}
+        </div>
+        <Badge className="bg-primary/10 text-primary border-primary/30 gap-1 shrink-0">
           <Activity className="w-3 h-3" />
           {activePlans.length} Active Jobs
         </Badge>
@@ -203,11 +251,13 @@ export function ProductionQueueView() {
 
       {loading || !customersReady ? (
         <p className="text-sm text-muted-foreground">Loading queue...</p>
-      ) : tree.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No manifests in queue.</p>
+      ) : filteredTree.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {search ? `No results for "${search}".` : "No manifests in queue."}
+        </p>
       ) : (
         <div className="space-y-3">
-          {tree.map(node => (
+          {filteredTree.map(node => (
             <CustomerFolder
               key={node.customerId || "unassigned"}
               node={node}
