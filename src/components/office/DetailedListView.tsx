@@ -116,11 +116,19 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
 
   const selectedPlan = plans.find(p => p.id === selectedPlanId);
 
+  const [search, setSearch] = useState("");
+
   // Separate plans into active (running/draft/ready/queued) and completed
   const { activePlans, completedPlans } = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const matches = (p: typeof plans[number]) =>
+      !q ||
+      p.name.toLowerCase().includes(q) ||
+      (p.customer_name || "").toLowerCase().includes(q) ||
+      (p.status || "").toLowerCase().includes(q);
     const active: typeof plans = [];
     const completed: typeof plans = [];
-    for (const plan of plans.filter(p => !p.name.endsWith("(Small)"))) {
+    for (const plan of plans.filter(p => !p.name.endsWith("(Small)") && matches(p))) {
       if (plan.status === "completed") {
         completed.push(plan);
       } else {
@@ -128,7 +136,7 @@ export function DetailedListView({ initialPlanId }: { initialPlanId?: string | n
       }
     }
     return { activePlans: active, completedPlans: completed };
-  }, [plans]);
+  }, [plans, search]);
 
   // Group plans by customer_name, sorted alphabetically
   const groupByCustomer = (list: typeof plans) => {
