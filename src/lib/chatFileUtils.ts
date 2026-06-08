@@ -22,16 +22,33 @@ export async function getChatFileSignedUrl(storagePath: string): Promise<string>
 
 
 /**
- * Extract the storage path from a legacy public/signed team-chat-files URL.
- * Returns null if the URL is external or doesn't match.
+ * Extract the storage path from any team-chat-files URL (signed, public,
+ * authenticated, render path, or legacy variants). Returns null if the URL is
+ * not a team-chat-files URL.
  */
 export function extractChatFilePath(url: string): string | null {
   if (!url) return null;
-  const signed = url.match(/\/object\/sign\/team-chat-files\/([^?]+)/);
-  if (signed?.[1]) return decodeURIComponent(signed[1]);
-  const publicMatch = url.match(/\/object\/public\/team-chat-files\/([^?]+)/);
-  if (publicMatch?.[1]) return decodeURIComponent(publicMatch[1]);
+  const m = url.match(/\/object\/(?:sign|public|authenticated|render\/[^/]+)\/team-chat-files\/([^?#]+)/);
+  if (m?.[1]) {
+    try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+  }
+  const loose = url.match(/\/team-chat-files\/([^?#]+)/);
+  if (loose?.[1]) {
+    try { return decodeURIComponent(loose[1]); } catch { return loose[1]; }
+  }
   return null;
+}
+
+/**
+ * Resolve any team-chat-files URL (legacy public, expired signed, etc.) to a
+ * fresh signed URL. Returns the original URL if it's not a team-chat-files URL
+ * or if signing fails.
+ */
+export async function resolveChatFileUrl(url: string): Promise<string> {
+  const path = extractChatFilePath(url);
+  if (!path) return url;
+  const signed = await getChatFileSignedUrl(path);
+  return signed || url;
 }
 
 /**

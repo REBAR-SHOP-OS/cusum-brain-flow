@@ -50,7 +50,7 @@ import { toast } from "sonner";
 import { useSessionGuard } from "@/hooks/useSessionGuard";
 import { useCompanyId } from "@/hooks/useCompanyId";
 import { primeMobileAudio } from "@/lib/audioPlayer";
-import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType } from "@/lib/chatFileUtils";
+import { getChatFileSignedUrl, fixChatFileUrl, parseAttachmentLinks, isImageUrl, isImageType, resolveChatFileUrl } from "@/lib/chatFileUtils";
 import { sanitizeFileName } from "@/lib/sanitizeFileName";
 import { isTeamHubAdmin } from "./teamHubConfig";
 
@@ -734,7 +734,10 @@ export function MessageThread({
                                             src={att.url}
                                             alt={att.name}
                                             className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                            onClick={() => window.open(att.url, "_blank")}
+                                            onClick={async () => {
+                                              const fresh = await resolveChatFileUrl(att.url);
+                                              window.open(fresh, "_blank", "noopener");
+                                            }}
                                           />
                                           <button
                                             onClick={() => downloadFile(att.url, att.name)}

@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { extractChatFilePath } from "@/lib/chatFileUtils";
+import { extractChatFilePath, resolveChatFileUrl } from "@/lib/chatFileUtils";
 
 /**
  * Programmatically download a file by fetching it as a blob.
@@ -21,6 +21,7 @@ export async function downloadFile(
   // that filter the /storage/v1/object/sign/* URL pattern.
   const chatPath = extractChatFilePath(url);
   if (chatPath) {
+    // 1) Try SDK download (works for authenticated users via RLS)
     try {
       const { data, error } = await supabase.storage
         .from("team-chat-files")
@@ -29,8 +30,17 @@ export async function downloadFile(
       triggerBlobDownload(data, filename);
       return;
     } catch (e) {
-      console.warn("[download] SDK download failed, falling back to anchor:", (e as Error).message);
+      console.warn("[download] SDK download failed, trying fresh signed URL:", (e as Error).message);
     }
+    // 2) Fallback: mint a fresh signed URL and anchor-download
+    //    Never expose the (private) /object/public/* URL — it 404s.
+    const signed = await resolveChatFileUrl(url);
+    if (signed && signed !== url) {
+      triggerAnchorDownload(signed, filename);
+      return;
+    }
+    toast.error("Unable to access this file (permission denied)");
+    return;
   }
 
   // Supabase storage URLs: use anchor tag to bypass CORS fetch issues
