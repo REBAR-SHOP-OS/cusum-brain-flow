@@ -1,6 +1,6 @@
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { extractChatFilePath } from "@/lib/chatFileUtils";
+import { extractChatFilePath, resolveChatFileUrl } from "@/lib/chatFileUtils";
 
 /**
  * Programmatically download a file by fetching it as a blob.
