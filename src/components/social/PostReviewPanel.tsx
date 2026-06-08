@@ -861,6 +861,21 @@ export function PostReviewPanel({
                           </button>
                         </>
                       )}
+                      {post.image_url && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = post.image_url!;
+                            const urlExt = (url.split("?")[0].match(/\.(mp4|webm|mov|jpg|jpeg|png|webp|gif)$/i)?.[1] || (isVideo ? "mp4" : "jpg")).toLowerCase();
+                            const safeTitle = (post.title || "post").replace(/[^\w\-]+/g, "_").slice(0, 60) || "post";
+                            downloadFile(url, `${safeTitle}.${urlExt}`);
+                          }}
+                          title="Download"
+                          className="absolute top-2 right-11 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ) : uploading ? (
                     <div className="rounded-lg border-2 border-dashed border-primary/30 bg-primary/5 p-8 text-center space-y-3">
