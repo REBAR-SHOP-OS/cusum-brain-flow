@@ -734,7 +734,10 @@ export function MessageThread({
                                             src={att.url}
                                             alt={att.name}
                                             className="rounded-lg border border-border max-w-[280px] max-h-[200px] object-cover cursor-pointer hover:opacity-90 transition-opacity"
-                                            onClick={() => window.open(att.url, "_blank")}
+                                            onClick={async () => {
+                                              const fresh = await resolveChatFileUrl(att.url);
+                                              window.open(fresh, "_blank", "noopener");
+                                            }}
                                           />
                                           <button
                                             onClick={() => downloadFile(att.url, att.name)}
