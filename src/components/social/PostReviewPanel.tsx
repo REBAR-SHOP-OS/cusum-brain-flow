@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth, getCurrentUser } from "@/lib/auth";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy, Languages } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy, Languages, Download } from "lucide-react";
+import { downloadFile } from "@/lib/downloadUtils";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
@@ -859,6 +860,21 @@ export function PostReviewPanel({
                             <ZoomIn className="w-4 h-4" />
                           </button>
                         </>
+                      )}
+                      {post.image_url && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = post.image_url!;
+                            const urlExt = (url.split("?")[0].match(/\.(mp4|webm|mov|jpg|jpeg|png|webp|gif)$/i)?.[1] || (isVideo ? "mp4" : "jpg")).toLowerCase();
+                            const safeTitle = (post.title || "post").replace(/[^\w\-]+/g, "_").slice(0, 60) || "post";
+                            downloadFile(url, `${safeTitle}.${urlExt}`);
+                          }}
+                          title="Download"
+                          className="absolute top-2 right-11 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Download className="w-4 h-4" />
+                        </button>
                       )}
                     </div>
                   ) : uploading ? (
