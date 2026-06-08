@@ -1,3 +1,5 @@
+import { probeVideoForInstagram, describeProbeFailure } from "./videoProbe.ts";
+
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
 type InstagramPublishParams = {
@@ -201,9 +203,26 @@ export async function publishInstagramMedia({
 
     if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
       console.warn(
-        `${logPrefix} BLOCKED unsupported Instagram video: content_type=${mediaDetails.contentType || "unknown"}, url=${imageUrl}`,
+        `${logPrefix} BLOCKED unsupported Instagram video (extension/mime): content_type=${mediaDetails.contentType || "unknown"}, url=${imageUrl}`,
       );
       return { error: INSTAGRAM_VIDEO_SPEC_ERROR };
+    }
+
+    // Deep codec probe — catches MP4 containers wrapping HEVC/VP9/AV1 or files
+    // missing an AAC audio track. Without this, Instagram accepts the container
+    // and rejects it later during processing with the generic spec error, which
+    // is exactly the failure the Publishing Failed dialog was showing.
+    if (isVideo) {
+      const probe = await probeVideoForInstagram(imageUrl);
+      console.log(
+        `${logPrefix} IG codec probe: video=${probe.videoCodec} audio=${probe.audioCodec} container=${probe.container} ready=${probe.isInstagramReady} reason=${probe.reason}`,
+      );
+      if (!probe.isInstagramReady && probe.inspected) {
+        return { error: `${INSTAGRAM_VIDEO_SPEC_ERROR} ${describeProbeFailure(probe)}` };
+      }
+      // If the probe could not inspect the file (HEAD/Range blocked), we allow
+      // the upload but Meta's own processing will still catch it; we already
+      // surface that error path.
     }
 
     const containerBody: Record<string, string> = {
