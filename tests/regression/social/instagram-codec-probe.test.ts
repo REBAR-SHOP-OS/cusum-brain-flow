@@ -15,8 +15,8 @@ describe("Instagram codec probe", () => {
   });
 
   it("is conservative on probe failure (not ready)", () => {
-    expect(probeSrc).toMatch(/probe_failed_fetch[\s\S]*isInstagramReady: false/);
-    expect(probeSrc).toMatch(/moov_not_found[\s\S]*isInstagramReady: false/);
+    expect(probeSrc).toMatch(/isInstagramReady: false,[\s\S]*?reason: "probe_failed_fetch"/);
+    expect(probeSrc).toMatch(/isInstagramReady: false,[\s\S]*?reason: "moov_not_found"/);
   });
 
   const publishSrc = readFileSync("supabase/functions/_shared/instagramPublish.ts", "utf8");
