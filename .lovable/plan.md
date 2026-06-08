@@ -1,58 +1,78 @@
-## Scope
+## از کجا آمده (Root cause)
 
-Re-implement the requested clearance audit upgrades inside the existing files — no new module layout, no route rename. The canonical route stays `/shopfloor/clearance` (`src/pages/ClearanceStation.tsx`), wired through `src/App.tsx`.
+پیام داخل کادر زرد دقیقاً از این خط در `supabase/functions/_shared/instagramPublish.ts` می‌آید:
 
-## Files touched
+```ts
+const INSTAGRAM_VIDEO_SPEC_ERROR =
+  "Instagram Reels require a real MP4 video encoded as H.264 with AAC audio. This file is not Instagram-ready; re-render/export it as MP4 before publishing to Instagram.";
+```
 
-- `src/hooks/useClearanceData.ts` — derive `is_sample`, triage bucket, urgency score per item.
-- `src/pages/ClearanceStation.tsx` — header health pill, sample toggle, triage badges, urgency sort, sample-action gating.
-- `src/components/clearance/ClearanceCard.tsx` — accept `disabledReason` prop; hide Manual Verify when sample-only / read-only. Evidence gate (`assertEvidenceComplete`) already enforced — left as-is.
-- `tests/regression/shopfloor/clearance-triage-and-sample-gate.test.ts` — new regression locking the new behavior in source.
+این پیام در دو نقطه برمی‌گردد:
 
-No DB migration. No router changes. No new routes/redirects (commit referenced a module layout that does not exist here).
+1. **Pre-flight** (`isClearlyUnsupportedInstagramVideo`) — فقط webm / mov / wmv / mkv / avi را بلوک می‌کند. هرچیزی که `.mp4` یا `video/mp4` باشد بدون بررسی codec رد می‌شود.
+2. **Container status = ERROR** (خط ۳۱۶–۳۲۱) — وقتی container ساخته می‌شود، آپلود می‌رود به اینستاگرام، و Instagram در فاز پردازش status را `ERROR` می‌کند، همین متن + جمله `Instagram rejected this upload during processing.` به کاربر نشان داده می‌شود. این دقیقاً همان چیزی است که در اسکرین‌شات می‌بینید (هفت بار برای هفت Page).
 
-## Behavior
+پس کدِ ما درست رفتار کرده — **علت واقعی این است که فایل ویدیویی که به‌عنوان `video_url` به Graph API می‌فرستیم، یک MP4 با codec قابل قبول Reels نیست** (به احتمال زیاد VP9/AV1 در ظرف mp4، یا HEVC، یا بدون track صدای AAC، یا fps/ابعاد غیرمجاز — مثلاً ویدیوهای تولید‌شده توسط Wan/Veo که داخل ظرف mp4 ولی با codec غیر-H.264 خروجی می‌دهند). pre-flight فعلی این موارد را تشخیص نمی‌دهد چون فقط به پسوند و mime نگاه می‌کند.
 
-1. **Live-data health indicator (header pill)**
-   - Green "LIVE · N items" when at least one non-sample item is present and the last query refetched within 60s.
-   - Amber "STALE · Xs" when refetch is older than 60s.
-   - Red "OFFLINE" when `error` is set or `items` is empty AND realtime channel is `CLOSED`.
-   - Uses existing `useClearanceData` query meta + `dataUpdatedAt` from `useQuery`.
+## راه‌حل ریشه‌ای و امن
 
-2. **Sample-data detection + toggle**
-   - `is_sample` derived in the hook by heuristic on `plan_name`/`customer_name`/`barlist_name` matching `/^(sample|demo|test|seed)\b/i`. Centralized in one helper.
-   - New "Show sample data" toggle in the header (off by default).
-   - When live (non-sample) items exist, sample rows are hidden by default; toggling shows them with a "SAMPLE" badge on each card and customer row.
-   - When only sample data exists, they are shown automatically with a banner "Showing sample data — no live clearance items".
+ایده: قبل از ارسال `video_url` به Instagram، فایل را به‌صورت قطعی به MP4 سازگار با Reels تبدیل کنیم (H.264 high@4.1 + AAC-LC 128k، yuv420p، 30fps، 1080×1920 یا 1080×1350)، نتیجه را در Storage بریزیم، و آن URL را برای IG استفاده کنیم. اگر Probe قطعی بگوید فایل از پیش سازگار است، transcode را skip می‌کنیم.
 
-3. **Disabled sample actions**
-   - `ClearanceCard` for `is_sample` rows: Manual Verify, photo upload, and storage-zone edits are disabled with tooltip "Sample row — actions disabled".
-   - Auto Clearance mode entry is blocked when only sample items are pending on the manifest.
+### پیاده‌سازی
 
-4. **Evidence-gated manual clear** — already enforced via `assertEvidenceComplete` in `ClearanceCard` (line 258). Plan adds a regression test that asserts the call site still precedes the `status: "cleared"` update, and that sample rows never reach that path.
+1. **Edge: `_shared/videoProbe.ts` (جدید)**
+   - با `Range: bytes=0-262143` ۲۵۶KB اول فایل را می‌گیرد.
+   - با parser سبک `ftyp` + `moov`/`trak`/`stsd` codec ویدیو (`avc1` vs `hev1`/`hvc1`/`vp09`/`av01`) و codec صدا (`mp4a`) را تشخیص می‌دهد.
+   - برمی‌گرداند: `{ container, videoCodec, audioCodec, isInstagramReady }`.
+   - اگر probe fail شد → `isInstagramReady: false` (محافظه‌کارانه).
 
-5. **Triage breakdown badges** (header strip on list view + per-manifest summary)
-   - Buckets derived per item:
-     - `cleared` — `evidence_status === "cleared"`.
-     - `needs_fix` — evidence row exists with `mismatch_reason` populated or `verification_state === "manual_review"`.
-     - `upstream_not_ready` — parent `barlist_status` not in (`released`,`approved`) OR `cut_plan_status` not in (`cutting`,`clearance`,`complete`).
-     - `stale` — pending > 24h since `created_at` (workspace TZ via existing `useWorkspaceSettings`, falls back to local).
-     - `pending` — everything else not cleared.
-   - Render as 5 small badges using existing `Badge` variants + semantic tokens.
+2. **Edge: `prepare-instagram-video` (جدید)**
+   - ورودی: `sourceUrl`، `aspectHint` (`reel` | `story` | `feed`).
+   - مرحله ۱: probe می‌کند. اگر آماده است، همان URL را برمی‌گرداند با `transcoded: false`.
+   - مرحله ۲: cache lookup بر اساس `sha256(sourceUrl + spec)` در جدول `instagram_video_renders` (id, source_url, spec, output_url, status). اگر `ready` بود همان را برگردان.
+   - مرحله ۳: GCE pipeline (همان `gce-video-assembly` که از قبل ffmpeg دارد) را در حالت "transcode-only" صدا می‌زند با command استاندارد Reels:
+     ```
+     -c:v libx264 -profile:v high -level 4.1 -pix_fmt yuv420p -preset veryfast -crf 23
+     -c:a aac -b:a 128k -ar 44100 -ac 2
+     -r 30 -movflags +faststart -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2"
+     ```
+   - خروجی روی bucket `social-media-renders` با naming `ig-ready/{hash}.mp4` ذخیره می‌شود و URL عمومی برمی‌گردد.
+   - اگر GCE credential نباشد → خطای واضح `IG_TRANSCODE_UNAVAILABLE` (نه fallback مرورگری، چون cron هم از این مسیر می‌آید).
 
-6. **Urgency sorting**
-   - Within a manifest: sort by bucket priority `needs_fix > stale > upstream_not_ready > pending > cleared`, then oldest `created_at` first.
-   - Customer/manifest list: bump customers with any `needs_fix` to the top, then `stale`, then existing newest-first order.
+3. **اتصال در `social-publish/index.ts`**
+   - قبل از فراخوانی `publishInstagramMedia` برای `instagram`، اگر media ویدیویی است:
+     - `prepare-instagram-video` فراخوانی شود.
+     - `imageUrl` با `output_url` جایگزین شود.
+     - اگر transcode fail کرد، status post به `failed` با reason `ig_not_ready` و پیام خوانا برای کاربر.
+   - این مسیر هم برای Retry Publishing دستی و هم cron-publish فعال است.
 
-## Technical notes
+4. **`instagramPublish.ts` تقویت‌شده**
+   - `isClearlyUnsupportedInstagramVideo` گسترش پیدا کند با خروجی `videoProbe` (codec غیر-avc1 هم بلوک شود).
+   - بدین ترتیب حتی اگر کسی مستقیماً URL بد بدهد، قبل از ساخت container بلوک می‌شود.
 
-- All new colors via existing semantic tokens (`destructive`, `amber-500/40` already used, `primary`, `muted-foreground`). No new CSS variables.
-- Hook returns add `is_sample`, `triage`, `urgency` on each `ClearanceItem` — purely additive, existing consumers untouched.
-- Realtime channel UUID pattern unchanged.
-- No backend write paths added; sample rows are read-only by UI guard, not DB constraint.
+5. **UI**
+   - در `PostReviewPanel`/پنل اسکرین‌شات، قبل از "Retry Publishing" یک badge کوچک: «Preparing Instagram-ready video…» وقتی `prepare-instagram-video` در حال اجراست (از `instagram_video_renders.status`).
+   - متن خطا با عمل دکمه عوض می‌شود: اگر علت `ig_not_ready` بود، دکمه می‌شود «Re-prepare & retry» که عمداً cache را invalidate می‌کند.
 
-## Verification
+6. **DB migration**
+   - جدول `instagram_video_renders` با ستون‌های `source_hash unique, source_url, spec, status, output_url, error, company_id, created_at`.
+   - RLS با `is_company_member(company_id)`، GRANT استاندارد، service_role full.
 
-- Re-read both edited files after change.
-- `bunx vitest run tests/regression/shopfloor/clearance-triage-and-sample-gate.test.ts tests/regression/shopfloor/auto-clearance-tag-gate.test.ts tests/regression/shopfloor/clearance-strict-3field-match.test.ts`.
-- Navigate preview to `/shopfloor/clearance`, confirm: health pill renders, badges count correctly, toggle hides/shows sample rows, Manual Verify disabled on sample card.
+7. **Regression tests** (افزودن به `tests/regression/social/`):
+   - `instagram-video-probe.test.ts`: ftyp/moov sample های avc1/hev1/vp09 درست شناسایی شوند.
+   - `instagram-publish-uses-prepared-url.test.ts`: snapshot از `social-publish` که اگر media ویدیو است، `prepare-instagram-video` صدا زده شده و `video_url` ارسالی همان output است.
+   - `instagram-cron-respects-transcode-failure.test.ts`: اگر prepare fail کرد، cron نباید container بسازد.
+
+### چرا «امن» است
+
+- هیچ مسیر فعلی حذف یا rename نمی‌شود (طبق Surgical Execution).
+- pre-flight موجود قوی‌تر می‌شود، نه ضعیف‌تر.
+- transcode فقط برای ویدیوهای ناسازگار اجرا می‌شود (cache + probe skip).
+- خطای روشن به جای پیام عمومی به کاربر می‌رسد، Neel-only approval gate دست‌نخورده باقی می‌ماند.
+- silent-video rule حفظ می‌شود: ffmpeg با `-c:a aac` فقط روی track صدای موجود اعمال می‌شود؛ اگر منبع silent باشد، یک silent AAC track افزوده می‌شود تا IG قبول کند، بدون افزودن محتوای صوتی.
+
+### Verification بعد از build
+
+- `vitest run tests/regression/social` 
+- یک ویدیوی Wan تستی publish روی یک IG Page تست → status باید `published` شود.
+- لاگ `social-publish` نشان دهد `prepare-instagram-video` قبل از `publishInstagramMedia` صدا خورده.
