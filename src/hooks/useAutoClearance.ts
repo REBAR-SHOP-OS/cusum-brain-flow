@@ -658,10 +658,14 @@ export function useAutoClearance({
 
     } catch (e: any) {
       console.error("tag capture failed", e);
+      const isTimeout = /timed out/i.test(e?.message || "");
+      if (isTimeout) {
+        clearanceFlowLog("scan_timeout", { stage: "tag_match", message: e?.message });
+      }
       // Clear partial active refs so the next shutter cannot reuse a stale id.
       setActiveItemId(null);
       setActiveEvidenceId(null);
-      showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 3000);
+      showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 2500);
       setState("waiting_tag");
     } finally {
       setBusy(false);
