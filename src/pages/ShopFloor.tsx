@@ -50,6 +50,13 @@ export default function ShopFloor() {
     >
       <div className="space-y-6">
         <section>
+          <SectionHead title="Active Intake" subtitle="Scope every station to one uploaded barlist / manifest" />
+          <IndustrialCard className="p-3">
+            <IntakeSelector />
+          </IndustrialCard>
+        </section>
+
+        <section>
           <SectionHead title="My Jobs" subtitle="Assigned to you across all stations" />
           <MyJobsCard />
         </section>
