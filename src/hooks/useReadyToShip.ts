@@ -78,7 +78,7 @@ export function useReadyToShip() {
     }));
     setItems(mapped);
     setLoading(false);
-  }, [companyId, toast]);
+  }, [companyId, intakeId, toast]);
 
   useEffect(() => {
     fetchItems();
