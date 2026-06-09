@@ -829,16 +829,20 @@ export function useAutoClearance({
         verification_state: productEvidence.verification_state,
       });
       setState("product_validating");
-      const { data: vData, error: vErr } = await supabase.functions.invoke(
-        "validate-clearance-photo",
-        {
-          body: {
-            photo_storage_path: path,
-            expected_mark_number: item?.mark_number,
-            expected_drawing_ref: item?.drawing_ref,
-            photo_type: "material",
+      const { data: vData, error: vErr } = await withTimeout(
+        supabase.functions.invoke(
+          "validate-clearance-photo",
+          {
+            body: {
+              photo_storage_path: path,
+              expected_mark_number: item?.mark_number,
+              expected_drawing_ref: item?.drawing_ref,
+              photo_type: "material",
+            },
           },
-        },
+        ),
+        AI_TIMEOUT_MS,
+        "validate-clearance-photo",
       );
       perfLog("product_update+validate", tNow() - tParallel);
       if (vErr) throw vErr;
