@@ -198,7 +198,7 @@ function extractRebarRowsFromWorkbook(workbook: any, manifestContext?: any): { i
       const item: any = {
         dwg: textAt(r, row, idx.dwg),
         item: textAt(r, row, idx.item) || String(items.length + 1),
-        grade: textAt(r, row, idx.grade),
+        grade: textAt(r, row, idx.grade) ?? sheetGrade,
         mark,
         quantity: qty,
         size,
