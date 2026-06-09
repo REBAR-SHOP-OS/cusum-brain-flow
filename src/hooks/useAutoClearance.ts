@@ -482,9 +482,13 @@ export function useAutoClearance({
         .then(async (imageBase64) => {
           perfLog("ocr_prep", tNow() - tOcrPrep);
           const tOcr = tNow();
-          const r = await supabase.functions.invoke("match-tag-photo", {
-            body: { imageBase64, candidates },
-          });
+          const r = await withTimeout(
+            supabase.functions.invoke("match-tag-photo", {
+              body: { imageBase64, candidates },
+            }),
+            AI_TIMEOUT_MS,
+            "match-tag-photo",
+          );
           perfLog("ocr+match", tNow() - tOcr);
           return r;
         });
