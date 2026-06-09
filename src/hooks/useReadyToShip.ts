@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useIntake } from "@/contexts/IntakeContext";
 import { useToast } from "@/hooks/use-toast";
 
 export type FulfillmentChannel = "pickup" | "loading" | "delivery";
