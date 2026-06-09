@@ -209,7 +209,7 @@ export function AutoClearanceMode({
       )}
 
       {/* PRODUCT LOCK NOTICE — shutter disabled until tag photo confirmed */}
-      {productLocked && (
+      {productLocked && showLockHint && (
         <div className="absolute inset-x-0 bottom-32 z-30 flex justify-center pointer-events-none">
           <div className="bg-amber-500/95 text-black rounded-xl px-4 py-2 text-xs font-bold tracking-wider uppercase shadow-2xl">
             Scan and save tag first
