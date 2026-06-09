@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useIntake } from "@/contexts/IntakeContext";
 import { useEffect } from "react";
 
 export interface Bundle {
