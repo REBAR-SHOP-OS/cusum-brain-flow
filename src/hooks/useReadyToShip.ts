@@ -24,6 +24,7 @@ export interface ReadyItem {
 
 export function useReadyToShip() {
   const { companyId } = useCompanyId();
+  const { intakeId } = useIntake();
   const { toast } = useToast();
   const [items, setItems] = useState<ReadyItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,16 +36,18 @@ export function useReadyToShip() {
       return;
     }
     setLoading(true);
-    const { data, error } = await supabase
+    let query = supabase
       .from("cut_plan_items")
       .select(
-        "id, cut_plan_id, bar_code, cut_length_mm, total_pieces, mark_number, drawing_ref, bend_type, fulfillment_channel, ready_at, delivery_id, loading_list_id, pickup_id, cut_plans!inner(name, company_id, projects(name, customers(name)))"
+        "id, cut_plan_id, bar_code, cut_length_mm, total_pieces, mark_number, drawing_ref, bend_type, fulfillment_channel, ready_at, delivery_id, loading_list_id, pickup_id, intake_id, cut_plans!inner(name, company_id, projects(name, customers(name)))"
       )
       .eq("phase", "complete")
       .is("delivery_id", null)
       .is("loading_list_id", null)
       .is("pickup_id", null)
-      .eq("cut_plans.company_id", companyId)
+      .eq("cut_plans.company_id", companyId);
+    if (intakeId) query = query.eq("intake_id", intakeId);
+    const { data, error } = await query
       .order("ready_at", { ascending: false, nullsFirst: false })
       .limit(500);
 
