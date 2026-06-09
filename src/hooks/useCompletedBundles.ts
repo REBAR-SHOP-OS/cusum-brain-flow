@@ -70,8 +70,10 @@ export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
             projectDisplayName: (projects?.name as string) || null,
             planName: (cutPlans?.name as string) || "",
             barlistRevisionNo: typeof barlists?.revision_no === "number" ? (barlists.revision_no as number) : null,
-            barlistStatus: (barlists?.status as string) || null,
-            cutPlanStatus: (cutPlans?.status as string) || null,
+            // Display status reflects this list's actual state (items are phase=complete and
+            // released to Loading), NOT raw barlists.status which can lag at 'in_production'.
+            barlistStatus: "ready_for_loading",
+            cutPlanStatus: "ready_for_loading",
             items: [],
           });
         }
