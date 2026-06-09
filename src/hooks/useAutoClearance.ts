@@ -507,29 +507,43 @@ export function useAutoClearance({
 
       if (decision === "none" || ranked.length === 0) {
         setLastConfidence(ranked[0]?.score ?? 0);
-        showBanner({ kind: "low_ocr", text: "Tag unreadable — please rescan." }, 2500);
+        refineAttemptsRef.current += 1;
+        const overLimit = refineAttemptsRef.current > MAX_REFINE_ATTEMPTS;
+        clearanceFlowLog("scan_low_ocr", { refine_attempt: refineAttemptsRef.current, overLimit });
+        showBanner(
+          { kind: "low_ocr", text: overLimit ? "Move closer & retry." : "Tag unreadable — please rescan." },
+          2200,
+        );
+        if (overLimit) refineAttemptsRef.current = 0;
         setState("waiting_tag");
         return;
       }
       const best = ranked[0];
       const matchedItem = itemsRef.current.find((i) => i.id === best.id);
       if (!matchedItem) {
-        showBanner({ kind: "mismatch", text: "Tag does not match this manifest." });
+        showBanner({ kind: "mismatch", text: "Tag does not match this manifest." }, 2200);
         setState("waiting_tag");
         return;
       }
+      clearanceFlowLog("tag_recognized", {
+        cut_plan_item_id: matchedItem.id,
+        mark: matchedItem.mark_number,
+        decision,
+        score: best.score,
+        mismatch_reason: mismatchReason,
+      });
       // Zone gate — if a zone is selected and the matched item is bound to a
       // different zone, never auto-match. Operator must rescan or change zone.
       const activeZone = (selectedZone || "").trim();
       if (activeZone && matchedItem.storage_zone && matchedItem.storage_zone !== activeZone) {
-        showBanner({ kind: "mismatch", text: "Tag belongs to a different zone." }, 3000);
+        showBanner({ kind: "mismatch", text: "Tag belongs to a different zone." }, 2500);
         speak("Wrong zone");
         vibrate([120, 60, 120]);
         setState("waiting_tag");
         return;
       }
-      if (matchedItem.evidence_status === "cleared") {
-        showBanner({ kind: "duplicate", text: `${matchedItem.mark_number || "Item"} already verified.` });
+      if (matchedItem.evidence_status === "cleared" || wasRecentlySaved(matchedItem.id)) {
+        showBanner({ kind: "duplicate", text: `${matchedItem.mark_number || "Item"} already verified.` }, 1800);
         speak("Already verified");
         vibrate([40, 40, 40]);
         setState("waiting_tag");
@@ -548,21 +562,47 @@ export function useAutoClearance({
         mismatch_reason: mismatchReason,
       };
 
-      if (decision === "confirm") {
+      // PARTIAL MATCH AUTO-ADVANCE — if backend said 'confirm' only because
+      // DWG/Ref is missing on the tag or on the item (not an actual mismatch),
+      // and the MARK match is unambiguous (best score clearly beats #2), do
+      // not stop for the manual pick overlay. Treat it as a partial match,
+      // log it, show a brief banner, and continue the cycle automatically.
+      const isMissingOnly =
+        !!mismatchReason &&
+        /missing on (item|tag)/i.test(mismatchReason) &&
+        !/≠/.test(mismatchReason);
+      const second = ranked[1]?.score ?? 0;
+      const unambiguous = best.score - second >= 0.15 || ranked.length === 1;
+      const partialAutoAccept = decision === "confirm" && isMissingOnly && unambiguous;
+
+      if (decision === "confirm" && !partialAutoAccept) {
         // HOLD the captured tag blob — confirmPick will upload it after the
-        // operator confirms the candidate. Previously this branch dropped the
-        // blob entirely, leaving evidence rows without a tag_scan_url.
+        // operator confirms the candidate.
         pendingTagBlobRef.current = blob;
         pendingTagOcrRef.current = { ocr, ranked, decision, mismatchReason };
         setPickCandidates(ranked.slice(0, 3));
         setLastConfidence(best.score);
         setState("tag_pick");
         if (mismatchReason) {
-          showBanner({ kind: "mismatch", text: mismatchReason }, 4000);
+          showBanner({ kind: "mismatch", text: mismatchReason }, 2500);
         }
         speak("Confirm match");
         return;
       }
+
+      if (partialAutoAccept) {
+        clearanceFlowLog("partial_match_auto_accept", {
+          cut_plan_item_id: matchedItem.id,
+          mark: matchedItem.mark_number,
+          mismatch_reason: mismatchReason,
+          best_score: best.score,
+          runner_up_score: second,
+        });
+        showBanner({ kind: "low_ocr", text: `Partial match · ${mismatchReason ?? ""}` }, 1800);
+      }
+
+      // Reset refine counter — we have a usable match.
+      refineAttemptsRef.current = 0;
 
       // High confidence (strict MARK+DWG+Ref) — upload tag photo + ensure
       // evidence row in parallel, then write the evidence row update. Move to
