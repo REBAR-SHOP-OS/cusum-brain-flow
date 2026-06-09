@@ -203,12 +203,55 @@ export function useAutoClearance({
 
   const showBanner = useCallback((b: Banner, ms = 2200) => {
     setBanner(b);
-    if (b && b.kind !== "mismatch") {
+    if (b) {
+      // Auto-dismiss every banner — including 'mismatch'. In auto mode the
+      // operator must not be required to tap to dismiss; recurring mismatches
+      // are surfaced via voice + vibrate, not a sticky banner.
       window.setTimeout(() => {
         setBanner((cur) => (cur === b ? null : cur));
       }, ms);
     }
   }, []);
+
+  // ---------- timeout + audit helpers ----------
+  // Hard ceiling for any single AI roundtrip. If the function call hangs, we
+  // bail out cleanly and reset the camera to ready instead of leaving the UI
+  // stuck on VERIFYING / READING TAG forever.
+  const AI_TIMEOUT_MS = 12000;
+  async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return await new Promise<T>((resolve, reject) => {
+      const t = window.setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      );
+      p.then(
+        (v) => { window.clearTimeout(t); resolve(v); },
+        (e) => { window.clearTimeout(t); reject(e); },
+      );
+    });
+  }
+
+  // Refine attempts — bounded so a single bad tag image can't pin the UI in
+  // a perpetual READING/MATCHING state. Reset on every successful tag accept.
+  const refineAttemptsRef = useRef(0);
+  const MAX_REFINE_ATTEMPTS = 2;
+
+  // Recent finalize dedupe — if the operator (or a chatty shutter) re-scans
+  // the same tag inside this window, we skip the second save entirely.
+  const recentlySavedRef = useRef<Map<string, number>>(new Map());
+  const RECENT_SAVE_WINDOW_MS = 6000;
+  function markRecentlySaved(itemId: string) {
+    recentlySavedRef.current.set(itemId, Date.now());
+  }
+  function wasRecentlySaved(itemId: string): boolean {
+    const t = recentlySavedRef.current.get(itemId);
+    if (!t) return false;
+    if (Date.now() - t > RECENT_SAVE_WINDOW_MS) {
+      recentlySavedRef.current.delete(itemId);
+      return false;
+    }
+    return true;
+  }
 
   // -------- pipeline helpers --------
 
