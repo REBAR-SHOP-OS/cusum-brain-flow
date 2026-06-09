@@ -159,7 +159,8 @@ const App = () => (
             <AuthProvider>
               <GlobalErrorWatcher>
                 <WorkspaceProvider>
-                  <Routes>
+                  <IntakeProvider>
+                    <Routes>
                     {/* Public routes */}
                     <Route path="/" element={<SmartErrorBoundary level="page" maxAutoRetries={2}><Landing /></SmartErrorBoundary>} />
                     <Route path="/login" element={<Login />} />
