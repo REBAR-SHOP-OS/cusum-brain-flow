@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { MyJobsCard } from "@/components/shopfloor/MyJobsCard";
 import { ShopFloorChrome } from "@/components/shopfloor/ShopFloorChrome";
+import { IntakeSelector } from "@/components/shopfloor/IntakeSelector";
 import {
   IndustrialCard,
   SectionHead,
