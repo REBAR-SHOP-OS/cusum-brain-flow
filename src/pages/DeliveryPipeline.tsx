@@ -159,9 +159,12 @@ export default function DeliveryPipeline() {
             Read-only timeline of deliveries grouped by current status.
           </p>
         </div>
-        <Badge variant="outline" className="text-sm">
-          {total} {total === 1 ? "delivery" : "deliveries"}
-        </Badge>
+        <div className="flex items-center gap-3 flex-wrap">
+          <IntakeSelector />
+          <Badge variant="outline" className="text-sm">
+            {total} {total === 1 ? "delivery" : "deliveries"}
+          </Badge>
+        </div>
       </header>
 
       {isLoading ? (
