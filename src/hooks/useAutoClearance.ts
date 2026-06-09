@@ -919,6 +919,11 @@ export function useAutoClearance({
       // Only optimistically remove from active list if DB confirms completion.
       // This preserves the "do not complete from React state alone" rule.
       if (evidenceOk && phaseOk) {
+        markRecentlySaved(finalizedItemId);
+        clearanceFlowLog("match_success", {
+          cut_plan_item_id: finalizedItemId,
+          evidence_id: finalizedEvidenceId,
+        });
         setLocallyCompletedIds((prev) => {
           const next = new Set(prev);
           next.add(finalizedItemId);
