@@ -314,8 +314,9 @@ const App = () => (
                     <Route path="/emails/*" element={<Navigate to="/home" replace />} />
 
                     <Route path="*" element={<NotFound />} />
-                  </Routes>
+                   </Routes>
                   <AdDirectorBackgroundIndicator />
+                  </IntakeProvider>
                 </WorkspaceProvider>
               </GlobalErrorWatcher>
             </AuthProvider>
