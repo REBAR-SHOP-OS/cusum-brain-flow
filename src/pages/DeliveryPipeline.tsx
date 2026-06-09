@@ -4,6 +4,8 @@ import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useIntake } from "@/contexts/IntakeContext";
+import { IntakeSelector } from "@/components/shopfloor/IntakeSelector";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -81,18 +83,21 @@ function metaFor(status: string) {
 
 export default function DeliveryPipeline() {
   const { companyId } = useCompanyId();
+  const { intakeId } = useIntake();
   const navigate = useNavigate();
 
   const { data: deliveries = [], isLoading } = useQuery({
-    queryKey: ["delivery-pipeline", companyId],
+    queryKey: ["delivery-pipeline", companyId, intakeId],
     enabled: !!companyId,
     queryFn: async (): Promise<Delivery[]> => {
-      const { data, error } = await supabase
+      let q = supabase
         .from("deliveries")
         .select(
           "id, delivery_number, status, scheduled_date, driver_name, vehicle, created_at, order_id"
         )
-        .eq("company_id", companyId!)
+        .eq("company_id", companyId!);
+      if (intakeId) q = q.eq("intake_id", intakeId);
+      const { data, error } = await q
         .order("scheduled_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -154,9 +159,12 @@ export default function DeliveryPipeline() {
             Read-only timeline of deliveries grouped by current status.
           </p>
         </div>
-        <Badge variant="outline" className="text-sm">
-          {total} {total === 1 ? "delivery" : "deliveries"}
-        </Badge>
+        <div className="flex items-center gap-3 flex-wrap">
+          <IntakeSelector />
+          <Badge variant="outline" className="text-sm">
+            {total} {total === 1 ? "delivery" : "deliveries"}
+          </Badge>
+        </div>
       </header>
 
       {isLoading ? (

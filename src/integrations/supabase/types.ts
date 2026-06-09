@@ -1586,7 +1586,9 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           id: string
+          intake_id: string | null
           notes: string | null
+          project_id: string | null
           quantity: number
           shape: string | null
           size: string | null
@@ -1601,7 +1603,9 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          intake_id?: string | null
           notes?: string | null
+          project_id?: string | null
           quantity?: number
           shape?: string | null
           size?: string | null
@@ -1616,7 +1620,9 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           id?: string
+          intake_id?: string | null
           notes?: string | null
+          project_id?: string | null
           quantity?: number
           shape?: string | null
           size?: string | null
@@ -1631,6 +1637,20 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundles_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bundles_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -2190,6 +2210,7 @@ export type Database = {
           cut_plan_item_id: string
           evidence_valid: boolean
           id: string
+          intake_id: string | null
           invalidated_at: string | null
           invalidated_by: string | null
           invalidation_reason: string | null
@@ -2205,6 +2226,7 @@ export type Database = {
           ocr_metadata: Json | null
           ocr_ref: string | null
           override_reason: string | null
+          project_id: string | null
           status: string
           storage_zone: string | null
           tag_scan_url: string | null
@@ -2220,6 +2242,7 @@ export type Database = {
           cut_plan_item_id: string
           evidence_valid?: boolean
           id?: string
+          intake_id?: string | null
           invalidated_at?: string | null
           invalidated_by?: string | null
           invalidation_reason?: string | null
@@ -2235,6 +2258,7 @@ export type Database = {
           ocr_metadata?: Json | null
           ocr_ref?: string | null
           override_reason?: string | null
+          project_id?: string | null
           status?: string
           storage_zone?: string | null
           tag_scan_url?: string | null
@@ -2250,6 +2274,7 @@ export type Database = {
           cut_plan_item_id?: string
           evidence_valid?: boolean
           id?: string
+          intake_id?: string | null
           invalidated_at?: string | null
           invalidated_by?: string | null
           invalidation_reason?: string | null
@@ -2265,6 +2290,7 @@ export type Database = {
           ocr_metadata?: Json | null
           ocr_ref?: string | null
           override_reason?: string | null
+          project_id?: string | null
           status?: string
           storage_zone?: string | null
           tag_scan_url?: string | null
@@ -2288,6 +2314,20 @@ export type Database = {
             isOneToOne: true
             referencedRelation: "v_workflow_release_state"
             referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "clearance_evidence_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "clearance_evidence_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -3430,6 +3470,7 @@ export type Database = {
             | Database["public"]["Enums"]["fulfillment_channel"]
             | null
           id: string
+          intake_id: string | null
           loading_list_id: string | null
           mark_number: string | null
           needs_fix: boolean
@@ -3437,6 +3478,7 @@ export type Database = {
           phase: string
           pickup_id: string | null
           pieces_per_bar: number
+          project_id: string | null
           qty_bars: number
           ready_at: string | null
           ref_no: string | null
@@ -3461,6 +3503,7 @@ export type Database = {
             | Database["public"]["Enums"]["fulfillment_channel"]
             | null
           id?: string
+          intake_id?: string | null
           loading_list_id?: string | null
           mark_number?: string | null
           needs_fix?: boolean
@@ -3468,6 +3511,7 @@ export type Database = {
           phase?: string
           pickup_id?: string | null
           pieces_per_bar?: number
+          project_id?: string | null
           qty_bars: number
           ready_at?: string | null
           ref_no?: string | null
@@ -3492,6 +3536,7 @@ export type Database = {
             | Database["public"]["Enums"]["fulfillment_channel"]
             | null
           id?: string
+          intake_id?: string | null
           loading_list_id?: string | null
           mark_number?: string | null
           needs_fix?: boolean
@@ -3499,6 +3544,7 @@ export type Database = {
           phase?: string
           pickup_id?: string | null
           pieces_per_bar?: number
+          project_id?: string | null
           qty_bars?: number
           ready_at?: string | null
           ref_no?: string | null
@@ -3521,6 +3567,20 @@ export type Database = {
             columns: ["cut_plan_id"]
             isOneToOne: false
             referencedRelation: "cut_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_plan_items_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cut_plan_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
           {
@@ -3642,8 +3702,10 @@ export type Database = {
           driver_name: string | null
           driver_profile_id: string | null
           id: string
+          intake_id: string | null
           notes: string | null
           order_id: string | null
+          project_id: string | null
           scheduled_date: string | null
           status: string | null
           updated_at: string
@@ -3657,8 +3719,10 @@ export type Database = {
           driver_name?: string | null
           driver_profile_id?: string | null
           id?: string
+          intake_id?: string | null
           notes?: string | null
           order_id?: string | null
+          project_id?: string | null
           scheduled_date?: string | null
           status?: string | null
           updated_at?: string
@@ -3672,8 +3736,10 @@ export type Database = {
           driver_name?: string | null
           driver_profile_id?: string | null
           id?: string
+          intake_id?: string | null
           notes?: string | null
           order_id?: string | null
+          project_id?: string | null
           scheduled_date?: string | null
           status?: string | null
           updated_at?: string
@@ -3702,6 +3768,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "deliveries_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "deliveries_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
@@ -3722,6 +3795,13 @@ export type Database = {
             referencedRelation: "v_pricing_bottleneck"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "deliveries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
         ]
       }
       delivery_bundles: {
@@ -3730,18 +3810,24 @@ export type Database = {
           created_at: string | null
           delivery_id: string
           id: string
+          intake_id: string | null
+          project_id: string | null
         }
         Insert: {
           bundle_id: string
           created_at?: string | null
           delivery_id: string
           id?: string
+          intake_id?: string | null
+          project_id?: string | null
         }
         Update: {
           bundle_id?: string
           created_at?: string | null
           delivery_id?: string
           id?: string
+          intake_id?: string | null
+          project_id?: string | null
         }
         Relationships: [
           {
@@ -3763,6 +3849,20 @@ export type Database = {
             columns: ["delivery_id"]
             isOneToOne: false
             referencedRelation: "v_deliveries_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_bundles_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_bundles_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -3838,10 +3938,12 @@ export type Database = {
           departure_time: string | null
           exception_reason: string | null
           id: string
+          intake_id: string | null
           notes: string | null
           order_id: string | null
           pod_photo_url: string | null
           pod_signature: string | null
+          project_id: string | null
           status: string | null
           stop_sequence: number
           updated_at: string
@@ -3856,10 +3958,12 @@ export type Database = {
           departure_time?: string | null
           exception_reason?: string | null
           id?: string
+          intake_id?: string | null
           notes?: string | null
           order_id?: string | null
           pod_photo_url?: string | null
           pod_signature?: string | null
+          project_id?: string | null
           status?: string | null
           stop_sequence: number
           updated_at?: string
@@ -3874,10 +3978,12 @@ export type Database = {
           departure_time?: string | null
           exception_reason?: string | null
           id?: string
+          intake_id?: string | null
           notes?: string | null
           order_id?: string | null
           pod_photo_url?: string | null
           pod_signature?: string | null
+          project_id?: string | null
           status?: string | null
           stop_sequence?: number
           updated_at?: string
@@ -3926,6 +4032,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "delivery_stops_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "delivery_stops_order_id_fkey"
             columns: ["order_id"]
             isOneToOne: false
@@ -3944,6 +4057,13 @@ export type Database = {
             columns: ["order_id"]
             isOneToOne: false
             referencedRelation: "v_pricing_bottleneck"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "delivery_stops_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -7991,10 +8111,12 @@ export type Database = {
           cut_plan_id: string
           cut_plan_item_id: string
           id: string
+          intake_id: string | null
           loaded: boolean
           loaded_at: string | null
           loaded_by: string | null
           photo_path: string | null
+          project_id: string | null
         }
         Insert: {
           company_id: string
@@ -8002,10 +8124,12 @@ export type Database = {
           cut_plan_id: string
           cut_plan_item_id: string
           id?: string
+          intake_id?: string | null
           loaded?: boolean
           loaded_at?: string | null
           loaded_by?: string | null
           photo_path?: string | null
+          project_id?: string | null
         }
         Update: {
           company_id?: string
@@ -8013,10 +8137,12 @@ export type Database = {
           cut_plan_id?: string
           cut_plan_item_id?: string
           id?: string
+          intake_id?: string | null
           loaded?: boolean
           loaded_at?: string | null
           loaded_by?: string | null
           photo_path?: string | null
+          project_id?: string | null
         }
         Relationships: [
           {
@@ -8039,6 +8165,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "v_workflow_release_state"
             referencedColumns: ["item_id"]
+          },
+          {
+            foreignKeyName: "loading_checklist_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "loading_checklist_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
           },
         ]
       }
@@ -9108,9 +9248,11 @@ export type Database = {
           delivery_date: string | null
           delivery_id: string | null
           id: string
+          intake_id: string | null
           invoice_date: string | null
           invoice_number: string | null
           items_json: Json
+          project_id: string | null
           scope: string | null
           ship_to: string | null
           signature_path: string | null
@@ -9128,9 +9270,11 @@ export type Database = {
           delivery_date?: string | null
           delivery_id?: string | null
           id?: string
+          intake_id?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
           items_json?: Json
+          project_id?: string | null
           scope?: string | null
           ship_to?: string | null
           signature_path?: string | null
@@ -9148,9 +9292,11 @@ export type Database = {
           delivery_date?: string | null
           delivery_id?: string | null
           id?: string
+          intake_id?: string | null
           invoice_date?: string | null
           invoice_number?: string | null
           items_json?: Json
+          project_id?: string | null
           scope?: string | null
           ship_to?: string | null
           signature_path?: string | null
@@ -9180,6 +9326,20 @@ export type Database = {
             columns: ["delivery_id"]
             isOneToOne: false
             referencedRelation: "v_deliveries_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "packing_slips_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "packing_slips_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -9493,32 +9653,52 @@ export type Database = {
           created_at: string
           description: string | null
           id: string
+          intake_id: string | null
           mark_number: string
           pickup_order_id: string
+          project_id: string | null
           verified: boolean
         }
         Insert: {
           created_at?: string
           description?: string | null
           id?: string
+          intake_id?: string | null
           mark_number: string
           pickup_order_id: string
+          project_id?: string | null
           verified?: boolean
         }
         Update: {
           created_at?: string
           description?: string | null
           id?: string
+          intake_id?: string | null
           mark_number?: string
           pickup_order_id?: string
+          project_id?: string | null
           verified?: boolean
         }
         Relationships: [
+          {
+            foreignKeyName: "pickup_order_items_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "pickup_order_items_pickup_order_id_fkey"
             columns: ["pickup_order_id"]
             isOneToOne: false
             referencedRelation: "pickup_orders"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_order_items_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]
@@ -9533,6 +9713,8 @@ export type Database = {
           customer_id: string | null
           final_photo_path: string | null
           id: string
+          intake_id: string | null
+          project_id: string | null
           signature_data: string | null
           site_address: string
           status: string
@@ -9547,6 +9729,8 @@ export type Database = {
           customer_id?: string | null
           final_photo_path?: string | null
           id?: string
+          intake_id?: string | null
+          project_id?: string | null
           signature_data?: string | null
           site_address: string
           status?: string
@@ -9561,6 +9745,8 @@ export type Database = {
           customer_id?: string | null
           final_photo_path?: string | null
           id?: string
+          intake_id?: string | null
+          project_id?: string | null
           signature_data?: string | null
           site_address?: string
           status?: string
@@ -9593,6 +9779,20 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "v_customers_clean"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_orders_intake_id_fkey"
+            columns: ["intake_id"]
+            isOneToOne: false
+            referencedRelation: "barlists"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_orders_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
             referencedColumns: ["id"]
           },
         ]

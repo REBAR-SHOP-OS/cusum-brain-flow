@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useIntake } from "@/contexts/IntakeContext";
 
 export interface ArchiveRow {
   evidence_id: string;
@@ -35,15 +36,16 @@ export interface ArchiveFilters {
 export function useClearanceArchive(filters: ArchiveFilters, limit = 50) {
   const { user } = useAuth();
   const { companyId } = useCompanyId();
+  const { intakeId } = useIntake();
 
   return useQuery({
-    queryKey: ["clearance-archive", companyId, filters, limit],
+    queryKey: ["clearance-archive", companyId, intakeId, filters, limit],
     enabled: !!user && !!companyId,
     queryFn: async () => {
       let q = supabase
         .from("clearance_evidence")
         .select(
-          `id, cut_plan_item_id, material_photo_url, tag_scan_url, verified_at, verified_by, verification_method, status,
+          `id, cut_plan_item_id, intake_id, material_photo_url, tag_scan_url, verified_at, verified_by, verification_method, status,
            cut_plan_items!inner(id, mark_number, bar_code, drawing_ref, cut_length_mm, total_pieces, cut_plan_id,
              cut_plans!inner(id, name, project_id, company_id, project_name,
                projects(id, name, customers(name)),
@@ -54,6 +56,7 @@ export function useClearanceArchive(filters: ArchiveFilters, limit = 50) {
         .order("verified_at", { ascending: false })
         .limit(limit);
 
+      if (intakeId) q = q.eq("intake_id", intakeId);
       if (filters.fromDate) q = q.gte("verified_at", filters.fromDate);
       if (filters.toDate) q = q.lte("verified_at", filters.toDate);
       if (filters.verifiedBy) q = q.eq("verified_by", filters.verifiedBy);

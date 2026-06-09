@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useCompanyId } from "@/hooks/useCompanyId";
+import { useIntake } from "@/contexts/IntakeContext";
 import { useEffect } from "react";
 
 export interface Bundle {
@@ -21,6 +22,7 @@ export interface Bundle {
 
 export function useBundles(statusFilter?: string) {
   const { companyId } = useCompanyId();
+  const { intakeId } = useIntake();
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -35,13 +37,15 @@ export function useBundles(statusFilter?: string) {
   }, [companyId, queryClient]);
 
   return useQuery({
-    queryKey: ["bundles", companyId, statusFilter],
+    queryKey: ["bundles", companyId, statusFilter, intakeId],
     enabled: !!companyId,
     queryFn: async () => {
       let query = supabase
         .from("bundles" as any)
         .select("*")
-        .eq("company_id", companyId!)
+        .eq("company_id", companyId!);
+      if (intakeId) query = query.eq("intake_id", intakeId);
+      query = query
         .order("created_at", { ascending: false });
 
       if (statusFilter && statusFilter !== "all") {

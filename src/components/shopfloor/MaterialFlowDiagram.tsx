@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { useIntake } from "@/contexts/IntakeContext";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -35,20 +36,23 @@ const FLOW_STAGES = [
 
 export function MaterialFlowDiagram() {
   const { user } = useAuth();
+  const { intakeId } = useIntake();
   const navigate = useNavigate();
 
   const { data: phaseCounts = [] } = useQuery({
-    queryKey: ["material-flow-counts"],
+    queryKey: ["material-flow-counts", intakeId],
     enabled: !!user,
     refetchInterval: 15000,
     queryFn: async () => {
       const phases = ["queued", "cutting", "cut_done", "bending", "clearance"];
       const counts: PhaseCount[] = [];
       for (const phase of phases) {
-        const { count, error } = await supabase
+        let q = supabase
           .from("cut_plan_items")
           .select("*", { count: "exact", head: true })
           .eq("phase", phase);
+        if (intakeId) q = q.eq("intake_id", intakeId);
+        const { count, error } = await q;
         counts.push({ phase, count: error ? 0 : (count || 0) });
       }
 
@@ -60,7 +64,8 @@ export function MaterialFlowDiagram() {
         { key: "delivery", channel: "delivery" as const },
       ];
       for (const c of channels) {
-        const base = supabase.from("cut_plan_items").select("*", { count: "exact", head: true }).eq("phase", "complete");
+        let base = supabase.from("cut_plan_items").select("*", { count: "exact", head: true }).eq("phase", "complete");
+        if (intakeId) base = base.eq("intake_id", intakeId);
         const q = c.channel === null ? base.is("fulfillment_channel", null) : base.eq("fulfillment_channel", c.channel);
         const { count, error } = await q;
         counts.push({ phase: c.key, count: error ? 0 : (count || 0) });
