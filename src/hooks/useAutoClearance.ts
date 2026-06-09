@@ -965,21 +965,32 @@ export function useAutoClearance({
         setActiveItemId(null);
         setActiveEvidenceId(null);
         setPickCandidates([]);
-        // If everything in this session is done, hold on the completion
-        // screen; otherwise resume scanning.
         const remaining = itemsRef.current.filter(
           (i) => i.evidence_status !== "cleared" && i.id !== finalizedItemId,
         ).length;
         if (remaining === 0) {
           setState("manifest_complete");
         } else {
+          clearanceFlowLog("auto_advance", { next: "waiting_tag", remaining });
           setState("waiting_tag");
         }
       }, 450);
     } catch (e: any) {
       console.error("product capture failed", e);
-      showBanner({ kind: "error", text: e?.message || "Verification failed" }, 3000);
-      setState("waiting_product");
+      const isTimeout = /timed out/i.test(e?.message || "");
+      if (isTimeout) {
+        clearanceFlowLog("scan_timeout", { stage: "product_validate", message: e?.message });
+      }
+      showBanner({ kind: "error", text: e?.message || "Verification failed" }, 2500);
+      // After a timeout, reset the cycle so the camera is ready immediately
+      // instead of parking on the VERIFYING ring.
+      if (isTimeout) {
+        setActiveItemId(null);
+        setActiveEvidenceId(null);
+        setState("waiting_tag");
+      } else {
+        setState("waiting_product");
+      }
     } finally {
       setBusy(false);
       scanLockRef.current = false;
