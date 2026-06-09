@@ -102,6 +102,32 @@ function cellText(sheet: any, row: number, col: number): string | null {
   return text.trim() || null;
 }
 
+const QTY_ALIASES = [
+  "QTY", "QUANTITY", "NO", "NUMBER",
+  "PCS", "NO PCS", "NO OF PCS", "NO OF PIECES", "PIECES", "COUNT", "NUM", "NUM PCS",
+];
+
+/**
+ * Scan rows above the data header for a sheet-level "Grade :" metadata cell
+ * (common in Rebar-CAD bar lists where Grade is a workbook-level field, not a column).
+ * Returns the grade text (e.g. "400/R") or null.
+ */
+function findSheetLevelGrade(rows: any[][], bestHeader: number): string | null {
+  for (let r = 0; r < Math.max(0, bestHeader); r++) {
+    const row = rows[r];
+    if (!row) continue;
+    for (let c = 0; c < row.length; c++) {
+      const label = normalizeHeader(row[c]);
+      if (label !== "GRADE") continue;
+      for (let k = c + 1; k < row.length; k++) {
+        const v = row[k];
+        if (v != null && String(v).trim() !== "") return String(v).trim();
+      }
+    }
+  }
+  return null;
+}
+
 function extractRebarRowsFromWorkbook(workbook: any, manifestContext?: any): { items: any[]; reason?: string } {
   const items: any[] = [];
   for (const sheetName of workbook.SheetNames || []) {
@@ -115,7 +141,7 @@ function extractRebarRowsFromWorkbook(workbook: any, manifestContext?: any): { i
       const headers = rows[r].map(normalizeHeader);
       const score = [
         findHeaderIndex(headers, ["MARK", "BAR MARK", "BAR MARKS", "ITEM MARK"]) >= 0,
-        findHeaderIndex(headers, ["QTY", "QUANTITY", "NO", "NUMBER"]) >= 0,
+        findHeaderIndex(headers, QTY_ALIASES) >= 0,
         findHeaderIndex(headers, ["SIZE", "BAR SIZE", "BAR", "BAR DIA", "DIAMETER"]) >= 0,
         findHeaderIndex(headers, ["SHAPE", "SHAPE TYPE", "TYPE", "ASA", "ASA SHAPE"]) >= 0,
         findHeaderIndex(headers, ["LENGTH", "CUT LENGTH", "TOTAL LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"]) >= 0,
@@ -141,7 +167,7 @@ function extractRebarRowsFromWorkbook(workbook: any, manifestContext?: any): { i
       item: findHeaderIndex(headerRow, ["ITEM", "ITEM NO", "ITEM NUMBER", "BAR NO", "BAR NUMBER"]),
       grade: findHeaderIndex(headerRow, ["GRADE", "STEEL GRADE"]),
       mark: findHeaderIndex(headerRow, ["MARK", "BAR MARK", "BAR MARKS", "ITEM MARK"]),
-      quantity: findHeaderIndex(headerRow, ["QTY", "QUANTITY", "NO", "NUMBER"]),
+      quantity: findHeaderIndex(headerRow, QTY_ALIASES),
       size: findHeaderIndex(headerRow, ["SIZE", "BAR SIZE", "BAR", "BAR DIA", "DIAMETER"]),
       type: findHeaderIndex(headerRow, ["SHAPE", "SHAPE TYPE", "TYPE", "ASA", "ASA SHAPE"]),
       total_length: findHeaderIndex(headerRow, ["LENGTH", "CUT LENGTH", "TOTAL LENGTH", "CUTLENGTH", "CUT LEN", "TOT LENGTH"]),
@@ -150,6 +176,9 @@ function extractRebarRowsFromWorkbook(workbook: any, manifestContext?: any): { i
       ref: findHeaderIndex(headerRow, ["REF", "REFERENCE", "PROJECT", "PROJECT REF", "BARLIST"]),
       address: findHeaderIndex(headerRow, ["ADDRESS", "SITE ADDRESS", "LOCATION"]),
     };
+
+    // Sheet-level Grade fallback (Rebar-CAD style "Grade : 400/R" in header metadata, not a column)
+    const sheetGrade = idx.grade < 0 ? findSheetLevelGrade(rows, bestHeader) : null;
 
     const valueAt = (row: any[], col: number) => col >= 0 ? row[col] : null;
     const textAt = (rowNum: number, row: any[], col: number) =>
