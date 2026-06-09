@@ -203,12 +203,55 @@ export function useAutoClearance({
 
   const showBanner = useCallback((b: Banner, ms = 2200) => {
     setBanner(b);
-    if (b && b.kind !== "mismatch") {
+    if (b) {
+      // Auto-dismiss every banner — including 'mismatch'. In auto mode the
+      // operator must not be required to tap to dismiss; recurring mismatches
+      // are surfaced via voice + vibrate, not a sticky banner.
       window.setTimeout(() => {
         setBanner((cur) => (cur === b ? null : cur));
       }, ms);
     }
   }, []);
+
+  // ---------- timeout + audit helpers ----------
+  // Hard ceiling for any single AI roundtrip. If the function call hangs, we
+  // bail out cleanly and reset the camera to ready instead of leaving the UI
+  // stuck on VERIFYING / READING TAG forever.
+  const AI_TIMEOUT_MS = 12000;
+  async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
+    return await new Promise<T>((resolve, reject) => {
+      const t = window.setTimeout(
+        () => reject(new Error(`${label} timed out after ${ms}ms`)),
+        ms,
+      );
+      p.then(
+        (v) => { window.clearTimeout(t); resolve(v); },
+        (e) => { window.clearTimeout(t); reject(e); },
+      );
+    });
+  }
+
+  // Refine attempts — bounded so a single bad tag image can't pin the UI in
+  // a perpetual READING/MATCHING state. Reset on every successful tag accept.
+  const refineAttemptsRef = useRef(0);
+  const MAX_REFINE_ATTEMPTS = 2;
+
+  // Recent finalize dedupe — if the operator (or a chatty shutter) re-scans
+  // the same tag inside this window, we skip the second save entirely.
+  const recentlySavedRef = useRef<Map<string, number>>(new Map());
+  const RECENT_SAVE_WINDOW_MS = 6000;
+  function markRecentlySaved(itemId: string) {
+    recentlySavedRef.current.set(itemId, Date.now());
+  }
+  function wasRecentlySaved(itemId: string): boolean {
+    const t = recentlySavedRef.current.get(itemId);
+    if (!t) return false;
+    if (Date.now() - t > RECENT_SAVE_WINDOW_MS) {
+      recentlySavedRef.current.delete(itemId);
+      return false;
+    }
+    return true;
+  }
 
   // -------- pipeline helpers --------
 
@@ -397,6 +440,7 @@ export function useAutoClearance({
     if (scanLockRef.current || busy) return;
     scanLockRef.current = true;
     cycleStartRef.current = tNow();
+    clearanceFlowLog("scan_started", { kind: "tag", manifestKey, refine_attempt: refineAttemptsRef.current });
     if (!navigator.onLine) {
       try {
         await queue.enqueue({
@@ -438,9 +482,13 @@ export function useAutoClearance({
         .then(async (imageBase64) => {
           perfLog("ocr_prep", tNow() - tOcrPrep);
           const tOcr = tNow();
-          const r = await supabase.functions.invoke("match-tag-photo", {
-            body: { imageBase64, candidates },
-          });
+          const r = await withTimeout(
+            supabase.functions.invoke("match-tag-photo", {
+              body: { imageBase64, candidates },
+            }),
+            AI_TIMEOUT_MS,
+            "match-tag-photo",
+          );
           perfLog("ocr+match", tNow() - tOcr);
           return r;
         });
@@ -459,29 +507,43 @@ export function useAutoClearance({
 
       if (decision === "none" || ranked.length === 0) {
         setLastConfidence(ranked[0]?.score ?? 0);
-        showBanner({ kind: "low_ocr", text: "Tag unreadable — please rescan." }, 2500);
+        refineAttemptsRef.current += 1;
+        const overLimit = refineAttemptsRef.current > MAX_REFINE_ATTEMPTS;
+        clearanceFlowLog("scan_low_ocr", { refine_attempt: refineAttemptsRef.current, overLimit });
+        showBanner(
+          { kind: "low_ocr", text: overLimit ? "Move closer & retry." : "Tag unreadable — please rescan." },
+          2200,
+        );
+        if (overLimit) refineAttemptsRef.current = 0;
         setState("waiting_tag");
         return;
       }
       const best = ranked[0];
       const matchedItem = itemsRef.current.find((i) => i.id === best.id);
       if (!matchedItem) {
-        showBanner({ kind: "mismatch", text: "Tag does not match this manifest." });
+        showBanner({ kind: "mismatch", text: "Tag does not match this manifest." }, 2200);
         setState("waiting_tag");
         return;
       }
+      clearanceFlowLog("tag_recognized", {
+        cut_plan_item_id: matchedItem.id,
+        mark: matchedItem.mark_number,
+        decision,
+        score: best.score,
+        mismatch_reason: mismatchReason,
+      });
       // Zone gate — if a zone is selected and the matched item is bound to a
       // different zone, never auto-match. Operator must rescan or change zone.
       const activeZone = (selectedZone || "").trim();
       if (activeZone && matchedItem.storage_zone && matchedItem.storage_zone !== activeZone) {
-        showBanner({ kind: "mismatch", text: "Tag belongs to a different zone." }, 3000);
+        showBanner({ kind: "mismatch", text: "Tag belongs to a different zone." }, 2500);
         speak("Wrong zone");
         vibrate([120, 60, 120]);
         setState("waiting_tag");
         return;
       }
-      if (matchedItem.evidence_status === "cleared") {
-        showBanner({ kind: "duplicate", text: `${matchedItem.mark_number || "Item"} already verified.` });
+      if (matchedItem.evidence_status === "cleared" || wasRecentlySaved(matchedItem.id)) {
+        showBanner({ kind: "duplicate", text: `${matchedItem.mark_number || "Item"} already verified.` }, 1800);
         speak("Already verified");
         vibrate([40, 40, 40]);
         setState("waiting_tag");
@@ -500,21 +562,47 @@ export function useAutoClearance({
         mismatch_reason: mismatchReason,
       };
 
-      if (decision === "confirm") {
+      // PARTIAL MATCH AUTO-ADVANCE — if backend said 'confirm' only because
+      // DWG/Ref is missing on the tag or on the item (not an actual mismatch),
+      // and the MARK match is unambiguous (best score clearly beats #2), do
+      // not stop for the manual pick overlay. Treat it as a partial match,
+      // log it, show a brief banner, and continue the cycle automatically.
+      const isMissingOnly =
+        !!mismatchReason &&
+        /missing on (item|tag)/i.test(mismatchReason) &&
+        !/≠/.test(mismatchReason);
+      const second = ranked[1]?.score ?? 0;
+      const unambiguous = best.score - second >= 0.15 || ranked.length === 1;
+      const partialAutoAccept = decision === "confirm" && isMissingOnly && unambiguous;
+
+      if (decision === "confirm" && !partialAutoAccept) {
         // HOLD the captured tag blob — confirmPick will upload it after the
-        // operator confirms the candidate. Previously this branch dropped the
-        // blob entirely, leaving evidence rows without a tag_scan_url.
+        // operator confirms the candidate.
         pendingTagBlobRef.current = blob;
         pendingTagOcrRef.current = { ocr, ranked, decision, mismatchReason };
         setPickCandidates(ranked.slice(0, 3));
         setLastConfidence(best.score);
         setState("tag_pick");
         if (mismatchReason) {
-          showBanner({ kind: "mismatch", text: mismatchReason }, 4000);
+          showBanner({ kind: "mismatch", text: mismatchReason }, 2500);
         }
         speak("Confirm match");
         return;
       }
+
+      if (partialAutoAccept) {
+        clearanceFlowLog("partial_match_auto_accept", {
+          cut_plan_item_id: matchedItem.id,
+          mark: matchedItem.mark_number,
+          mismatch_reason: mismatchReason,
+          best_score: best.score,
+          runner_up_score: second,
+        });
+        showBanner({ kind: "low_ocr", text: `Partial match · ${mismatchReason ?? ""}` }, 1800);
+      }
+
+      // Reset refine counter — we have a usable match.
+      refineAttemptsRef.current = 0;
 
       // High confidence (strict MARK+DWG+Ref) — upload tag photo + ensure
       // evidence row in parallel, then write the evidence row update. Move to
@@ -570,10 +658,14 @@ export function useAutoClearance({
 
     } catch (e: any) {
       console.error("tag capture failed", e);
+      const isTimeout = /timed out/i.test(e?.message || "");
+      if (isTimeout) {
+        clearanceFlowLog("scan_timeout", { stage: "tag_match", message: e?.message });
+      }
       // Clear partial active refs so the next shutter cannot reuse a stale id.
       setActiveItemId(null);
       setActiveEvidenceId(null);
-      showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 3000);
+      showBanner({ kind: "error", text: e?.message || "Tag scan failed" }, 2500);
       setState("waiting_tag");
     } finally {
       setBusy(false);
@@ -741,16 +833,20 @@ export function useAutoClearance({
         verification_state: productEvidence.verification_state,
       });
       setState("product_validating");
-      const { data: vData, error: vErr } = await supabase.functions.invoke(
-        "validate-clearance-photo",
-        {
-          body: {
-            photo_storage_path: path,
-            expected_mark_number: item?.mark_number,
-            expected_drawing_ref: item?.drawing_ref,
-            photo_type: "material",
+      const { data: vData, error: vErr } = await withTimeout(
+        supabase.functions.invoke(
+          "validate-clearance-photo",
+          {
+            body: {
+              photo_storage_path: path,
+              expected_mark_number: item?.mark_number,
+              expected_drawing_ref: item?.drawing_ref,
+              photo_type: "material",
+            },
           },
-        },
+        ),
+        AI_TIMEOUT_MS,
+        "validate-clearance-photo",
       );
       perfLog("product_update+validate", tNow() - tParallel);
       if (vErr) throw vErr;
@@ -827,6 +923,11 @@ export function useAutoClearance({
       // Only optimistically remove from active list if DB confirms completion.
       // This preserves the "do not complete from React state alone" rule.
       if (evidenceOk && phaseOk) {
+        markRecentlySaved(finalizedItemId);
+        clearanceFlowLog("match_success", {
+          cut_plan_item_id: finalizedItemId,
+          evidence_id: finalizedEvidenceId,
+        });
         setLocallyCompletedIds((prev) => {
           const next = new Set(prev);
           next.add(finalizedItemId);
@@ -868,21 +969,32 @@ export function useAutoClearance({
         setActiveItemId(null);
         setActiveEvidenceId(null);
         setPickCandidates([]);
-        // If everything in this session is done, hold on the completion
-        // screen; otherwise resume scanning.
         const remaining = itemsRef.current.filter(
           (i) => i.evidence_status !== "cleared" && i.id !== finalizedItemId,
         ).length;
         if (remaining === 0) {
           setState("manifest_complete");
         } else {
+          clearanceFlowLog("auto_advance", { next: "waiting_tag", remaining });
           setState("waiting_tag");
         }
       }, 450);
     } catch (e: any) {
       console.error("product capture failed", e);
-      showBanner({ kind: "error", text: e?.message || "Verification failed" }, 3000);
-      setState("waiting_product");
+      const isTimeout = /timed out/i.test(e?.message || "");
+      if (isTimeout) {
+        clearanceFlowLog("scan_timeout", { stage: "product_validate", message: e?.message });
+      }
+      showBanner({ kind: "error", text: e?.message || "Verification failed" }, 2500);
+      // After a timeout, reset the cycle so the camera is ready immediately
+      // instead of parking on the VERIFYING ring.
+      if (isTimeout) {
+        setActiveItemId(null);
+        setActiveEvidenceId(null);
+        setState("waiting_tag");
+      } else {
+        setState("waiting_product");
+      }
     } finally {
       setBusy(false);
       scanLockRef.current = false;

@@ -75,6 +75,17 @@ export function AutoClearanceMode({
   // Hard lock: product shutter only fires once tag photo is DB-confirmed.
   const productLocked = stage === "product" && state !== "waiting_product";
 
+  // The "Scan and save tag first" hint must NOT flash during the brief
+  // tag_evidence_saved → waiting_product transition. Only show it after a
+  // short grace window when the lock is still active (e.g. the operator
+  // pressed the product shutter before tag landed).
+  const [showLockHint, setShowLockHint] = useState(false);
+  useEffect(() => {
+    if (!productLocked) { setShowLockHint(false); return; }
+    const t = window.setTimeout(() => setShowLockHint(true), 700);
+    return () => window.clearTimeout(t);
+  }, [productLocked]);
+
   const ringColor =
     state === "waiting_tag" ? "blue"
     : state === "tag_uploading" ? "blue"
@@ -198,7 +209,7 @@ export function AutoClearanceMode({
       )}
 
       {/* PRODUCT LOCK NOTICE — shutter disabled until tag photo confirmed */}
-      {productLocked && (
+      {productLocked && showLockHint && (
         <div className="absolute inset-x-0 bottom-32 z-30 flex justify-center pointer-events-none">
           <div className="bg-amber-500/95 text-black rounded-xl px-4 py-2 text-xs font-bold tracking-wider uppercase shadow-2xl">
             Scan and save tag first
