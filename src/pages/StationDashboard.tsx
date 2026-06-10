@@ -11,6 +11,7 @@ import { ActiveProductionPanel } from "@/components/shopfloor/ActiveProductionPa
 import { ActiveProductionHub } from "@/components/shopfloor/ActiveProductionHub";
 import { WorkOrderQueueSection } from "@/components/shopfloor/WorkOrderQueueSection";
 import { DowntimeAlertBanner } from "@/components/shopfloor/DowntimeAlertBanner";
+import { StaleCompletionAlert } from "@/components/shopfloor/StaleCompletionAlert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Cloud, Radio, Loader2, Settings, ArrowLeft, AlertTriangle, Sun, Moon } from "lucide-react";
@@ -216,6 +217,8 @@ export default function StationDashboard() {
                 ))}
               </div>
             </div>
+
+            <StaleCompletionAlert />
 
             <LiveOpsTicker
               machines={machines}
