@@ -3,6 +3,8 @@
  * and crossfade transitions using canvas + MediaRecorder.
  * Returns a blob URL of the resulting video.
  */
+import { pickRecorderMime } from "./recorderMime";
+
 
 interface SlideshowOptions {
   imageUrls: string[];

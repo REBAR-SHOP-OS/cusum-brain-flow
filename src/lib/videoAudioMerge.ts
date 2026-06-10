@@ -2,6 +2,8 @@
  * Merges a video and an audio track using canvas + MediaRecorder.
  * Returns a blob URL of the combined video with audio.
  */
+import { pickRecorderMime } from "./recorderMime";
+
 export async function mergeVideoAudio(
   videoSrc: string,
   audioSrc: string,
@@ -46,9 +48,9 @@ export async function mergeVideoAudio(
         ...audioDestination.stream.getAudioTracks(),
       ]);
 
-      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
-        ? "video/webm;codecs=vp9,opus"
-        : "video/webm";
+      // Prefer MP4/H.264 + AAC so the output is Instagram-ready. WebM is only
+      // used when the browser cannot record MP4 directly.
+      const { mimeType } = pickRecorderMime({ hasAudio: true });
       const recorder = new MediaRecorder(combinedStream, {
         mimeType,
         videoBitsPerSecond: 5_000_000,
