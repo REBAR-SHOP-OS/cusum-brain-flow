@@ -2,6 +2,8 @@ import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { normalizeForInstagram } from "@/lib/igSafeVideo";
+import { uploadSocialMediaAsset } from "@/lib/socialMediaStorage";
 
 /** Strip Persian translation block that is only for internal review */
 function stripPersian(text: string): string {
@@ -71,6 +73,38 @@ export function usePublishPost() {
             duration: 12000,
           });
           return false;
+        }
+
+        // Root-cause auto-heal: even if the URL/content-type say MP4, browser
+        // MediaRecorder MP4s have ~1000 fps timestamps + 30 Mbps bitrate that
+        // Instagram rejects "during processing". Re-encode to IG-safe spec and
+        // swap the URL on the post before publish.
+        const looksLikeVideo =
+          /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(url) ||
+          post.content_type === "story" ||
+          post.content_type === "reel";
+        if (looksLikeVideo) {
+          try {
+            toast({
+              title: "Preparing video for Instagram…",
+              description: "Re-encoding to Reels-safe spec (30 fps, H.264 level 4.1).",
+            });
+            const norm = await normalizeForInstagram(url);
+            if (norm.reencoded) {
+              const newUrl = await uploadSocialMediaAsset(
+                URL.createObjectURL(norm.blob),
+                "video",
+              );
+              await supabase
+                .from("social_posts")
+                .update({ image_url: newUrl })
+                .eq("id", post.id);
+              post.image_url = newUrl;
+              console.log("[publish] swapped IG video for normalized version", newUrl);
+            }
+          } catch (e) {
+            console.warn("[publish] IG normalization failed, continuing with original", e);
+          }
         }
       }
 
