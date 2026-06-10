@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { uploadToStorage } from "@/lib/storageUpload";
+import { normalizeForInstagram } from "@/lib/igSafeVideo";
 
 const BUCKET = "social-media-assets";
 
@@ -48,6 +49,22 @@ export async function uploadSocialMediaAsset(
     const resp = await fetch(sourceUrl);
     if (!resp.ok) throw new Error("Failed to fetch remote media");
     blob = await resp.blob();
+  }
+
+  // Root-cause fix for Instagram "rejected during processing": browser
+  // MediaRecorder produces MP4s with ~1000 fps timestamps and 30+ Mbps
+  // bitrate that violate IG Reels limits. Normalize every social video to
+  // a safe spec at upload time so it's IG-ready for every platform.
+  if (type === "video") {
+    try {
+      const norm = await normalizeForInstagram(blob);
+      if (norm.reencoded) {
+        console.log("[socialMediaStorage] video normalized to IG-safe MP4");
+        blob = norm.blob;
+      }
+    } catch (e) {
+      console.warn("[socialMediaStorage] IG-safe normalization failed, uploading original", e);
+    }
   }
 
   const ext = extensionForBlob(blob, type);
