@@ -3,6 +3,8 @@
  * and crossfade transitions using canvas + MediaRecorder.
  * Returns a blob URL of the resulting video.
  */
+import { pickRecorderMime } from "./recorderMime";
+
 
 interface SlideshowOptions {
   imageUrls: string[];
@@ -71,9 +73,9 @@ export async function slideshowToVideo(opts: SlideshowOptions): Promise<string> 
   const totalFrames = Math.ceil(totalDuration * fps);
 
   const stream = canvas.captureStream(fps);
-  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
-    ? "video/webm;codecs=vp9"
-    : "video/webm";
+  // Prefer MP4/H.264 so the output is Instagram-ready. WebM is only used when
+  // the browser cannot record MP4 directly. See src/lib/recorderMime.ts.
+  const { mimeType } = pickRecorderMime({ hasAudio: false });
   const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 5_000_000 });
   const chunks: Blob[] = [];
 
