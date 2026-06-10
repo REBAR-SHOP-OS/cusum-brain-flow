@@ -1,68 +1,50 @@
-## Goal
+## Why the card failed
 
-Every intake (one uploaded barlist/manifest) flows end-to-end as its own isolated stream — pool → cutter → bender → clearance → loading → pickup/delivery — so two intakes for the same customer (e.g. Torcom ECA R1 vs. Sina's bundle) can never bleed into each other again.
+The failed post in your screenshot is a video whose source file is a browser-recorded **WebM (VP9 + Opus)** produced by `MediaRecorder` in `src/lib/slideshowToVideo.ts` and `src/lib/videoAudioMerge.ts`. Instagram's Graph API only accepts **MP4 with H.264 video + AAC audio**, so the codec probe in `supabase/functions/_shared/instagramPublish.ts` correctly rejects it with `INSTAGRAM_VIDEO_SPEC_ERROR` — that's exactly the red message in the right panel (`Page "Ontario Steel Detailing": Instagram Reels require a real MP4 video encoded as H.264 with AAC audio…`).
 
-Scope unit: **Project + Intake**. A `project_id` already groups intakes for the same job; `intake_id` (= the source `barlists.id`) keeps each upload isolated within it. Both are required on every row.
+Today the system only **blocks** the bad video — it never converts it. So every time Vizzy / AI Video Director outputs a WebM (no Wan/Veo MP4 source, just the canvas slideshow path), Instagram publishing fails at the scheduled slot and the card lands in `failed`. Facebook/LinkedIn cards on the same post succeed because they accept WebM.
 
-## Architecture
+## Fix (surgical, additive only)
+
+Add an automatic WebM→MP4 transcode step that runs **before** Instagram publish, and a one-time retry for the already-failed card.
+
+### 1. New edge function: `transcode-to-mp4`
+A trimmed copy of the existing `supabase/functions/gce-video-assembly/index.ts` pipeline (same GCE + ffmpeg pattern, already proven in this codebase). Input: a single source URL. Output: an MP4 (H.264 + AAC, `yuv420p`, `+faststart`) uploaded to the same `social-media` bucket, and the public URL returned.
 
 ```text
-barlist (intake)
-   └─ cut_plan (1..n per intake)         intake_id = barlist_id
-        └─ cut_plan_item                 intake_id stamped, project_id stamped
-             ├─ clearance_evidence       inherits intake_id via FK
-             ├─ loading_checklist        intake_id stamped
-             ├─ packing_slips            intake_id stamped
-             ├─ bundles                  intake_id + project_id stamped
-             ├─ pickup_orders            intake_id stamped
-             └─ deliveries               intake_id stamped
+ffmpeg -y -i input -c:v libx264 -preset fast -crf 22 -pix_fmt yuv420p \
+  -c:a aac -b:a 128k -movflags +faststart output.mp4
 ```
 
-`cut_plans` already has `barlist_id` + `project_id`. We promote `barlist_id` (aliased as `intake_id`) and `project_id` down the chain so every station can filter without joining four tables.
+### 2. Hook it into the publish path
+In `supabase/functions/_shared/instagramPublish.ts`, right after `probeVideoForInstagram(...)` decides `isInstagramReady === false` AND the URL/content-type indicates WebM:
 
-## Steps
+- Call `transcode-to-mp4` with `imageUrl`.
+- Re-probe the MP4 result.
+- If probe passes, swap `imageUrl` for the MP4 URL and continue the IG container POST.
+- Persist the MP4 URL back to `social_posts.image_url` so future retries skip transcoding.
+- If transcode itself fails, fall through to the existing `INSTAGRAM_VIDEO_SPEC_ERROR` path (no behavior regression).
 
-**1. Schema — add `intake_id` to the pipeline tables** *(migration)*
-- Add nullable `intake_id uuid` (+ `project_id uuid` where missing) to: `cut_plan_items`, `bundles`, `loading_checklist`, `packing_slips`, `pickup_orders`, `pickup_order_items`, `deliveries`, `delivery_stops`, `delivery_bundles`, `work_orders`, `clearance_evidence`.
-- FK `intake_id → barlists(id) ON DELETE SET NULL`.
-- Indexes `(intake_id)` and `(project_id, intake_id)` on each.
-- DB trigger `stamp_intake_from_cut_plan()` on `cut_plan_items` BEFORE INSERT/UPDATE: copies `intake_id` + `project_id` from parent `cut_plans`. Mirror triggers on `bundles`, `loading_checklist`, `packing_slips`, `pickup_orders`, `deliveries` to copy from referenced `cut_plan_item` / `cut_plan`.
+This single hook covers both manual "Publish Now" (`social-publish`) and the cron path (`social-cron-publish`) because both route IG through `publishInstagramMedia`.
 
-**2. Backfill from source links** *(same migration, idempotent)*
-- `cut_plan_items.intake_id` ← `cut_plans.barlist_id` via `cut_plan_id`.
-- `bundles.intake_id` ← from `source_cut_batch_id` → cut_batch → cut_plan → barlist; fall back via `source_bend_batch_id`; fall back via `source_job_id`.
-- `loading_checklist`, `packing_slips`, `pickup_orders`, `deliveries`: copy from `cut_plan_id` chain.
-- `delivery_stops`/`delivery_bundles`: copy from parent delivery/bundle.
-- Rows that can't be resolved stay NULL (visible in admin reassignment list — step 6 future work; not built now per "Backfill from source links" choice).
-- Log counts to `migration_logs` so we can audit unscoped orphans.
+### 3. Heal the failed card
+After deploying, manually retry the failed post (the "Retry Publishing" button already shown in your screenshot) — the new transcode path will now succeed instead of bouncing on codec.
 
-**3. Server-side enforcement**
-- Edge functions / RPCs that create cut_plans, bundles, loading lists, deliveries must accept and pass `intake_id`. Audit: `dispatchService.ts`, `barlistService.ts`, `inventoryService.ts`, `supabase/functions/finalize-cut-batch`, `create-bundle*`, `release-to-loading*`, `assign-delivery*`. Triggers in step 1 are the safety net; explicit passing is the contract.
+### 4. Regression test
+Add `tests/regression/social/instagram-auto-transcode-webm.test.ts` verifying that `instagramPublish.ts` invokes the transcoder when the probe rejects with a WebM-style reason, and that the IG container POST receives the MP4 URL, not the WebM URL.
 
-**4. Frontend — intake selector + station auto-scope**
-- New `IntakeContext` (`src/contexts/IntakeContext.tsx`) holding `{ projectId, intakeId, intakeLabel }` + `localStorage` persistence.
-- New top-bar selector in `IndustrialShell` / Shop Floor header: project dropdown → intake dropdown ("SD07 – SIDEWALK_LIGHT POLE 2025-05-22"). "All intakes" option for admins only.
-- Update every station hook to filter by `intake_id` when set:
-  - `useStationData`, `useProductionQueues`, `useCutPlans`, `useBendBatches`, `useBenderBatches`, `useClearanceData`, `useBundles`, `useReadyToShip`, `usePickupOrders`, plus delivery list query in `DeliveryPipeline.tsx`, `ClearanceArchive.tsx`, `MaterialFlowDiagram.tsx` phase counts.
-- `MaterialFlowDiagram` counts re-key on `intakeId`.
-- Show intake chip on every tag/card so operators see which stream they're in.
+## Out of scope (intentionally)
 
-**5. Clearance Archive ↔ Loading consistency**
-- The Torcom mismatch we just diagnosed comes from `ClearanceArchive` filtering by customer only. With intake scope on, both the archive and the loading station read the same `intake_id`, so the "18 cleared vs 6 loading" confusion disappears by construction. Add a regression test under `tests/regression/shopfloor/intake-scope-consistency.test.ts` asserting clearance archive count == loading-eligible count for a given intake fixture.
+- Not changing `slideshowToVideo.ts` / `videoAudioMerge.ts` to record MP4 directly. Browser `MediaRecorder` MP4 support is inconsistent (Chrome only, recent versions), so the safer fix is a server-side normalizer.
+- Not removing the existing IG WebM block — it stays as a safety net for cases where transcoding fails or the source is some other unsupported codec.
+- Not touching Facebook/LinkedIn publish paths — they're already working.
 
-**6. Memory + docs**
-- Add `mem://architecture/intake-pipeline-isolation` (HARD): every pipeline row carries `intake_id` (= `barlists.id`) and `project_id`; stations filter by active intake; cross-intake batching forbidden in loading/delivery; cutter/bender may visually mix but each tag shows its intake chip.
-- Update `mem://index.md` Core with one-line rule.
+## Files
 
-## Technical notes
+**New**
+- `supabase/functions/transcode-to-mp4/index.ts`
+- `tests/regression/social/instagram-auto-transcode-webm.test.ts`
 
-- `intake_id` is intentionally `barlists.id` (not a new surrogate) — barlists are already the upload unit and have RLS by `company_id`. No new table needed.
-- Triggers use `SET search_path = public` and `SECURITY DEFINER` only where needed for cross-row reads, per existing standards.
-- All new columns nullable to keep deploy non-breaking; NOT NULL can be added later once backfill confirmed clean.
-- No changes to existing status/phase enums or workflow gates.
-- Tests: `tests/regression/shopfloor/intake-scope-isolation.test.ts` (two intakes same customer don't leak), `intake-backfill.test.ts` (backfill resolves cut_plan_items 100% when cut_plans.barlist_id is set).
-
-## Risk
-
-- Backfill orphans: bundles/deliveries with no traceable barlist (likely the older Torcom data). They stay NULL and admins see them under "Unscoped" — explicitly not auto-reassigned per your choice.
-- Selector UX: if a user forgets to switch intake, they'll see an empty pool. Mitigation: top-bar always shows the active intake name in bold + a "Switch intake" affordance; if pool empty, show "No items in this intake — switch?".
+**Edited**
+- `supabase/functions/_shared/instagramPublish.ts` — add transcode-then-retry step before the spec-error return.
+- `supabase/config.toml` — register the new function (if not auto-registered).
