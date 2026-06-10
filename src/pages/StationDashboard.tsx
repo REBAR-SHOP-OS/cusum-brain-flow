@@ -218,6 +218,8 @@ export default function StationDashboard() {
               </div>
             </div>
 
+            <StaleCompletionAlert />
+
             <LiveOpsTicker
               machines={machines}
               lanes={projectLanes}
