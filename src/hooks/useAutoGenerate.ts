@@ -53,11 +53,36 @@ export function useAutoGenerate() {
     const timeout = setTimeout(() => controller.abort(), 120000);
 
     const pollTimers: ReturnType<typeof setTimeout>[] = [];
-    const schedulePoll = () => {
-      [5000, 15000, 30000].forEach((delay) => {
+    const isStoryMode = options?.mode === "story";
+    // Story image generation runs in the background and typically takes 60–120s
+    // (5 images, batched 2 at a time). Caption-only generation finishes fast.
+    const POLL_DELAYS_MS = isStoryMode
+      ? [5000, 15000, 30000, 45000, 60000, 80000, 100000, 120000, 150000, 180000]
+      : [5000, 15000, 30000];
+
+    const schedulePoll = (placeholderIds?: string[]) => {
+      POLL_DELAYS_MS.forEach((delay) => {
         pollTimers.push(
-          setTimeout(() => {
+          setTimeout(async () => {
             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+            // Early-exit: stop remaining polls once every placeholder has an image_url
+            if (isStoryMode && placeholderIds && placeholderIds.length > 0) {
+              try {
+                const { data } = await supabase
+                  .from("social_posts")
+                  .select("id,image_url")
+                  .in("id", placeholderIds);
+                const allDone = data
+                  && data.length === placeholderIds.length
+                  && data.every((r: any) => !!r.image_url);
+                if (allDone) {
+                  pollTimers.forEach((t) => clearTimeout(t));
+                  pollTimers.length = 0;
+                }
+              } catch {
+                // best-effort early exit; ignore
+              }
+            }
           }, delay)
         );
       });
