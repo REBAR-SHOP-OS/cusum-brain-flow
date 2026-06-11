@@ -1,37 +1,57 @@
-# Fix: Instagram rejects videos during processing (root cause)
+## Goal
 
-## Diagnosis (verified, not guessed)
+When the user clicks the story-reel icon to auto-generate 5 stories:
+1. The 5 cards must reliably refresh with their generated images (no stuck "?" placeholders).
+2. The unrelated "Something went wrong — Failed to update a ServiceWorker" toast must stop appearing.
 
-I downloaded and probed the actual failed video (`videos/fcb2af66….mp4`). It is **not** the old WebM problem — it really is MP4 with H.264 + AAC, so the codec probe passes and the upload reaches Instagram. Instagram then rejects it **during processing** because the file violates its encoding limits:
+## Root cause
 
-| Property | This file | Instagram limit |
-|---|---|---|
-| Declared frame rate | **1000 fps** (browser MediaRecorder artifact) | 23–60 fps |
-| Video bitrate | **~34 Mbps** (80 MB for 19 s) | max 25 Mbps |
-| H.264 level | **6.0** | ≤ 4.x |
+**Cards stuck on "?"**
+- `src/hooks/useAutoGenerate.ts` schedules cache invalidation only at **5s / 15s / 30s** after the edge call returns.
+- Story background generation runs in `auto-generate-post` and routinely takes **60–120s** (5 images, batched 2 at a time, ~15–25s each through `openai/gpt-image-2`).
+- The realtime channel in `useSocialPosts` *should* push updates, but if the tab is backgrounded, the channel reconnects, or the user filters/scrolls, the placeholders can persist until a manual reload.
+- DB confirms images are being written correctly (verified Sat 13 placeholders — all 5 have valid `image_url`s). This is purely a client-refresh gap.
 
-Browser `MediaRecorder` (used by the slideshow/merge/editor pipelines) produces variable-frame-rate MP4s with a 1000 Hz timestamp track, ignores the bitrate hint, and stamps level 6.0. Facebook/LinkedIn tolerate this; Instagram does not. The current error message ("not a real MP4") is misleading — it is a real MP4 with out-of-spec encoding.
-
-There are no server-side ffmpeg credentials configured (the GCE pipeline falls back to browser), so the fix is a deterministic **client-side re-encode** using WebCodecs.
+**ServiceWorker toast**
+- Preview environment (`id-preview--*.lovable.app`) sometimes returns `/sw.js` behind a redirect, which the browser refuses to use.
+- The rejection bubbles to `GlobalErrorHandler` and shows a red "Something went wrong" toast. It has no impact on app functionality.
 
 ## Changes
 
-1. **New `src/lib/igSafeVideo.ts`** — re-encodes any video blob/URL into an Instagram-safe MP4 using WebCodecs + the `mp4-muxer` package:
-   - constant 30 fps, H.264 (high profile, level 4.1), bitrate capped ~8 Mbps
-   - AAC-LC audio 128 kbps, 44.1/48 kHz
-   - `fastStart` (moov at head)
-   - Skips work if the source already passes spec checks; falls back gracefully if WebCodecs is unavailable.
+### 1. `src/hooks/useAutoGenerate.ts` — extend story polling window
+When `options.mode === "story"`, replace the current short polling schedule with one that covers the realistic image-gen window:
+- Poll at 5s, 15s, 30s, 45s, 60s, 80s, 100s, 120s, 150s.
+- Stop polling early (clear remaining timers) once all `placeholderIds` have a non-null `image_url` in the cache, so we don't keep hitting the DB unnecessarily.
+- Keep the existing short schedule for non-story mode (caption generation is fast).
 
-2. **Normalize at the source** — wherever social video blobs are uploaded (slideshow, audio merge, Pro Editor export → `socialMediaStorage`), run the blob through `igSafeVideo` first so every stored social video is Instagram-ready from day one.
+This is purely additive — no change to edge function, no change to DB, no change to realtime.
 
-3. **Auto-heal on publish/retry** — in `usePublishPost`: when publishing a video to Instagram, if the file is out of spec (or a previous attempt failed with the spec error), download → re-encode → re-upload → persist the new URL on the post → publish. This fixes the existing failed card and all 6 pages with one "Retry Publishing" click.
+### 2. Suppress benign ServiceWorker registration errors
 
-4. **Accurate error message** — update the server-side spec error to name the real causes (frame rate / bitrate / level), not just "re-render as MP4".
+Find the global handler (likely in `src/main.tsx` or a `GlobalErrorHandler` component — confirm during build). Filter out unhandled rejections whose message matches:
+- `Failed to update a ServiceWorker`
+- `script resource is behind a redirect`
 
-5. **Regression test** — `tests/regression/social/ig-safe-video-normalization.test.ts` asserting the normalizer enforces 30 fps CFR / ≤8 Mbps / level 4.1 settings and that upload + retry paths call it.
+Log them to console at `info` level instead of firing a toast. Keep all other unhandled rejections surfacing as before.
 
-## Technical notes
+This is a narrow string match on a known preview-environment artifact, not a blanket suppression.
 
-- `mp4-muxer` is a small, dependency-free muxer; WebCodecs H.264/AAC encoding is supported in Chrome/Edge (your environment).
-- No backend changes other than the error-message wording; no new infrastructure or secrets needed.
-- Dead-code rule honored: nothing replaced is left behind; existing probe/WebM guards stay (they catch a different failure class).
+## Out of scope
+
+- No changes to `auto-generate-post` edge function (it works).
+- No changes to story image prompt, aspect cropping, or storage.
+- No changes to `schedulePost` or the declined-post gate.
+- No retry / cancel UI for the placeholders (separate request).
+
+## Verification
+
+1. Click the story-reel icon → pick date/aspect/product → 5 "?" cards appear immediately.
+2. Within ~120s, all 5 cards refresh with images without manual reload.
+3. ServiceWorker redirect events no longer raise a toast in preview; check console for the muted info log.
+4. Normal unhandled rejections (forced via a thrown error) still surface a toast.
+5. Non-story auto-generate flow is unchanged (still polls at 5/15/30s).
+
+## Files touched
+
+- `src/hooks/useAutoGenerate.ts`
+- One of: `src/main.tsx` or the `GlobalErrorHandler` component (confirmed at build time).
