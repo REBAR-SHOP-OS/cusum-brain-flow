@@ -100,6 +100,10 @@ function isIgnoredError(message: string): boolean {
     "Edge function returned 402",
     "Edge function returned 429",
     "Edge function ad-director-ai",
+    // Preview-only ServiceWorker registration noise (Lovable preview redirects /sw.js)
+    "Failed to update a ServiceWorker",
+    "script resource is behind a redirect",
+    "Failed to register a ServiceWorker",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }
