@@ -49,11 +49,38 @@ export function showBrowserNotification(
 
 let pushRegistered = false;
 
+/**
+ * Web-push registration only runs on stable production origins.
+ *
+ * Lovable preview origins (`id-preview--<uuid>.lovable.app`) change between
+ * sandbox restarts and serve the SPA fallback for unknown paths, which causes
+ * the browser's background SW update to fail with:
+ *   "Failed to update a ServiceWorker ... The script resource is behind a redirect"
+ *
+ * Registering only on production hosts avoids the noise entirely. The
+ * kill-switch worker at `public/sw.js` handles any legacy `/sw.js`
+ * registrations still living in users' browsers.
+ */
+function isProductionOrigin(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  const allowed = new Set(["erp.rebar.shop", "cusum-brain-flow.lovable.app"]);
+  return allowed.has(host);
+}
+
 export async function registerPushSubscription(): Promise<void> {
   if (pushRegistered) return;
   pushRegistered = true;
 
   try {
+    if (!isProductionOrigin()) {
+      console.log(
+        "Push registration skipped: non-production origin",
+        window.location.hostname
+      );
+      return;
+    }
+
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
       console.log("Push notifications not supported");
       return;
@@ -64,6 +91,7 @@ export async function registerPushSubscription(): Promise<void> {
       console.log("Push registration skipped: notification permission not granted");
       return;
     }
+
 
     // Get VAPID public key
     const vapidPublicKey = await getVapidPublicKey();
