@@ -1,57 +1,59 @@
-## Goal
+## Problem
 
-When the user clicks the story-reel icon to auto-generate 5 stories:
-1. The 5 cards must reliably refresh with their generated images (no stuck "?" placeholders).
-2. The unrelated "Something went wrong — Failed to update a ServiceWorker" toast must stop appearing.
+The toast "Something went wrong — Failed to update a ServiceWorker for scope ('https://id-preview--ef512187-…lovable.app/')" appears intermittently on `/social-media-manager` and other routes.
 
-## Root cause
+Root cause:
+- `src/lib/browserNotification.ts` registers `/sw-push.js` via `navigator.serviceWorker.register("/sw-push.js")` whenever a user has granted notification permission.
+- It is called from `useNotifications.ts` and `SupportInbox.tsx` on every session, including inside the Lovable preview iframe (`id-preview--<uuid>.lovable.app`).
+- The preview origin changes between sandbox restarts, the SW script URL can 30x-redirect, and the browser later runs a background `update()` against the old scope. That background update fails and surfaces as an unhandled rejection: `Failed to update a ServiceWorker for scope (...)`.
+- The global error handler already lists `"Failed to update a ServiceWorker"` in its ignore patterns, but the error fires from the browser's background SW update (not from our awaited `register()` call), and at least one path still slips through as a generic toast. The right fix is to never register the SW in preview in the first place — per the project's PWA guidance, service workers must not register in Lovable preview/dev contexts. Web-push messaging SWs are an exception, but they should still be gated to real production origins where the scope is stable.
 
-**Cards stuck on "?"**
-- `src/hooks/useAutoGenerate.ts` schedules cache invalidation only at **5s / 15s / 30s** after the edge call returns.
-- Story background generation runs in `auto-generate-post` and routinely takes **60–120s** (5 images, batched 2 at a time, ~15–25s each through `openai/gpt-image-2`).
-- The realtime channel in `useSocialPosts` *should* push updates, but if the tab is backgrounded, the channel reconnects, or the user filters/scrolls, the placeholders can persist until a manual reload.
-- DB confirms images are being written correctly (verified Sat 13 placeholders — all 5 have valid `image_url`s). This is purely a client-refresh gap.
+## Fix (surgical, additive, safe)
 
-**ServiceWorker toast**
-- Preview environment (`id-preview--*.lovable.app`) sometimes returns `/sw.js` behind a redirect, which the browser refuses to use.
-- The rejection bubbles to `GlobalErrorHandler` and shows a red "Something went wrong" toast. It has no impact on app functionality.
+### 1) Gate push SW registration to production origins only — `src/lib/browserNotification.ts`
 
-## Changes
+Add a small `isProductionOrigin()` helper and bail out of `registerPushSubscription()` early when not on a stable production host.
 
-### 1. `src/hooks/useAutoGenerate.ts` — extend story polling window
-When `options.mode === "story"`, replace the current short polling schedule with one that covers the realistic image-gen window:
-- Poll at 5s, 15s, 30s, 45s, 60s, 80s, 100s, 120s, 150s.
-- Stop polling early (clear remaining timers) once all `placeholderIds` have a non-null `image_url` in the cache, so we don't keep hitting the DB unnecessarily.
-- Keep the existing short schedule for non-story mode (caption generation is fast).
+Allowed origins (push registration runs):
+- `erp.rebar.shop` (custom domain)
+- `cusum-brain-flow.lovable.app` (published Lovable domain)
 
-This is purely additive — no change to edge function, no change to DB, no change to realtime.
+Blocked origins (push registration is a no-op):
+- `id-preview--*.lovable.app` (Lovable preview iframe — the source of the error)
+- `localhost` / `127.0.0.1` (local dev)
+- any other `*.lovable.app` sandbox host
 
-### 2. Suppress benign ServiceWorker registration errors
+Behavior:
+- `registerPushSubscription()` returns early with a single `console.log("Push registration skipped: non-production origin", host)` — no SW register call, no DB write, no error to swallow.
+- `requestNotificationPermission()` and `showBrowserNotification()` are left untouched — in-page notifications and the permission prompt still work in preview, only the background SW registration is skipped.
 
-Find the global handler (likely in `src/main.tsx` or a `GlobalErrorHandler` component — confirm during build). Filter out unhandled rejections whose message matches:
-- `Failed to update a ServiceWorker`
-- `script resource is behind a redirect`
+No call-site changes needed in `useNotifications.ts` or `SupportInbox.tsx` — both just call the helper and the gate is internal.
 
-Log them to console at `info` level instead of firing a toast. Keep all other unhandled rejections surfacing as before.
+### 2) Belt-and-suspenders on the global handler — `src/hooks/useGlobalErrorHandler.ts`
 
-This is a narrow string match on a known preview-environment artifact, not a blanket suppression.
+Keep the existing ignore patterns and add two more to cover the exact shapes the browser emits from background SW update failures:
 
-## Out of scope
+- `"ServiceWorker script"` (covers `"ServiceWorker script ... fetch failed"`)
+- `"sw-push.js"` (any failure that names our SW script directly)
 
-- No changes to `auto-generate-post` edge function (it works).
-- No changes to story image prompt, aspect cropping, or storage.
-- No changes to `schedulePost` or the declined-post gate.
-- No retry / cancel UI for the placeholders (separate request).
+This is defense-in-depth; the registration gate in step 1 should make these unreachable on preview from now on.
 
-## Verification
+### 3) Verification
 
-1. Click the story-reel icon → pick date/aspect/product → 5 "?" cards appear immediately.
-2. Within ~120s, all 5 cards refresh with images without manual reload.
-3. ServiceWorker redirect events no longer raise a toast in preview; check console for the muted info log.
-4. Normal unhandled rejections (forced via a thrown error) still surface a toast.
-5. Non-story auto-generate flow is unchanged (still polls at 5/15/30s).
+- Reload preview, confirm no `/sw-push.js` request in network tab and no "Failed to update a ServiceWorker" toast.
+- Confirm `console.log("Push registration skipped: non-production origin id-preview--…lovable.app")` appears once on `useNotifications` mount.
+- Confirm `cusum-brain-flow.lovable.app` (published) and `erp.rebar.shop` still register the SW and write to `push_subscriptions` (no code path change for those hosts).
+- Confirm support inbox push still works on production (`SupportInbox.tsx` path).
 
-## Files touched
+### Out of scope
 
-- `src/hooks/useAutoGenerate.ts`
-- One of: `src/main.tsx` or the `GlobalErrorHandler` component (confirmed at build time).
+- No change to `sw-push.js` itself, the `get-vapid-public-key` edge function, the `push_subscriptions` table, or any RLS.
+- No change to `useNotifications.ts` or `SupportInbox.tsx` (the call sites stay; only the helper gates itself).
+- No change to manifest/PWA installability — this project is not an installable PWA, only web-push.
+
+### Files touched
+
+```
+src/lib/browserNotification.ts          # add isProductionOrigin() gate at top of registerPushSubscription()
+src/hooks/useGlobalErrorHandler.ts      # add 2 extra ignore patterns (defense-in-depth)
+```

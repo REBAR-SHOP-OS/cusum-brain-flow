@@ -104,6 +104,9 @@ function isIgnoredError(message: string): boolean {
     "Failed to update a ServiceWorker",
     "script resource is behind a redirect",
     "Failed to register a ServiceWorker",
+    "ServiceWorker script",
+    "sw-push.js",
+    "sw.js",
   ];
   return ignored.some((pattern) => message.includes(pattern));
 }
