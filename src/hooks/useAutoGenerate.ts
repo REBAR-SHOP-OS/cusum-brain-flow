@@ -154,7 +154,7 @@ export function useAutoGenerate() {
           description: data.error,
           variant: "destructive",
         });
-        schedulePoll();
+        schedulePoll(placeholderIds);
         return null;
       }
 
@@ -164,7 +164,7 @@ export function useAutoGenerate() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-      schedulePoll();
+      schedulePoll(placeholderIds);
 
       return data;
     } catch (err) {
@@ -180,7 +180,7 @@ export function useAutoGenerate() {
       });
 
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
-      schedulePoll();
+      schedulePoll(placeholderIds);
 
       return null;
     } finally {
