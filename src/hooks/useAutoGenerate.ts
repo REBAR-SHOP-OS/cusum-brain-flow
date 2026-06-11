@@ -88,6 +88,7 @@ export function useAutoGenerate() {
       });
     };
 
+    let placeholderIds: string[] = [];
     try {
       // Get current user
       const user = await getCurrentUser();
