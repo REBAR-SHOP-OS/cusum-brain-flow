@@ -125,7 +125,7 @@ export function useAutoGenerate() {
         console.warn("[useAutoGenerate] Placeholder insert failed:", phError.message);
       }
 
-      const placeholderIds = (placeholders || []).map((p: any) => p.id);
+      placeholderIds = (placeholders || []).map((p: any) => p.id);
 
       // Show placeholders in calendar immediately
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
