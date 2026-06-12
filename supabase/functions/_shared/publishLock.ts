@@ -70,7 +70,7 @@ export async function releasePublishLock(
   postId: string,
   lockId: string,
   finalStatus: "published" | "failed",
-  extra?: { last_error?: string; qa_status?: string },
+  extra?: { last_error?: string | null; qa_status?: string | null },
 ): Promise<boolean> {
   const updatePayload: Record<string, unknown> = {
     status: finalStatus,
@@ -114,10 +114,25 @@ export async function initPageResults(
   postId: string,
   pageNames: string[],
 ): Promise<void> {
+  const retryNames = new Set(pageNames.map((name) => normalizePageName(name)));
+  const { data } = await supabase
+    .from("social_posts")
+    .select("page_results")
+    .eq("id", postId)
+    .maybeSingle();
+  const current: PageResult[] = Array.isArray((data as any)?.page_results)
+    ? ((data as any).page_results as PageResult[])
+    : [];
+
+  // Preserve already-published pages on retry so a partial card can never
+  // duplicate successful pages or be downgraded when only failed pages retry.
+  const preserved = current.filter((p) =>
+    p?.status === "success" && !retryNames.has(normalizePageName(p.name || ""))
+  );
   const initial: PageResult[] = pageNames.map((name) => ({ name, status: "pending" }));
   await supabase
     .from("social_posts")
-    .update({ page_results: initial })
+    .update({ page_results: [...preserved, ...initial] })
     .eq("id", postId);
 }
 
