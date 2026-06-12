@@ -28,7 +28,7 @@ type MetaError = {
 };
 
 const PROCESSING_PUBLISH_DELAYS_MS = [15000, 30000, 45000, 60000, 60000, 60000];
-const IMAGE_PUBLISH_DELAYS_MS = [5000, 10000, 20000, 30000, 45000];
+const IMAGE_PUBLISH_DELAYS_MS = [4000, 8000, 16000, 30000];
 const INSTAGRAM_VIDEO_SPEC_ERROR =
   "Instagram rejected the video. Likely cause: frame rate >60 fps, bitrate >25 Mbps, or H.264 level >4.x (common with browser-recorded MP4s). Re-publish from the app — it will auto-normalize the video to IG-safe spec (30 fps, 8 Mbps, level 4.1).";
 
