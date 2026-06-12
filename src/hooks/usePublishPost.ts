@@ -54,16 +54,17 @@ export function usePublishPost() {
         const url = post.image_url;
         let badByUrl = /\.(webm|mkv|mov|avi|wmv)(\?|$)/i.test(url);
         let badByType = false;
+        let headContentType = "";
         if (!badByUrl) {
           try {
             const head = await fetch(url, { method: "HEAD" });
-            const ct = (head.headers.get("content-type") || "").toLowerCase();
+            headContentType = (head.headers.get("content-type") || "").toLowerCase();
             badByType =
-              ct.includes("webm") ||
-              ct.includes("matroska") ||
-              ct.includes("quicktime") ||
-              ct.includes("x-msvideo") ||
-              ct.includes("x-ms-wmv");
+              headContentType.includes("webm") ||
+              headContentType.includes("matroska") ||
+              headContentType.includes("quicktime") ||
+              headContentType.includes("x-msvideo") ||
+              headContentType.includes("x-ms-wmv");
           } catch {
             // Network/CORS failure — let the server-side guard handle it.
           }
@@ -79,14 +80,19 @@ export function usePublishPost() {
           return false;
         }
 
-        // Root-cause auto-heal: even if the URL/content-type say MP4, browser
-        // MediaRecorder MP4s have ~1000 fps timestamps + 30 Mbps bitrate that
-        // Instagram rejects "during processing". Re-encode to IG-safe spec and
-        // swap the URL on the post before publish.
+        // Root-cause auto-heal: only run video normalization when the asset is
+        // actually a video. `content_type === "story"` covers BOTH image and
+        // video stories, so it must NOT force the video pipeline — that's what
+        // caused "Preparing video for Instagram…" to appear on image stories.
+        const urlIsVideo = /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(url);
+        const headIsVideo = headContentType.startsWith("video/");
+        const urlIsImage = /\.(png|jpe?g|webp|gif|heic|heif)(\?|$)/i.test(url);
+        const headIsImage = headContentType.startsWith("image/");
+        const isImage = !urlIsVideo && !headIsVideo && (urlIsImage || headIsImage);
+        // Reels are always video; stories can be either — only treat as video
+        // when explicit signal says so.
         const looksLikeVideo =
-          /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(url) ||
-          post.content_type === "story" ||
-          post.content_type === "reel";
+          !isImage && (urlIsVideo || headIsVideo || post.content_type === "reel");
         if (looksLikeVideo) {
           try {
             toast({
@@ -94,7 +100,8 @@ export function usePublishPost() {
               description: "Re-encoding to Reels-safe spec (30 fps, H.264 level 4.1).",
             });
             const norm = await normalizeForInstagram(url);
-            if (norm.reencoded) {
+            const normMime = (norm.blob?.type || "").toLowerCase();
+            if (norm.reencoded && normMime.startsWith("video/")) {
               const newUrl = await uploadSocialMediaAsset(
                 URL.createObjectURL(norm.blob),
                 "video",
@@ -111,6 +118,7 @@ export function usePublishPost() {
           }
         }
       }
+
 
       // Strip Persian translation block — never publish Persian text
       const cleanContent = stripPersian(post.content);
