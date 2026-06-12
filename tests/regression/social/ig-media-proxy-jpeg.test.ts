@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, existsSync } from "node:fs";
 
-describe("Instagram media proxy (root-cause fix for Meta code 2)", () => {
+describe("Instagram durable JPEG media (root-cause fix for Meta code 2)", () => {
   it("ig-media-proxy edge function exists and re-encodes PNG to JPEG", () => {
     const path = "supabase/functions/ig-media-proxy/index.ts";
     expect(existsSync(path)).toBe(true);
@@ -16,15 +16,18 @@ describe("Instagram media proxy (root-cause fix for Meta code 2)", () => {
     expect(src).toMatch(/Cache-Control[\s\S]*max-age/);
   });
 
-  it("instagramPublish.ts routes non-video images through ig-media-proxy", () => {
+  it("instagramPublish.ts materializes non-video images as durable JPEG storage objects", () => {
     const src = readFileSync(
       "supabase/functions/_shared/instagramPublish.ts",
       "utf8",
     );
-    expect(src).toContain("wrapWithIgMediaProxy");
-    expect(src).toContain("/functions/v1/ig-media-proxy");
-    // Wrapping must only happen for non-video media (videos use video_url path).
-    expect(src).toMatch(/if \(!isVideo\)[\s\S]{0,120}wrapWithIgMediaProxy/);
+    expect(src).toContain("materializeInstagramImageUrl");
+    expect(src).toContain("IG_READY_PREFIX");
+    expect(src).toContain("encodeJPEG");
+    expect(src).toContain("contentType: \"image/jpeg\"");
+    // Materializing must only happen for non-video media (videos use video_url path).
+    expect(src).toMatch(/if \(!isVideo\)[\s\S]{0,140}materializeInstagramImageUrl/);
+    expect(src).not.toContain("/functions/v1/ig-media-proxy?src=");
   });
 
   it("surfaces Meta fbtrace_id in the error so failures are diagnosable", () => {
