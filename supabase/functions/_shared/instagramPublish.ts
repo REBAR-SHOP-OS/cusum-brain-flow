@@ -259,7 +259,11 @@ export async function publishInstagramMedia({
     );
 
     let containerData: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
+    // Exponential backoff with jitter for Meta's transient code 2
+    // ("An unexpected error has occurred"). Common when many IG accounts
+    // hit Graph API in parallel — needs >10s, not 3s, to clear.
+    const TRANSIENT_DELAYS_MS = [2000, 6000, 15000, 30000];
+    for (let attempt = 0; attempt < TRANSIENT_DELAYS_MS.length + 1; attempt++) {
       const containerRes = await fetch(`${GRAPH_API}/${igAccountId}/media`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -267,11 +271,19 @@ export async function publishInstagramMedia({
       });
       containerData = await containerRes.json();
 
-      if (containerData.error?.is_transient && attempt < 2) {
+      const err = containerData.error as MetaError | undefined;
+      const isTransient =
+        !!err &&
+        (err.is_transient === true || err.code === 1 || err.code === 2 || err.code === 4 || err.code === 17 || err.code === 32 || err.code === 613);
+
+      if (isTransient && attempt < TRANSIENT_DELAYS_MS.length) {
+        const base = TRANSIENT_DELAYS_MS[attempt];
+        const jitter = Math.floor(Math.random() * 1500);
+        const delayMs = base + jitter;
         console.warn(
-          `${logPrefix} Transient container error on attempt ${attempt + 1}, retrying in 3s...`,
+          `${logPrefix} Transient container error code=${err?.code} on attempt ${attempt + 1}, retrying in ${delayMs}ms...`,
         );
-        await wait(3000);
+        await wait(delayMs);
         continue;
       }
       break;
@@ -286,6 +298,13 @@ export async function publishInstagramMedia({
         return {
           error:
             "Instagram token expired or missing permissions — please reconnect Facebook/Instagram in Integrations.",
+        };
+      }
+      const e = containerData.error as MetaError;
+      if (e.is_transient || e.code === 1 || e.code === 2) {
+        return {
+          error:
+            "Instagram is temporarily unavailable (Meta transient error). Please retry in 1–2 minutes.",
         };
       }
       return { error: `Instagram: ${containerData.error.message}` };
