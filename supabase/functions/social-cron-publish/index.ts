@@ -4,7 +4,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, recoverStaleLocks, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
-import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
+import { publishInstagramMedia, prepareInstagramImageUrl } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
@@ -310,6 +310,31 @@ Deno.serve((req) =>
           const publishedIgIds = new Set<string>();
           const igPublishQueue: Array<{ igAccountId: string; pageAccessToken: string; targetPageName: string }> = [];
 
+          // ── One-shot Instagram image preparation (same contract as social-publish) ──
+          let igImageUrl: string | null | undefined = post.image_url;
+          if (post.platform === "instagram" && post.image_url) {
+            const isVideoUrl = /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(post.image_url);
+            if (!isVideoUrl) {
+              const prepared = await prepareInstagramImageUrl(post.image_url, "[social-cron-publish][IG-prep]");
+              if (!prepared.ok) {
+                console.error(`[social-cron-publish] IG image preparation failed for post ${post.id}: ${prepared.error}`);
+                for (const tpn of individualPages) {
+                  pageErrors.push(`Page "${tpn}": ${prepared.error}`);
+                }
+                individualPages = [];
+              } else {
+                igImageUrl = prepared.url;
+                if (prepared.prepared && igImageUrl !== post.image_url) {
+                  await supabase
+                    .from("social_posts")
+                    .update({ image_url: igImageUrl })
+                    .eq("id", post.id);
+                }
+              }
+            }
+          }
+
+
           for (const targetPageName of individualPages) {
             if (!targetPageName) {
               pageErrors.push("Empty page name — skipped");
@@ -440,7 +465,7 @@ Deno.serve((req) =>
             console.log(`[social-cron-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`);
             const igResults = await Promise.allSettled(
               igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }) =>
-                publishToInstagram(igAccountId, pat, message, post.image_url, post.content_type || "post", post.cover_image_url)
+                publishToInstagram(igAccountId, pat, message, igImageUrl, post.content_type || "post", post.cover_image_url)
                   .then(r => ({ ...r, targetPageName: tpn }))
                   .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
               )

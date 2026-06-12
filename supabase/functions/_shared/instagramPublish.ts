@@ -71,25 +71,42 @@ async function waitForPublicImage(url: string): Promise<boolean> {
   return false;
 }
 
-/**
- * Instagram's fetcher has been rejecting Edge Function proxy URLs even when
- * they return a valid JPEG to normal clients. For non-video IG media, create a
- * durable JPEG derivative in public storage and hand Meta that plain object URL.
- */
-async function materializeInstagramImageUrl(srcUrl: string, logPrefix: string): Promise<string> {
-  try {
-    const parsed = new URL(srcUrl);
-    const isStorageUrl = parsed.hostname.endsWith(".supabase.co") &&
-      parsed.pathname.includes("/storage/v1/object/");
-    if (!isStorageUrl) return srcUrl;
-    if (parsed.pathname.includes(`/${IG_READY_BUCKET}/${IG_READY_PREFIX}/`)) return srcUrl;
+export type PreparedInstagramImage =
+  | { ok: true; url: string; prepared: boolean }
+  | { ok: false; error: string };
 
+/**
+ * Convert any source image to a durable JPEG object URL Meta can fetch.
+ * Fails LOUDLY (no silent fallback to the source URL) so the caller can stop
+ * before invoking the Graph API and avoid the misleading Meta code 2 error.
+ *
+ * Idempotent — if `srcUrl` already points at `ig-ready/*.jpg` in our storage,
+ * it is returned unchanged with `prepared: false`.
+ */
+export async function prepareInstagramImageUrl(
+  srcUrl: string,
+  logPrefix: string,
+): Promise<PreparedInstagramImage> {
+  if (!srcUrl) return { ok: false, error: "Instagram image URL is empty." };
+  let parsed: URL;
+  try {
+    parsed = new URL(srcUrl);
+  } catch {
+    return { ok: false, error: `Instagram image URL is invalid: ${srcUrl}` };
+  }
+  if (parsed.pathname.includes(`/${IG_READY_BUCKET}/${IG_READY_PREFIX}/`)) {
+    return { ok: true, url: srcUrl, prepared: false };
+  }
+
+  try {
     const upstream = await fetch(srcUrl, { redirect: "follow" });
     if (!upstream.ok) {
-      console.warn(`${logPrefix} IG image materialize skipped — source returned HTTP ${upstream.status}`);
-      return srcUrl;
+      return {
+        ok: false,
+        error:
+          `Instagram image source is not reachable (HTTP ${upstream.status}). Re-upload or regenerate the image, then retry.`,
+      };
     }
-
     const upstreamType = (upstream.headers.get("content-type") || "").toLowerCase();
     const bytes = new Uint8Array(await upstream.arrayBuffer());
     const isJpeg = upstreamType.includes("jpeg") || upstreamType.includes("jpg") ||
@@ -98,32 +115,41 @@ async function materializeInstagramImageUrl(srcUrl: string, logPrefix: string): 
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !serviceKey) return srcUrl;
+    if (!supabaseUrl || !serviceKey) {
+      return { ok: false, error: "Instagram image preparation failed: backend storage is not configured." };
+    }
 
     const hash = await sha256Hex(srcUrl);
     const path = `${IG_READY_PREFIX}/${hash}.jpg`;
     const admin = createClient(supabaseUrl, serviceKey);
-    const { error } = await admin.storage.from(IG_READY_BUCKET).upload(
+    const { error: uploadError } = await admin.storage.from(IG_READY_BUCKET).upload(
       path,
       new Blob([jpegBytes], { type: "image/jpeg" }),
       { contentType: "image/jpeg", upsert: true },
     );
-    if (error) {
-      console.warn(`${logPrefix} IG image materialize upload failed: ${error.message}`);
-      return srcUrl;
+    if (uploadError) {
+      return {
+        ok: false,
+        error: `Instagram image preparation failed: ${uploadError.message}. Retry shortly.`,
+      };
     }
-
     const { data } = admin.storage.from(IG_READY_BUCKET).getPublicUrl(path);
     const publicUrl = data.publicUrl;
-    if (await waitForPublicImage(publicUrl)) {
-      console.log(`${logPrefix} Materialized IG-safe JPEG URL: ${publicUrl}`);
-      return publicUrl;
+    if (!(await waitForPublicImage(publicUrl))) {
+      return {
+        ok: false,
+        error:
+          "Instagram image preparation finished but the public URL is not yet readable. Retry in a few seconds.",
+      };
     }
-    console.warn(`${logPrefix} IG materialized JPEG was not fetchable yet; using original URL`);
+    console.log(`${logPrefix} Prepared IG-safe JPEG URL: ${publicUrl}`);
+    return { ok: true, url: publicUrl, prepared: true };
   } catch (e) {
-    console.warn(`${logPrefix} IG image materialize failed: ${(e as Error).message}`);
+    return {
+      ok: false,
+      error: `Instagram image preparation failed: ${(e as Error).message}.`,
+    };
   }
-  return srcUrl;
 }
 
 function isAuthError(error: MetaError | undefined) {
@@ -301,11 +327,16 @@ export async function publishInstagramMedia({
     const isVideo = mediaDetails.isVideo;
     const requiresProcessing = isVideo || isStory;
 
-    // Route non-video images to a durable JPEG object URL so Meta sees a plain,
-    // public image/jpeg file instead of an Edge Function proxy URL. Meta code 2
-    // repeatedly hit all linked IG accounts when the media URL was proxied.
+    // Safety net: callers (social-publish / social-cron-publish) are expected
+    // to call prepareInstagramImageUrl ONCE upstream and pass the resulting
+    // ig-ready JPEG URL here. If a raw URL slips through, prepare it now and
+    // fail loudly instead of letting Meta hit it directly.
     if (!isVideo) {
-      imageUrl = await materializeInstagramImageUrl(imageUrl, logPrefix);
+      const prepared = await prepareInstagramImageUrl(imageUrl, logPrefix);
+      if (!prepared.ok) {
+        return { error: prepared.error };
+      }
+      imageUrl = prepared.url;
     }
 
     if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
