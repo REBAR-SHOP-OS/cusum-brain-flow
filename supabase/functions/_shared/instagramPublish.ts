@@ -24,6 +24,7 @@ type MetaError = {
   error_subcode?: number;
   error_user_msg?: string;
   is_transient?: boolean;
+  fbtrace_id?: string;
 };
 
 const PROCESSING_PUBLISH_DELAYS_MS = [15000, 30000, 45000, 60000, 60000, 60000];
