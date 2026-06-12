@@ -289,12 +289,11 @@ export async function publishInstagramMedia({
     const isVideo = mediaDetails.isVideo;
     const requiresProcessing = isVideo || isStory;
 
-    // Route non-video images through the ig-media-proxy so Meta sees a clean
-    // image/jpeg URL with no Cloudflare bot-management cookies and no PNG
-    // edge-case quirks that have caused intermittent "code 2 / unexpected
-    // error" container failures across all linked IG accounts.
+    // Route non-video images to a durable JPEG object URL so Meta sees a plain,
+    // public image/jpeg file instead of an Edge Function proxy URL. Meta code 2
+    // repeatedly hit all linked IG accounts when the media URL was proxied.
     if (!isVideo) {
-      imageUrl = wrapWithIgMediaProxy(imageUrl);
+      imageUrl = await materializeInstagramImageUrl(imageUrl, logPrefix);
     }
 
     if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
