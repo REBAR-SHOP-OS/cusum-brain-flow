@@ -844,21 +844,35 @@ export function useAutoClearance({
         verification_state: productEvidence.verification_state,
       });
       setState("product_validating");
-      const { data: vData, error: vErr } = await withTimeout(
-        supabase.functions.invoke(
-          "validate-clearance-photo",
-          {
-            body: {
-              photo_storage_path: path,
-              expected_mark_number: item?.mark_number,
-              expected_drawing_ref: item?.drawing_ref,
-              photo_type: "material",
+      let vData: any;
+      let vErr: any = null;
+      if (trustedTagRef.current) {
+        // Tag already matched cleanly (decision=auto + high score). The
+        // material-validate AI call is redundant — skip it to cut ~1-2s.
+        clearanceFlowLog("validate_skipped_trusted_tag", {
+          evidenceId: evId,
+          cut_plan_item_id: activeItemId,
+        });
+        vData = { valid: true, confidence: "trusted_tag", reason: "tag matched with high confidence" };
+      } else {
+        const res = await withTimeout(
+          supabase.functions.invoke(
+            "validate-clearance-photo",
+            {
+              body: {
+                photo_storage_path: path,
+                expected_mark_number: item?.mark_number,
+                expected_drawing_ref: item?.drawing_ref,
+                photo_type: "material",
+              },
             },
-          },
-        ),
-        AI_TIMEOUT_MS,
-        "validate-clearance-photo",
-      );
+          ),
+          AI_TIMEOUT_MS,
+          "validate-clearance-photo",
+        );
+        vData = res.data;
+        vErr = res.error;
+      }
       perfLog("product_update+validate", tNow() - tParallel);
       if (vErr) throw vErr;
 
