@@ -65,6 +65,13 @@ Deno.serve((req) =>
   handleRequest(
     req,
     async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
+      // Tracked across the whole publish path so the finally{} safety net can
+      // release any orphaned publishing lock — guarantees the UI never sees
+      // a row stuck on "publishing" because an early-return / throw skipped
+      // the explicit releasePublishLock calls below.
+      let trackedPostId: string | null = null;
+      let trackedLockId: string | null = null;
+      try {
       // Flexible auth: allow admin/marketing roles OR super admin emails
       const hasPublishRole = await hasAnyRole(supabaseAdmin, userId, [
         "admin",
@@ -334,6 +341,8 @@ Deno.serve((req) =>
             },
           );
         }
+        trackedPostId = post_id;
+        trackedLockId = lock.lockId ?? null;
         console.log(
           `[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`,
         );
