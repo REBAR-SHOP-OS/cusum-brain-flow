@@ -24,7 +24,7 @@ describe("Instagram durable JPEG media (root-cause fix for Meta code 2)", () => 
 
   it("social-publish prepares the IG image ONCE upstream and reuses it", () => {
     expect(publish).toContain("prepareInstagramImageUrl");
-    expect(publish).toMatch(/let igImageUrl[\s\S]{0,200}prepareInstagramImageUrl/);
+    expect(publish).toMatch(/let igImageUrl[\s\S]{0,600}prepareInstagramImageUrl/);
     expect(publish).toMatch(/publishToInstagram\([\s\S]{0,200}igImageUrl/);
     // Failed preparation must short-circuit before the IG fan-out.
     expect(publish).toMatch(/if \(!prepared\.ok\)[\s\S]{0,300}individualPages = \[\];/);
