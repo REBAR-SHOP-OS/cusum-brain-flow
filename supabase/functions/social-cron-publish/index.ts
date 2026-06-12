@@ -4,7 +4,7 @@ import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, recoverStaleLocks, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
 import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
-import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
+import { publishInstagramMedia, prepareInstagramImageUrl } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
