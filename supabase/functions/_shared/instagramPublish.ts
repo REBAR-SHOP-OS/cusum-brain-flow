@@ -327,9 +327,7 @@ export async function publishInstagramMedia({
       containerData = await containerRes.json();
 
       const err = containerData.error as MetaError | undefined;
-      const isTransient =
-        !!err &&
-        (err.is_transient === true || err.code === 1 || err.code === 2 || err.code === 4 || err.code === 17 || err.code === 32 || err.code === 613);
+      const isTransient = isTransientMetaError(err);
 
       if (isTransient && attempt < TRANSIENT_DELAYS_MS.length) {
         const base = TRANSIENT_DELAYS_MS[attempt];
@@ -370,7 +368,7 @@ export async function publishInstagramMedia({
 
     const attemptDelays = requiresProcessing
       ? PROCESSING_PUBLISH_DELAYS_MS
-      : [0];
+      : [0, ...IMAGE_PUBLISH_DELAYS_MS];
 
     for (let attempt = 0; attempt < attemptDelays.length; attempt++) {
       const delay = attemptDelays[attempt];
@@ -453,13 +451,27 @@ export async function publishInstagramMedia({
       }
 
       if (
-        isNotReadyError(publishResult.error) &&
+        (isNotReadyError(publishResult.error) || isTransientMetaError(publishResult.error)) &&
         attempt < attemptDelays.length - 1
       ) {
         console.warn(
-          `${logPrefix} Container ${containerId} not ready on publish attempt ${attempt + 1}; retrying.`,
+          `${logPrefix} Container ${containerId} not ready/transient on publish attempt ${attempt + 1}; retrying.`,
         );
         continue;
+      }
+
+      if (isNotReadyError(publishResult.error)) {
+        return {
+          error:
+            `Instagram media is still processing (fbtrace ${publishResult.error.fbtrace_id || "n/a"}). Retry in 2–5 minutes; already published pages will be skipped.`,
+        };
+      }
+
+      if (isTransientMetaError(publishResult.error)) {
+        return {
+          error:
+            `Instagram rejected the publish attempt (Meta code ${publishResult.error.code || "n/a"}, fbtrace ${publishResult.error.fbtrace_id || "n/a"}). Meta accepted the media container but could not finish publishing yet; retry in 2–5 minutes.`,
+        };
       }
 
       return {
