@@ -53,6 +53,18 @@ async function waitForPublicImage(url: string): Promise<boolean> {
       const contentType = (res.headers.get("content-type") || "").toLowerCase();
       if (res.ok && contentType.startsWith("image/")) return true;
     } catch {
+      // Try GET below, then retry.
+    }
+    try {
+      const res = await fetch(url, {
+        method: "GET",
+        redirect: "follow",
+        headers: { Range: "bytes=0-15" },
+      });
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      await res.body?.cancel();
+      if (res.ok && contentType.startsWith("image/")) return true;
+    } catch {
       // Retry below.
     }
   }
