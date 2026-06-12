@@ -30,8 +30,10 @@ export function ApprovalsPanel() {
     getCurrentUser().then((u) => setCurrentUserEmail(u?.email ?? null));
   }, []);
 
-  // HARD RULE: only neel@rebar.shop may approve. All other reviewers can reject only.
-  const canApprove = currentUserEmail === "neel@rebar.shop";
+  // HARD RULE: only neel@rebar.shop and sattar@rebar.shop may approve. All other reviewers can reject only.
+  const APPROVERS = ["neel@rebar.shop", "sattar@rebar.shop"];
+  const canApprove = APPROVERS.includes(currentUserEmail ?? "");
+
 
 
   const getPost = (postId: string): SocialPost | undefined =>
@@ -150,9 +152,10 @@ export function ApprovalsPanel() {
                           onClick={() => handleApprove(approval.id, approval.post_id)}
                           className="flex-1 gap-1.5"
                           disabled={approvePost.isPending || !canApprove}
-                          title={canApprove ? undefined : "Only neel@rebar.shop can approve posts"}
+                          title={canApprove ? undefined : "Only neel@rebar.shop or sattar@rebar.shop can approve posts"}
                         >
-                          <CheckCircle className="w-4 h-4" /> {canApprove ? "Approve" : "Approve (Neel only)"}
+                          <CheckCircle className="w-4 h-4" /> {canApprove ? "Approve" : "Approve (Approvers only)"}
+
                         </Button>
                         <Button
                           onClick={() => handleReject(approval.id, approval.post_id)}
