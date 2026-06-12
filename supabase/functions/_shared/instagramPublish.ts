@@ -68,7 +68,7 @@ async function materializeInstagramImageUrl(srcUrl: string, logPrefix: string): 
   try {
     const parsed = new URL(srcUrl);
     const isStorageUrl = parsed.hostname.endsWith(".supabase.co") &&
-      parsed.pathname.includes(`/storage/v1/object/public/${IG_READY_BUCKET}/`);
+      parsed.pathname.includes("/storage/v1/object/");
     if (!isStorageUrl) return srcUrl;
     if (parsed.pathname.includes(`/${IG_READY_BUCKET}/${IG_READY_PREFIX}/`)) return srcUrl;
 
