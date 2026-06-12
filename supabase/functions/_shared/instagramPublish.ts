@@ -24,6 +24,7 @@ type MetaError = {
   error_subcode?: number;
   error_user_msg?: string;
   is_transient?: boolean;
+  fbtrace_id?: string;
 };
 
 const PROCESSING_PUBLISH_DELAYS_MS = [15000, 30000, 45000, 60000, 60000, 60000];
@@ -32,6 +33,26 @@ const INSTAGRAM_VIDEO_SPEC_ERROR =
 
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Wrap a Supabase Storage URL with the ig-media-proxy edge function so Meta's
+ * fetcher receives a clean image/jpeg response (no CF bot-management cookies,
+ * PNG sources re-encoded to JPEG). Non-Supabase URLs are returned unchanged.
+ */
+function wrapWithIgMediaProxy(srcUrl: string): string {
+  try {
+    const parsed = new URL(srcUrl);
+    if (!parsed.hostname.endsWith(".supabase.co")) return srcUrl;
+    if (parsed.pathname.includes("/functions/v1/ig-media-proxy")) return srcUrl;
+    const projectUrl = Deno.env.get("SUPABASE_URL");
+    if (!projectUrl) return srcUrl;
+    return `${projectUrl.replace(/\/$/, "")}/functions/v1/ig-media-proxy?src=${
+      encodeURIComponent(srcUrl)
+    }`;
+  } catch {
+    return srcUrl;
+  }
 }
 
 function isAuthError(error: MetaError | undefined) {
@@ -200,6 +221,14 @@ export async function publishInstagramMedia({
     const mediaDetails = await detectMediaDetails(imageUrl);
     const isVideo = mediaDetails.isVideo;
     const requiresProcessing = isVideo || isStory;
+
+    // Route non-video images through the ig-media-proxy so Meta sees a clean
+    // image/jpeg URL with no Cloudflare bot-management cookies and no PNG
+    // edge-case quirks that have caused intermittent "code 2 / unexpected
+    // error" container failures across all linked IG accounts.
+    if (!isVideo) {
+      imageUrl = wrapWithIgMediaProxy(imageUrl);
+    }
 
     if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
       console.warn(
