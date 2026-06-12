@@ -30,8 +30,10 @@ export function ApprovalsPanel() {
     getCurrentUser().then((u) => setCurrentUserEmail(u?.email ?? null));
   }, []);
 
-  // HARD RULE: only neel@rebar.shop may approve. All other reviewers can reject only.
-  const canApprove = currentUserEmail === "neel@rebar.shop";
+  // HARD RULE: only neel@rebar.shop and sattar@rebar.shop may approve. All other reviewers can reject only.
+  const APPROVERS = ["neel@rebar.shop", "sattar@rebar.shop"];
+  const canApprove = APPROVERS.includes(currentUserEmail ?? "");
+
 
 
   const getPost = (postId: string): SocialPost | undefined =>
