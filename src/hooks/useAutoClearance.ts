@@ -483,15 +483,18 @@ export function useAutoClearance({
         return;
       }
 
-      // Run OCR/match in parallel with storage upload. OCR uses a downscaled
-      // copy so the AI roundtrip isn't blocked on the full-size upload.
-      const tOcrPrep = tNow();
-      const ocrBlobPromise = buildOcrBlob(blob);
+      // One compressed blob serves both OCR and upload. Upload runs in
+      // parallel with the OCR roundtrip to a temp path; if OCR matches a
+      // different itemId than expected we still keep the file (single-item
+      // matches are the common path). This removes the second canvas pass
+      // and the OCR→upload sequential wait.
+      const tPrep = tNow();
+      const sharedBlobPromise = buildSharedBlob(blob);
       setState("ocr_running");
-      const ocrPromise = ocrBlobPromise
+      const ocrPromise = sharedBlobPromise
         .then(blobToBase64)
         .then(async (imageBase64) => {
-          perfLog("ocr_prep", tNow() - tOcrPrep);
+          perfLog("ocr_prep", tNow() - tPrep);
           const tOcr = tNow();
           const r = await withTimeout(
             supabase.functions.invoke("match-tag-photo", {
@@ -504,11 +507,9 @@ export function useAutoClearance({
           return r;
         });
 
-      // We need the matched item before we know which itemId to upload under,
-      // so the tag upload starts AFTER OCR returns. (Upload path is keyed by
-      // matched itemId — uploading speculatively would create orphaned files.)
       const { data, error } = await ocrPromise;
       if (error) throw error;
+
       const ocr = data?.ocr || {};
       const ranked: RankedMatch[] = data?.ranked || [];
       const decision: "auto" | "confirm" | "none" = data?.decision || "none";
