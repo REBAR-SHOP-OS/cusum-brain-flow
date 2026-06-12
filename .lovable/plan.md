@@ -1,40 +1,29 @@
-Plan to fix the Instagram publish failure at the root
+# Expand Approval Rights to Neel + Sattar
 
-Findings
-- The screenshot error is the same Meta code 2 media-ingestion failure: Instagram cannot fetch/process the image URL.
-- The failed database row is already marked failed, and it used the original PNG URL: `social-media-assets/images/6b789...png`.
-- Current code now tries to create an `ig-ready/*.jpg` derivative, but it still has two weaknesses:
-  - If JPEG materialization fails or is not immediately public, it silently falls back to the original PNG URL and still calls Meta.
-  - Manual publish and cron publish pass the original `image_url` into each IG page publish; the prepared URL is not persisted/centralized before fan-out, so retries can keep showing/using the original failed media path.
+Currently only `neel@rebar.shop` can approve social posts (HARD rule enforced in frontend, DB trigger, and regression tests). User wants `sattar@rebar.shop` to also be an approver.
 
-Implementation plan
-1. Make IG image preparation mandatory before Meta calls
-   - For Instagram non-video posts/stories, convert the source image to a JPEG derivative in the public social media storage path: `social-media-assets/ig-ready/<hash>.jpg`.
-   - Verify that the final JPEG URL is publicly readable with `HEAD` and fallback `GET` before any Meta API call.
-   - If preparation fails, stop before Meta and show a clear internal error like “Instagram image preparation failed; retry after re-upload/regenerate,” instead of sending the original URL and producing Meta code 2.
+## Changes
 
-2. Centralize the prepared media URL once per publish run
-   - Prepare the Instagram image once in `social-publish` before publishing to the selected pages.
-   - Pass the same verified JPEG URL to all IG pages instead of re-preparing per page.
-   - Apply the same shared preparation path in `social-cron-publish` so scheduled publishing behaves exactly like manual publishing.
+### 1. Frontend gates
+- `src/components/social/ApprovalsPanel.tsx` — change `canApprove` to accept both emails:
+  ```ts
+  const APPROVERS = ["neel@rebar.shop", "sattar@rebar.shop"];
+  const canApprove = APPROVERS.includes(currentUserEmail ?? "");
+  ```
+  Update button label/tooltip ("Neel only" → "Approvers only").
+- `src/components/social/PostReviewPanel.tsx` — same allowlist in the Neel Approval Gate region.
 
-3. Persist the prepared URL for truthful retries/display
-   - When a post has a prepared IG JPEG URL, update the Instagram row’s `image_url` to that `ig-ready/*.jpg` URL before publishing.
-   - This makes manual retries use the verified URL and keeps the UI aligned with what was actually sent to Instagram.
+### 2. Database trigger
+- New migration replacing `enforce_neel_only_approval` to allow `neel_approved=true` to be set by either `neel@rebar.shop` or `sattar@rebar.shop` (looked up via `auth.users.email` from `auth.uid()`). Keeps service-role/admin bypass forbidden.
 
-4. Improve error handling and UI feedback
-   - Do not return a huge repeated red error blob for every page when the single shared media URL fails preparation.
-   - Return one clear media-preparation error before per-page publishing starts.
-   - Keep per-page Meta errors only for real page/account-level failures after media preparation succeeds.
+### 3. Regression tests
+- `tests/regression/social/neel-only-approval.test.ts` → rename concept to `approver-allowlist.test.ts` (or update in place): assert allowlist contains both `neel@` and `sattar@`, and does NOT include `radin@`, `zahra@`, or other emails. Update DB-trigger grep to match the new trigger name/body.
 
-5. Regression coverage
-   - Update the existing IG durable JPEG regression test to require:
-     - no silent fallback to the original URL after failed materialization,
-     - preparation happens before IG page fan-out,
-     - manual and cron publish both use the shared prepared media path,
-     - prepared `ig-ready/*.jpg` URL is persisted for retry/display.
+### 4. Memory update
+- Update `mem://index.md` Core rule "Neel Approval Gate (HARD)" → "Approver Gate (HARD): only `neel@rebar.shop` and `sattar@rebar.shop` may set `neel_approved=true`." Update referenced memory file accordingly.
 
-6. Validation after implementation
-   - Run targeted social publishing regression tests.
-   - Check the failed row/recent logs to confirm future attempts no longer send the original PNG/proxy URL to Meta.
-   - Deploy the updated edge functions after tests pass.
+## Out of scope
+- Column name `neel_approved` stays (renaming would cascade through many files); semantics simply broaden to "approver-approved".
+- No change to who can reject (any reviewer can still reject).
+
+Confirm to proceed.
