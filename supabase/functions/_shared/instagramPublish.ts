@@ -255,8 +255,25 @@ export async function publishInstagramMedia({
     }
 
     console.log(
-      `${logPrefix} Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}`,
+      `${logPrefix} Creating container for IG account ${igAccountId}, media_type=${containerBody.media_type || "IMAGE"}, url=${imageUrl}, content_type=${mediaDetails.contentType || "unknown"}, size=${mediaDetails.contentLength ?? "unknown"}`,
     );
+
+    // Pre-flight: verify Meta can actually fetch the media URL. Code 2 ("unexpected
+    // error") on container creation across multiple accounts almost always means
+    // Meta's fetcher cannot read the URL (403, redirect, wrong content-type, etc).
+    try {
+      const head = await fetch(imageUrl, { method: "HEAD", redirect: "follow" });
+      if (!head.ok) {
+        console.error(
+          `${logPrefix} Media URL not publicly fetchable: HTTP ${head.status} for ${imageUrl}`,
+        );
+        return {
+          error: `Instagram could not fetch the media (HTTP ${head.status}). The image URL is not publicly accessible — re-upload the asset and try again.`,
+        };
+      }
+    } catch (e) {
+      console.warn(`${logPrefix} HEAD pre-flight failed (continuing): ${(e as Error).message}`);
+    }
 
     let containerData: any;
     // Exponential backoff with jitter for Meta's transient code 2
@@ -304,7 +321,7 @@ export async function publishInstagramMedia({
       if (e.is_transient || e.code === 1 || e.code === 2) {
         return {
           error:
-            "Instagram is temporarily unavailable (Meta transient error). Please retry in 1–2 minutes.",
+            `Instagram rejected the media (Meta code ${e.code}, fbtrace ${e.fbtrace_id || "n/a"}). This usually means Meta could not fetch/process the image at this URL. Re-upload the asset or wait 2–5 minutes and retry.`,
         };
       }
       return { error: `Instagram: ${containerData.error.message}` };
