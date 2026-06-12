@@ -71,7 +71,7 @@ export function useClearanceData() {
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
         .select(
-          "id, cut_plan_id, bar_code, cut_length_mm, unit_system, source_total_length_text, mark_number, drawing_ref, ref_no, asa_shape_code, total_pieces, bend_completed_pieces, created_at, cut_plans!inner(id, name, status, project_name, project_id, company_id, barlist_id, projects(id, name, customer_id, customers(name)), barlists(name, revision_no, status))"
+          "id, cut_plan_id, bar_code, cut_length_mm, unit_system, source_total_length_text, mark_number, drawing_ref, ref_no, asa_shape_code, total_pieces, bend_completed_pieces, ready_at, cut_plans!inner(id, name, status, project_name, project_id, company_id, barlist_id, projects(id, name, customer_id, customers(name)), barlists(name, revision_no, status))"
         )
         .eq("phase", "clearance")
         .eq("cut_plans.company_id", companyId!);
