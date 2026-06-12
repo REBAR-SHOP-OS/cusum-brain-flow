@@ -266,8 +266,12 @@ export function useAutoClearance({
     blob: Blob,
   ): Promise<string> => {
     const tCompress = tNow();
+    // Aggressive compress for clearance photos: ~1024px max edge, JPEG q=0.7.
+    // Full-res phone shots (3-5 MB) used to dominate the upload roundtrip.
     const compressed = await compressImage(
-      new File([blob], `${kind}-${Date.now()}.jpg`, { type: "image/jpeg" })
+      new File([blob], `${kind}-${Date.now()}.jpg`, { type: "image/jpeg" }),
+      1024,
+      0.7,
     );
     perfLog("compress", tNow() - tCompress, { kind, bytes: compressed.size });
     const ext = compressed.name.split(".").pop() || "jpg";
