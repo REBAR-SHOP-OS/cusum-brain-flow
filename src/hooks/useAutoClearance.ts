@@ -217,7 +217,7 @@ export function useAutoClearance({
   // Hard ceiling for any single AI roundtrip. If the function call hangs, we
   // bail out cleanly and reset the camera to ready instead of leaving the UI
   // stuck on VERIFYING / READING TAG forever.
-  const AI_TIMEOUT_MS = 12000;
+  const AI_TIMEOUT_MS = 8000;
   async function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
     return await new Promise<T>((resolve, reject) => {
       const t = window.setTimeout(
@@ -266,8 +266,12 @@ export function useAutoClearance({
     blob: Blob,
   ): Promise<string> => {
     const tCompress = tNow();
+    // Aggressive compress for clearance photos: ~1024px max edge, JPEG q=0.7.
+    // Full-res phone shots (3-5 MB) used to dominate the upload roundtrip.
     const compressed = await compressImage(
-      new File([blob], `${kind}-${Date.now()}.jpg`, { type: "image/jpeg" })
+      new File([blob], `${kind}-${Date.now()}.jpg`, { type: "image/jpeg" }),
+      1024,
+      0.7,
     );
     perfLog("compress", tNow() - tCompress, { kind, bytes: compressed.size });
     const ext = compressed.name.split(".").pop() || "jpg";
