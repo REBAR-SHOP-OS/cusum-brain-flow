@@ -465,7 +465,7 @@ Deno.serve((req) =>
             console.log(`[social-cron-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`);
             const igResults = await Promise.allSettled(
               igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }) =>
-                publishToInstagram(igAccountId, pat, message, post.image_url, post.content_type || "post", post.cover_image_url)
+                publishToInstagram(igAccountId, pat, message, igImageUrl, post.content_type || "post", post.cover_image_url)
                   .then(r => ({ ...r, targetPageName: tpn }))
                   .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
               )
