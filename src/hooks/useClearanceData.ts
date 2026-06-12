@@ -140,7 +140,7 @@ export function useClearanceData() {
           if (!blOk || !cpOk) {
             triage = "upstream_not_ready";
           } else {
-            const createdMs = item.created_at ? new Date(item.created_at).getTime() : nowMs;
+            const createdMs = item.ready_at ? new Date(item.ready_at).getTime() : nowMs;
             const ageHrs = (nowMs - createdMs) / 36e5;
             if (ageHrs > STALE_HOURS) triage = "stale";
           }
