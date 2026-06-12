@@ -138,13 +138,17 @@ Deno.serve((req) =>
         const { data: existing } = await supabaseAdmin
           .from("social_posts")
           .select(
-            "status, neel_approved, declined_by, title, platform, page_name, scheduled_date, content, image_url, publishing_started_at, publishing_lock_id",
+            "status, neel_approved, declined_by, title, platform, page_name, scheduled_date, content, image_url, publishing_started_at, publishing_lock_id, page_results",
           )
           .eq("id", post_id)
           .maybeSingle();
         postRecord = existing;
 
-        if (existing?.status === "published") {
+        const existingPageResults = getStoredPageResults(existing?.page_results);
+        const hasRetryableFailedPages = existingPageResults.some((p) =>
+          p?.status === "failed"
+        );
+        if (existing?.status === "published" && !hasRetryableFailedPages) {
           return new Response(
             JSON.stringify({ error: "This post has already been published." }),
             {
@@ -311,7 +315,7 @@ Deno.serve((req) =>
         // ── Atomic Lock ──────────────────────────────────────────────
         // Allow retry from "failed" when manually triggered (force_publish)
         const allowedStatuses = force_publish
-          ? ["scheduled", "draft", "failed", "pending_approval"]
+          ? ["scheduled", "draft", "failed", "pending_approval", "published"]
           : ["scheduled", "draft"];
         const lock = await acquirePublishLock(
           supabaseAdmin,
