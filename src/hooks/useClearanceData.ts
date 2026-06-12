@@ -66,9 +66,13 @@ export function useClearanceData() {
     queryKey: ["clearance-items", companyId],
     enabled: !!user && !!companyId,
     queryFn: async () => {
+      // Narrow column list — only fields actually consumed below. Cuts payload
+      // size on the manifest load and on every realtime invalidation tick.
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
-        .select("*, cut_plans!inner(id, name, status, project_name, project_id, company_id, barlist_id, projects(id, name, customer_id, customers(name)), barlists(name, revision_no, status))")
+        .select(
+          "id, cut_plan_id, bar_code, cut_length_mm, unit_system, source_total_length_text, mark_number, drawing_ref, ref_no, asa_shape_code, total_pieces, bend_completed_pieces, created_at, cut_plans!inner(id, name, status, project_name, project_id, company_id, barlist_id, projects(id, name, customer_id, customers(name)), barlists(name, revision_no, status))"
+        )
         .eq("phase", "clearance")
         .eq("cut_plans.company_id", companyId!);
 
@@ -78,7 +82,9 @@ export function useClearanceData() {
       const itemIds = items.map((i: any) => i.id);
       const { data: evidence } = await supabase
         .from("clearance_evidence")
-        .select("*")
+        .select(
+          "id, cut_plan_item_id, status, verification_state, mismatch_reason, material_photo_url, tag_scan_url, storage_zone, verified_at, verified_by"
+        )
         .in("cut_plan_item_id", itemIds);
 
       const evidenceMap = new Map(
