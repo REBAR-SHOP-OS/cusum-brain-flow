@@ -201,6 +201,14 @@ export async function publishInstagramMedia({
     const isVideo = mediaDetails.isVideo;
     const requiresProcessing = isVideo || isStory;
 
+    // Route non-video images through the ig-media-proxy so Meta sees a clean
+    // image/jpeg URL with no Cloudflare bot-management cookies and no PNG
+    // edge-case quirks that have caused intermittent "code 2 / unexpected
+    // error" container failures across all linked IG accounts.
+    if (!isVideo) {
+      imageUrl = wrapWithIgMediaProxy(imageUrl);
+    }
+
     if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
       console.warn(
         `${logPrefix} BLOCKED unsupported Instagram video (extension/mime): content_type=${mediaDetails.contentType || "unknown"}, url=${imageUrl}`,
