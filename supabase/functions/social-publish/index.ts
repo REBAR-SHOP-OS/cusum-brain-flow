@@ -405,11 +405,29 @@ Deno.serve((req) =>
       const resolvedPageName = (force_publish && page_name)
         ? page_name
         : (postRecord?.page_name || page_name || "");
-      const individualPages = resolvedPageName
+      let individualPages = resolvedPageName
         ? resolvedPageName.split(", ").map((p: string) => p.trim()).filter(
           Boolean,
         )
         : [];
+      const storedPageResults = getStoredPageResults(postRecord?.page_results);
+      const alreadySuccessfulPages = new Set(
+        storedPageResults
+          .filter((p) => p?.status === "success" && p.name)
+          .map((p) => normalizePageName(p.name!)),
+      );
+      if (force_publish && alreadySuccessfulPages.size > 0) {
+        const before = individualPages.length;
+        individualPages = individualPages.filter((name) =>
+          !alreadySuccessfulPages.has(normalizePageName(name))
+        );
+        const skipped = before - individualPages.length;
+        if (skipped > 0) {
+          console.log(
+            `[social-publish] Retry will skip ${skipped} already-published page(s) for post ${post_id}`,
+          );
+        }
+      }
       console.log(
         `[social-publish] Resolved pages: [${
           individualPages.join(", ")
@@ -417,7 +435,9 @@ Deno.serve((req) =>
       );
 
       const pageErrors: string[] = [];
-      const pageSuccesses: string[] = [];
+      const pageSuccesses: string[] = storedPageResults
+        .filter((p) => p?.status === "success" && p.name)
+        .map((p) => p.name!);
 
       // Get lock ID for final status update
       let lockId: string | null = null;
