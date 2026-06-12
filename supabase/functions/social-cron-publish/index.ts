@@ -310,6 +310,31 @@ Deno.serve((req) =>
           const publishedIgIds = new Set<string>();
           const igPublishQueue: Array<{ igAccountId: string; pageAccessToken: string; targetPageName: string }> = [];
 
+          // ── One-shot Instagram image preparation (same contract as social-publish) ──
+          let igImageUrl: string | null | undefined = post.image_url;
+          if (post.platform === "instagram" && post.image_url) {
+            const isVideoUrl = /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(post.image_url);
+            if (!isVideoUrl) {
+              const prepared = await prepareInstagramImageUrl(post.image_url, "[social-cron-publish][IG-prep]");
+              if (!prepared.ok) {
+                console.error(`[social-cron-publish] IG image preparation failed for post ${post.id}: ${prepared.error}`);
+                for (const tpn of individualPages) {
+                  pageErrors.push(`Page "${tpn}": ${prepared.error}`);
+                }
+                individualPages = [];
+              } else {
+                igImageUrl = prepared.url;
+                if (prepared.prepared && igImageUrl !== post.image_url) {
+                  await supabase
+                    .from("social_posts")
+                    .update({ image_url: igImageUrl })
+                    .eq("id", post.id);
+                }
+              }
+            }
+          }
+
+
           for (const targetPageName of individualPages) {
             if (!targetPageName) {
               pageErrors.push("Empty page name — skipped");
