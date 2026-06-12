@@ -448,6 +448,7 @@ export function useAutoClearance({
     if (scanLockRef.current || busy) return;
     scanLockRef.current = true;
     cycleStartRef.current = tNow();
+    trustedTagRef.current = false;
     clearanceFlowLog("scan_started", { kind: "tag", manifestKey, refine_attempt: refineAttemptsRef.current });
     if (!navigator.onLine) {
       try {
