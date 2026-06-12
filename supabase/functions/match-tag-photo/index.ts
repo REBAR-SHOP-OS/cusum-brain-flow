@@ -275,6 +275,8 @@ Deno.serve(async (req) => {
           },
         }],
         tool_choice: { type: 'function', function: { name: 'extract_tag' } },
+        // Tool-call response is a small JSON object — cap to keep latency tight.
+        max_tokens: 256,
       }),
     });
 

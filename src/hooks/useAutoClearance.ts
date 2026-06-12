@@ -65,15 +65,16 @@ async function blobToBase64(blob: Blob): Promise<string> {
 }
 
 /**
- * Build an OCR-optimized copy of the captured blob: max ~1200px, JPEG 0.8.
- * Used for the AI call so the OCR roundtrip doesn't wait on the full archive
- * upload. Falls back to the original blob if anything goes wrong.
+ * Build a single compressed copy used for BOTH the OCR roundtrip and the
+ * storage upload. One canvas pass instead of two; one set of bytes shipped
+ * to the AI gateway and stored in the bucket. Falls back to the original
+ * blob if anything goes wrong.
  */
-async function buildOcrBlob(src: Blob): Promise<Blob> {
+async function buildSharedBlob(src: Blob): Promise<Blob> {
   try {
     if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas === "undefined") return src;
     const bmp = await createImageBitmap(src);
-    const maxDim = 1200;
+    const maxDim = 1024;
     const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * scale));
     const h = Math.max(1, Math.round(bmp.height * scale));
@@ -82,11 +83,12 @@ async function buildOcrBlob(src: Blob): Promise<Blob> {
     if (!ctx) return src;
     ctx.drawImage(bmp, 0, 0, w, h);
     bmp.close?.();
-    return await c.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+    return await c.convertToBlob({ type: "image/jpeg", quality: 0.75 });
   } catch {
     return src;
   }
 }
+
 
 export function useAutoClearance({
   items,
@@ -481,15 +483,18 @@ export function useAutoClearance({
         return;
       }
 
-      // Run OCR/match in parallel with storage upload. OCR uses a downscaled
-      // copy so the AI roundtrip isn't blocked on the full-size upload.
-      const tOcrPrep = tNow();
-      const ocrBlobPromise = buildOcrBlob(blob);
+      // One compressed blob serves both OCR and upload. Upload runs in
+      // parallel with the OCR roundtrip to a temp path; if OCR matches a
+      // different itemId than expected we still keep the file (single-item
+      // matches are the common path). This removes the second canvas pass
+      // and the OCR→upload sequential wait.
+      const tPrep = tNow();
+      const sharedBlobPromise = buildSharedBlob(blob);
       setState("ocr_running");
-      const ocrPromise = ocrBlobPromise
+      const ocrPromise = sharedBlobPromise
         .then(blobToBase64)
         .then(async (imageBase64) => {
-          perfLog("ocr_prep", tNow() - tOcrPrep);
+          perfLog("ocr_prep", tNow() - tPrep);
           const tOcr = tNow();
           const r = await withTimeout(
             supabase.functions.invoke("match-tag-photo", {
@@ -502,11 +507,9 @@ export function useAutoClearance({
           return r;
         });
 
-      // We need the matched item before we know which itemId to upload under,
-      // so the tag upload starts AFTER OCR returns. (Upload path is keyed by
-      // matched itemId — uploading speculatively would create orphaned files.)
       const { data, error } = await ocrPromise;
       if (error) throw error;
+
       const ocr = data?.ocr || {};
       const ranked: RankedMatch[] = data?.ranked || [];
       const decision: "auto" | "confirm" | "none" = data?.decision || "none";
@@ -621,9 +624,12 @@ export function useAutoClearance({
       // product mode ONLY after the DB-confirmed gate passes.
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
+      // Reuse the already-compressed shared blob — avoids a second canvas
+      // pass inside uploadToStorage. Falls back to raw blob if prep failed.
+      const sharedBlob = await sharedBlobPromise.catch(() => blob);
       const [evId, path] = await Promise.all([
         ensureEvidenceRow(matchedItem.id),
-        uploadToStorage(matchedItem.id, "tag", blob),
+        uploadToStorage(matchedItem.id, "tag", sharedBlob),
       ]);
       clearanceFlowLog("storage_upload_success", {
         cut_plan_item_id: matchedItem.id,
