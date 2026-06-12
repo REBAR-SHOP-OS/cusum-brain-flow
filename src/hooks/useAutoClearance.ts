@@ -234,6 +234,10 @@ export function useAutoClearance({
   // Refine attempts — bounded so a single bad tag image can't pin the UI in
   // a perpetual READING/MATCHING state. Reset on every successful tag accept.
   const refineAttemptsRef = useRef(0);
+  // Set true when the tag OCR matched cleanly (decision === "auto" with high
+  // score). Lets the product step skip the redundant validate-clearance-photo
+  // AI call entirely — the tag already proved this is the right item.
+  const trustedTagRef = useRef(false);
   const MAX_REFINE_ATTEMPTS = 2;
 
   // Recent finalize dedupe — if the operator (or a chatty shutter) re-scans
@@ -444,6 +448,7 @@ export function useAutoClearance({
     if (scanLockRef.current || busy) return;
     scanLockRef.current = true;
     cycleStartRef.current = tNow();
+    trustedTagRef.current = false;
     clearanceFlowLog("scan_started", { kind: "tag", manifestKey, refine_attempt: refineAttemptsRef.current });
     if (!navigator.onLine) {
       try {
@@ -607,6 +612,9 @@ export function useAutoClearance({
 
       // Reset refine counter — we have a usable match.
       refineAttemptsRef.current = 0;
+      // Mark the tag as trusted only on a clean auto-decision with strong
+      // score. Partial-accept paths stay untrusted so material-validate runs.
+      trustedTagRef.current = decision === "auto" && best.score >= 0.85 && !partialAutoAccept;
 
       // High confidence (strict MARK+DWG+Ref) — upload tag photo + ensure
       // evidence row in parallel, then write the evidence row update. Move to
@@ -837,21 +845,35 @@ export function useAutoClearance({
         verification_state: productEvidence.verification_state,
       });
       setState("product_validating");
-      const { data: vData, error: vErr } = await withTimeout(
-        supabase.functions.invoke(
-          "validate-clearance-photo",
-          {
-            body: {
-              photo_storage_path: path,
-              expected_mark_number: item?.mark_number,
-              expected_drawing_ref: item?.drawing_ref,
-              photo_type: "material",
+      let vData: any;
+      let vErr: any = null;
+      if (trustedTagRef.current) {
+        // Tag already matched cleanly (decision=auto + high score). The
+        // material-validate AI call is redundant — skip it to cut ~1-2s.
+        clearanceFlowLog("validate_skipped_trusted_tag", {
+          evidenceId: evId,
+          cut_plan_item_id: activeItemId,
+        });
+        vData = { valid: true, confidence: "trusted_tag", reason: "tag matched with high confidence" };
+      } else {
+        const res = await withTimeout(
+          supabase.functions.invoke(
+            "validate-clearance-photo",
+            {
+              body: {
+                photo_storage_path: path,
+                expected_mark_number: item?.mark_number,
+                expected_drawing_ref: item?.drawing_ref,
+                photo_type: "material",
+              },
             },
-          },
-        ),
-        AI_TIMEOUT_MS,
-        "validate-clearance-photo",
-      );
+          ),
+          AI_TIMEOUT_MS,
+          "validate-clearance-photo",
+        );
+        vData = res.data;
+        vErr = res.error;
+      }
       perfLog("product_update+validate", tNow() - tParallel);
       if (vErr) throw vErr;
 
@@ -982,7 +1004,7 @@ export function useAutoClearance({
           clearanceFlowLog("auto_advance", { next: "waiting_tag", remaining });
           setState("waiting_tag");
         }
-      }, 450);
+      }, 120);
     } catch (e: any) {
       console.error("product capture failed", e);
       const isTimeout = /timed out/i.test(e?.message || "");
