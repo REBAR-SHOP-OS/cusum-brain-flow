@@ -327,11 +327,16 @@ export async function publishInstagramMedia({
     const isVideo = mediaDetails.isVideo;
     const requiresProcessing = isVideo || isStory;
 
-    // Route non-video images to a durable JPEG object URL so Meta sees a plain,
-    // public image/jpeg file instead of an Edge Function proxy URL. Meta code 2
-    // repeatedly hit all linked IG accounts when the media URL was proxied.
+    // Safety net: callers (social-publish / social-cron-publish) are expected
+    // to call prepareInstagramImageUrl ONCE upstream and pass the resulting
+    // ig-ready JPEG URL here. If a raw URL slips through, prepare it now and
+    // fail loudly instead of letting Meta hit it directly.
     if (!isVideo) {
-      imageUrl = await materializeInstagramImageUrl(imageUrl, logPrefix);
+      const prepared = await prepareInstagramImageUrl(imageUrl, logPrefix);
+      if (!prepared.ok) {
+        return { error: prepared.error };
+      }
+      imageUrl = prepared.url;
     }
 
     if (isVideo && isClearlyUnsupportedInstagramVideo(imageUrl, mediaDetails.contentType)) {
