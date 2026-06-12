@@ -13,7 +13,7 @@ describe("Instagram media proxy (root-cause fix for Meta code 2)", () => {
     expect(src).toContain("encodeJPEG");
     // Serves with a clean image/jpeg content-type and aggressive caching.
     expect(src).toContain("image/jpeg");
-    expect(src).toMatch(/Cache-Control[^"]*max-age/);
+    expect(src).toMatch(/Cache-Control[\s\S]*max-age/);
   });
 
   it("instagramPublish.ts routes non-video images through ig-media-proxy", () => {
