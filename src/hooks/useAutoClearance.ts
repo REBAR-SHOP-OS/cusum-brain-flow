@@ -1003,7 +1003,7 @@ export function useAutoClearance({
           clearanceFlowLog("auto_advance", { next: "waiting_tag", remaining });
           setState("waiting_tag");
         }
-      }, 450);
+      }, 120);
     } catch (e: any) {
       console.error("product capture failed", e);
       const isTimeout = /timed out/i.test(e?.message || "");
