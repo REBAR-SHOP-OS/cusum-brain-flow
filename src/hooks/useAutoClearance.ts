@@ -65,15 +65,16 @@ async function blobToBase64(blob: Blob): Promise<string> {
 }
 
 /**
- * Build an OCR-optimized copy of the captured blob: max ~1200px, JPEG 0.8.
- * Used for the AI call so the OCR roundtrip doesn't wait on the full archive
- * upload. Falls back to the original blob if anything goes wrong.
+ * Build a single compressed copy used for BOTH the OCR roundtrip and the
+ * storage upload. One canvas pass instead of two; one set of bytes shipped
+ * to the AI gateway and stored in the bucket. Falls back to the original
+ * blob if anything goes wrong.
  */
-async function buildOcrBlob(src: Blob): Promise<Blob> {
+async function buildSharedBlob(src: Blob): Promise<Blob> {
   try {
     if (typeof createImageBitmap !== "function" || typeof OffscreenCanvas === "undefined") return src;
     const bmp = await createImageBitmap(src);
-    const maxDim = 1200;
+    const maxDim = 1024;
     const scale = Math.min(1, maxDim / Math.max(bmp.width, bmp.height));
     const w = Math.max(1, Math.round(bmp.width * scale));
     const h = Math.max(1, Math.round(bmp.height * scale));
@@ -82,11 +83,12 @@ async function buildOcrBlob(src: Blob): Promise<Blob> {
     if (!ctx) return src;
     ctx.drawImage(bmp, 0, 0, w, h);
     bmp.close?.();
-    return await c.convertToBlob({ type: "image/jpeg", quality: 0.8 });
+    return await c.convertToBlob({ type: "image/jpeg", quality: 0.75 });
   } catch {
     return src;
   }
 }
+
 
 export function useAutoClearance({
   items,
