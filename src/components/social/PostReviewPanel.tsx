@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { format } from "date-fns";
 import { useSocialPosts, type SocialPost } from "@/hooks/useSocialPosts";
+import { resolveDisplayStatus } from "@/lib/socialPostStatus";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { cn } from "@/lib/utils";
@@ -187,7 +188,12 @@ export function PostReviewPanel({
   const [fbPublishReady, setFbPublishReady] = useState<boolean | null>(null);
   const [fbMissingScopes, setFbMissingScopes] = useState<string[]>([]);
 
-  const isPublished = post?.status === "published";
+  // Derive displayed status from real signal so the side panel matches the
+  // calendar — a stuck-"publishing" row shows Failed/Published immediately
+  // instead of waiting for cron stale-lock recovery.
+  const displayStatus = post ? resolveDisplayStatus(post as any).displayStatus : null;
+  const isPublished = displayStatus === "published";
+  const isFailedDisplay = displayStatus === "failed";
 
   // Fetch current user email for Neel approval gate
   useEffect(() => {
@@ -1377,7 +1383,7 @@ export function PostReviewPanel({
 
               {/* ── Footer Actions ── */}
               {/* Failed status banner + retry */}
-              {(post.status as string) === "failed" && (
+              {isFailedDisplay && (
                 <div className="p-4 border-t space-y-2">
                   <div className="w-full rounded-lg bg-destructive/10 border border-destructive/30 p-3 text-center space-y-1">
                     <span className="text-sm font-medium text-destructive">Publishing Failed ❌</span>

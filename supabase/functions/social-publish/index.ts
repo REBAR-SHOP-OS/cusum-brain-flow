@@ -65,6 +65,13 @@ Deno.serve((req) =>
   handleRequest(
     req,
     async ({ userId, serviceClient: supabaseAdmin, body, req: rawReq }) => {
+      // Tracked across the whole publish path so the finally{} safety net can
+      // release any orphaned publishing lock — guarantees the UI never sees
+      // a row stuck on "publishing" because an early-return / throw skipped
+      // the explicit releasePublishLock calls below.
+      let trackedPostId: string | null = null;
+      let trackedLockId: string | null = null;
+      try {
       // Flexible auth: allow admin/marketing roles OR super admin emails
       const hasPublishRole = await hasAnyRole(supabaseAdmin, userId, [
         "admin",
@@ -334,6 +341,8 @@ Deno.serve((req) =>
             },
           );
         }
+        trackedPostId = post_id;
+        trackedLockId = lock.lockId ?? null;
         console.log(
           `[social-publish] Acquired lock for post ${post_id}: lockId=${lock.lockId}`,
         );
@@ -924,6 +933,57 @@ Deno.serve((req) =>
             headers: { ...corsHeaders, "Content-Type": "application/json" },
           },
         );
+      }
+      } finally {
+        // Safety net: if we acquired a lock but bailed before releasing it
+        // (early return, thrown error, unhandled platform branch), finalize
+        // here using the same rules as recoverStaleLocks. Idempotent — if
+        // release already happened, the lockId match no-ops.
+        if (trackedPostId && trackedLockId) {
+          try {
+            const { data: still } = await supabaseAdmin
+              .from("social_posts")
+              .select("status, page_results")
+              .eq("id", trackedPostId)
+              .eq("publishing_lock_id", trackedLockId)
+              .maybeSingle();
+            if (still && (still as any).status === "publishing") {
+              const results = getStoredPageResults((still as any).page_results);
+              const finalized = results.map((p) =>
+                p.status === "pending"
+                  ? { ...p, status: "failed" as const, error: "Publish run ended without finalizing", completed_at: new Date().toISOString() }
+                  : p,
+              );
+              const successes = finalized.filter((p) => p.status === "success");
+              const failures = finalized.filter((p) => p.status === "failed");
+              let finalStatus: "published" | "failed";
+              let lastError: string | null;
+              if (finalized.length === 0) {
+                finalStatus = "failed";
+                lastError = "Publish run ended without recording any page results";
+              } else if (successes.length === finalized.length) {
+                finalStatus = "published";
+                lastError = null;
+              } else if (successes.length > 0) {
+                finalStatus = "published";
+                lastError = `Partial: ${failures.map(formatPageError).join("; ")}`;
+              } else {
+                finalStatus = "failed";
+                lastError = failures.map(formatPageError).join("; ") || "Publish failed";
+              }
+              await releasePublishLock(
+                supabaseAdmin,
+                trackedPostId,
+                trackedLockId,
+                finalStatus,
+                { last_error: lastError, qa_status: finalStatus === "failed" ? "needs_review" : undefined },
+              );
+              console.warn(`[social-publish] finally{} finalized stuck post ${trackedPostId} -> ${finalStatus}`);
+            }
+          } catch (e) {
+            console.error(`[social-publish] finally{} finalize failed: ${(e as Error).message}`);
+          }
+        }
       }
     },
     {

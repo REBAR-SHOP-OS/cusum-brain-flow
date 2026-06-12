@@ -184,9 +184,11 @@ export async function recordPageResult(
 export async function recoverStaleLocks(
   supabase: ReturnType<typeof createClient>,
 ): Promise<string[]> {
-  // Two thresholds: 10 min for fast (text/image) publishes, 20 min for IG videos/Reels
-  // because IG's async media processing routinely takes >10 min on first try.
-  const cutoffFast = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+  // Two thresholds: 3 min for fast (text/image) publishes so the calendar UI
+  // doesn't sit on "Publishing 🔄" for 10 min when the publish has clearly
+  // failed; 20 min for IG videos/Reels because IG's async media processing
+  // routinely takes >10 min on first try.
+  const cutoffFast = new Date(Date.now() - 3 * 60 * 1000).toISOString();
   const cutoffVideo = new Date(Date.now() - 20 * 60 * 1000).toISOString();
 
   // Find all stale candidates (both timestamped and legacy)
