@@ -34,6 +34,26 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Wrap a Supabase Storage URL with the ig-media-proxy edge function so Meta's
+ * fetcher receives a clean image/jpeg response (no CF bot-management cookies,
+ * PNG sources re-encoded to JPEG). Non-Supabase URLs are returned unchanged.
+ */
+function wrapWithIgMediaProxy(srcUrl: string): string {
+  try {
+    const parsed = new URL(srcUrl);
+    if (!parsed.hostname.endsWith(".supabase.co")) return srcUrl;
+    if (parsed.pathname.includes("/functions/v1/ig-media-proxy")) return srcUrl;
+    const projectUrl = Deno.env.get("SUPABASE_URL");
+    if (!projectUrl) return srcUrl;
+    return `${projectUrl.replace(/\/$/, "")}/functions/v1/ig-media-proxy?src=${
+      encodeURIComponent(srcUrl)
+    }`;
+  } catch {
+    return srcUrl;
+  }
+}
+
 function isAuthError(error: MetaError | undefined) {
   if (!error) return false;
 
