@@ -58,7 +58,8 @@ Return ONLY valid JSON in this format:
     try {
       const result = await callAI({
         provider: "gemini",
-        model: "gemini-2.5-flash",
+        // Lite is ~2-3× faster than flash for printed-tag OCR — accuracy is fine here.
+        model: "gemini-2.5-flash-lite",
         agentName: "shopfloor",
         messages: [
           { role: "system", content: systemPrompt },
@@ -70,7 +71,8 @@ Return ONLY valid JSON in this format:
             ],
           },
         ],
-        maxTokens: 1000,
+        // Response is a small JSON object — 256 tokens is plenty.
+        maxTokens: 256,
         temperature: 0.1,
       });
 
