@@ -28,6 +28,7 @@ type MetaError = {
 };
 
 const PROCESSING_PUBLISH_DELAYS_MS = [15000, 30000, 45000, 60000, 60000, 60000];
+const IMAGE_PUBLISH_DELAYS_MS = [5000, 10000, 20000, 30000, 45000];
 const INSTAGRAM_VIDEO_SPEC_ERROR =
   "Instagram rejected the video. Likely cause: frame rate >60 fps, bitrate >25 Mbps, or H.264 level >4.x (common with browser-recorded MP4s). Re-publish from the app — it will auto-normalize the video to IG-safe spec (30 fps, 8 Mbps, level 4.1).";
 
@@ -112,13 +113,20 @@ function isSpuriousStatusError(error: MetaError | undefined) {
   return error.code === 100 && error.error_subcode === 33;
 }
 
+function isTransientMetaError(error: MetaError | undefined) {
+  if (!error) return false;
+  return error.is_transient === true || [1, 2, 4, 17, 32, 613].includes(error.code || 0);
+}
+
 async function detectMediaDetails(imageUrl: string) {
   let contentType = "";
+  let contentLength = "";
   let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
   if (!isVideo) {
     try {
       const head = await fetch(imageUrl, { method: "HEAD" });
       contentType = head.headers.get("content-type") || "";
+      contentLength = head.headers.get("content-length") || "";
       isVideo = contentType.startsWith("video/");
     } catch {
       // Ignore HEAD failures and fall back to URL detection only.
@@ -127,11 +135,12 @@ async function detectMediaDetails(imageUrl: string) {
     try {
       const head = await fetch(imageUrl, { method: "HEAD" });
       contentType = head.headers.get("content-type") || "";
+      contentLength = head.headers.get("content-length") || "";
     } catch {
       // Ignore HEAD failures and fall back to URL detection only.
     }
   }
-  return { isVideo, contentType };
+  return { isVideo, contentType, contentLength };
 }
 
 function isClearlyUnsupportedInstagramVideo(imageUrl: string, contentType: string) {
