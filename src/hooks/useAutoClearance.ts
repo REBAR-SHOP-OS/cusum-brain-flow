@@ -234,6 +234,10 @@ export function useAutoClearance({
   // Refine attempts — bounded so a single bad tag image can't pin the UI in
   // a perpetual READING/MATCHING state. Reset on every successful tag accept.
   const refineAttemptsRef = useRef(0);
+  // Set true when the tag OCR matched cleanly (decision === "auto" with high
+  // score). Lets the product step skip the redundant validate-clearance-photo
+  // AI call entirely — the tag already proved this is the right item.
+  const trustedTagRef = useRef(false);
   const MAX_REFINE_ATTEMPTS = 2;
 
   // Recent finalize dedupe — if the operator (or a chatty shutter) re-scans
