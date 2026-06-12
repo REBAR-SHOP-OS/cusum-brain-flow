@@ -1,53 +1,91 @@
 ## Problem
 
-When publishing an **image Story** (the card in your screenshot — a Canada World Cup PNG, no video), the toast still shows:
+The Instagram card from your screenshot (post `092234f7-…`, scheduled 10:00 AM) is stuck showing **"Publishing 🔄"** in the calendar, but the database tells the real story:
 
-> "Preparing video for Instagram… Re-encoding to Reels-safe spec (30 fps, H.264 level 4.1)."
+- `status = "publishing"` (still locked from 15:03 UTC)
+- `last_error` already contains all 6 IG per-page rejections (Meta code 2 on every page)
+- `page_results` was reset to all-pending on retry
+- `publishing_started_at` is fresh enough that the 10-min stale-lock recovery hasn't kicked in yet
 
-This is wrong and misleading. It also triggers `normalizeForInstagram(url)` on a PNG, which either silently fails or wastes time and bandwidth, and can corrupt the post by overwriting `image_url` with a re-encoded blob.
+So **the truth is "failed on every page"**, but the UI keeps showing the optimistic "Publishing" label until the cron-side stale-lock recovery (10 min for images, 20 min for IG video) eventually flips it. That delay is the display bug you're seeing.
 
-## Root Cause
+## Root Cause (two layers)
 
-`src/hooks/usePublishPost.ts` line 86–89:
+1. **Frontend trusts `status` blindly.** `SocialCalendar.tsx` (line 287 → `STATUS_LABELS[status]`) and card color block (line 310 onward) render whatever `social_posts.status` says, without consulting `page_results` or `last_error`. So a stuck-publishing post displays as in-progress even when every page already failed.
 
-```ts
-const looksLikeVideo =
-  /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(url) ||
-  post.content_type === "story" ||
-  post.content_type === "reel";
-```
-
-`content_type === "story"` is **not** proof of video. Stories on this app are predominantly image stories (per `Stories are image/video only — no caption needed` note in the side panel). The OR-branch on `content_type` forces the video pipeline on every story regardless of media kind.
+2. **Backend finalizer doesn't always release the lock.** `social-publish/index.ts` has multiple early-return paths (token failure, no pages, platform-not-supported) and the per-page loop can also exit before `releasePublishLock` runs if any awaited helper throws. The cron `recoverStaleLocks` is the only safety net and it waits 10 min (images) or 20 min (IG video), leaving the UI lying for that whole window.
 
 ## Fix (surgical, safe, additive)
 
-1. **`src/hooks/usePublishPost.ts`** — Replace the `looksLikeVideo` heuristic with a media-kind detector that requires actual video signal:
-   - Treat as video only if **URL extension** is `mp4|m4v|mov|webm|mkv` **OR** the HEAD `content-type` starts with `video/`.
-   - `content_type === "reel"` stays as a video hint (reels are always video) — but only used as a fallback after the URL/HEAD check is inconclusive.
-   - `content_type === "story"` is removed from the video gate entirely. A story is a video only when its URL/HEAD says so.
-   - The HEAD probe a few lines above already runs; reuse its result instead of probing twice.
+### A — Frontend: derive the displayed status from real signal (primary fix)
 
-2. **Toast only fires after we've actually decided to re-encode**, not before. Move the toast inside the `if (looksLikeVideo)` branch *after* `normalizeForInstagram` confirms it received a video (i.e., gate by `norm.reencoded` or by file MIME). This eliminates the false "Preparing video…" message on image stories.
+New helper `src/lib/socialPostStatus.ts` exporting `resolveDisplayStatus(post)`:
 
-3. **Guard `uploadSocialMediaAsset(..., "video")` overwrite** — only swap `image_url` when `norm.reencoded === true` AND the resulting blob's MIME starts with `video/`. Prevents an image story from being overwritten with a video blob URL on edge cases.
+- Start with `post.status`.
+- If `status === "publishing"`:
+  - Read `page_results` (Json array of `{ name, status: pending|success|failed }`).
+  - If `page_results.length > 0` and **every** entry is `"failed"` → return `"failed"`.
+  - If `page_results.length > 0` and **every** entry is `"success"` → return `"published"`.
+  - If `page_results.length > 0` and **mixed** (some success, some failed/pending) and `now − updated_at > 60 s` → return `"published"` (partial), with a `partial: true` flag.
+  - If `now − updated_at > 180 s` (images, no video extension on `image_url`) → return `"failed"` (stale; UI shouldn't lie longer than 3 min for image posts).
+  - Otherwise → stay `"publishing"`.
+- Returns `{ displayStatus, partial, isStale }`.
 
-4. **Regression test** — add `tests/regression/social/image-story-skips-video-pipeline.test.ts`:
-   - Asserts: given a `content_type: "story"` post with `image_url` ending in `.png`, the publish flow does not call `normalizeForInstagram` and does not emit the "Preparing video for Instagram…" toast.
-   - Asserts: given a `.mp4` URL with `content_type: "story"`, the video pipeline still runs (no regression for video stories).
+Hook the helper into:
+
+- **`src/components/social/SocialCalendar.tsx`** — replace direct `post.status` reads in `STATUS_LABELS[status]` and the card color cascade (`status === "publishing"` → blue) with `resolveDisplayStatus(post).displayStatus`. `partial` adds a small amber dot/tooltip; `isStale` forces the red `failed` styling.
+- **`src/components/social/PostReviewPanel.tsx`** — same resolver for the right-side "Publishing…" / "Approved by Neel" badge so the side panel matches the calendar.
+
+This alone fixes the user's complaint: the card will go red within 3 minutes of every page failing, instead of waiting 10 min for the cron.
+
+### B — Backend: guarantee finalization (root-cause hardening)
+
+`supabase/functions/social-publish/index.ts`:
+
+- Wrap the request handler body in a `try { … } finally { … }` block. The `finally` checks: if `post_id && lockId` and the post is still in `status="publishing"` with that `lockId`, read `page_results` and call `releasePublishLock(…, finalStatus)` where `finalStatus` is computed exactly like the cron recovery (all success → `published`, some success → `published` + partial last_error, none success / all pending → `failed`).
+- This is **idempotent** with the existing `await releasePublishLock(…, "published"|"failed")` calls — if release already happened, the `.eq("publishing_lock_id", lockId)` in `releasePublishLock` no-ops on the second call. Cost: zero. Benefit: no more orphaned `publishing` rows when an early-return path is hit.
+
+### C — Shorter image stale-lock window
+
+`supabase/functions/_shared/publishLock.ts → recoverStaleLocks`:
+
+- Drop the image cutoff from **10 min → 3 min** (matches the frontend's "stale → failed" threshold so cron and UI agree). Video / IG-reels cutoff stays at **20 min** (unchanged).
+- This is the only behavioral cron change.
+
+### D — One-shot cleanup of the existing stuck row
+
+After deploy, run a single targeted SQL via `supabase--read_query` to confirm `092234f7-…` and the two older `publishing` rows now flip — or finalize them with a migration that calls `recoverStaleLocks` semantics manually. (Will be performed in build mode, not as a permanent migration.)
+
+### E — Regression test
+
+`tests/regression/social/publishing-display-status.test.ts` (new):
+
+- `resolveDisplayStatus({ status: "publishing", page_results: [all failed], updated_at: 30s ago })` → `"failed"`.
+- `resolveDisplayStatus({ status: "publishing", page_results: [all success], updated_at: 30s ago })` → `"published"`.
+- `resolveDisplayStatus({ status: "publishing", page_results: [mixed], updated_at: 90s ago })` → `"published"` with `partial: true`.
+- `resolveDisplayStatus({ status: "publishing", page_results: [all pending], updated_at: 4 min ago, image_url: 'x.png' })` → `"failed"` (image stale).
+- `resolveDisplayStatus({ status: "publishing", page_results: [], updated_at: 30s ago })` → `"publishing"` (still legitimate in-flight).
+- `resolveDisplayStatus({ status: "published" })` → `"published"` (no transformation when status is already final).
 
 ## Files Touched
 
-- `src/hooks/usePublishPost.ts` — tighten `looksLikeVideo`, move toast inside re-encode branch, gate `image_url` overwrite on video MIME.
-- `tests/regression/social/image-story-skips-video-pipeline.test.ts` *(new)* — locks the rule.
+- `src/lib/socialPostStatus.ts` *(new)* — pure resolver.
+- `src/components/social/SocialCalendar.tsx` — swap `post.status` reads for resolver.
+- `src/components/social/PostReviewPanel.tsx` — same swap on the side panel badge.
+- `supabase/functions/social-publish/index.ts` — wrap body in try/finally finalizer.
+- `supabase/functions/_shared/publishLock.ts` — image stale cutoff 10 → 3 min.
+- `tests/regression/social/publishing-display-status.test.ts` *(new)*.
 
-## Out of Scope (intentionally not touched)
+## Out of Scope (intentionally untouched)
 
-- `normalizeForInstagram`, `uploadSocialMediaAsset`, `instagramPublish.ts`, edge functions — they're fine; the bug is purely in the client-side gate.
-- Story validation / story 9:16 enforcement — unchanged.
-- Neel approval gate, IG media proxy, retry/partial-publish logic — unchanged.
+- Meta code 2 retry strategy, IG media proxy, video normalization — unchanged.
+- Neel approval gate, RLS, schema — unchanged.
+- The bigger root cause of *why* Meta is rejecting these PNGs — that's the prior fix (proxy + JPEG re-encode) and is independent.
 
 ## Verification
 
-1. Re-read edited `usePublishPost.ts` after change.
-2. Run `bunx vitest run tests/regression/social/image-story-skips-video-pipeline.test.ts` — must pass.
-3. Manual check in preview: retry-publish the Canada World Cup story — toast must say nothing about video; publish goes straight to the IG `/media` (image) container.
+1. Re-read every edited file after the change.
+2. `bunx vitest run tests/regression/social/publishing-display-status.test.ts` — must pass.
+3. Deploy `social-publish` edge function.
+4. Query DB: `092234f7-…` should be `failed` (red card) within minutes; preview should match.
+5. Manually retry one post — card flips to publishing, then to published or failed within ~3 min, never indefinitely.
