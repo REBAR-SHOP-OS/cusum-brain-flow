@@ -806,7 +806,7 @@ Deno.serve((req) =>
                   igAccountId,
                   pat,
                   message,
-                  image_url,
+                  igImageUrl,
                   content_type,
                   cover_image_url,
                 )
