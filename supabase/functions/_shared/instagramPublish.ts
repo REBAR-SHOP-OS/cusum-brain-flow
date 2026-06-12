@@ -1,6 +1,10 @@
 import { probeVideoForInstagram, describeProbeFailure } from "./videoProbe.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Image } from "https://deno.land/x/imagescript@1.2.17/mod.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
+const IG_READY_BUCKET = "social-media-assets";
+const IG_READY_PREFIX = "ig-ready";
 
 type InstagramPublishParams = {
   igAccountId: string;
@@ -36,24 +40,78 @@ function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function sha256Hex(input: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+  return [...new Uint8Array(hash)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function waitForPublicImage(url: string): Promise<boolean> {
+  for (const delay of [0, 500, 1500]) {
+    if (delay) await wait(delay);
+    try {
+      const res = await fetch(url, { method: "HEAD", redirect: "follow" });
+      const contentType = (res.headers.get("content-type") || "").toLowerCase();
+      if (res.ok && contentType.startsWith("image/")) return true;
+    } catch {
+      // Retry below.
+    }
+  }
+  return false;
+}
+
 /**
- * Wrap a Supabase Storage URL with the ig-media-proxy edge function so Meta's
- * fetcher receives a clean image/jpeg response (no CF bot-management cookies,
- * PNG sources re-encoded to JPEG). Non-Supabase URLs are returned unchanged.
+ * Instagram's fetcher has been rejecting Edge Function proxy URLs even when
+ * they return a valid JPEG to normal clients. For non-video IG media, create a
+ * durable JPEG derivative in public storage and hand Meta that plain object URL.
  */
-function wrapWithIgMediaProxy(srcUrl: string): string {
+async function materializeInstagramImageUrl(srcUrl: string, logPrefix: string): Promise<string> {
   try {
     const parsed = new URL(srcUrl);
-    if (!parsed.hostname.endsWith(".supabase.co")) return srcUrl;
-    if (parsed.pathname.includes("/functions/v1/ig-media-proxy")) return srcUrl;
-    const projectUrl = Deno.env.get("SUPABASE_URL");
-    if (!projectUrl) return srcUrl;
-    return `${projectUrl.replace(/\/$/, "")}/functions/v1/ig-media-proxy?src=${
-      encodeURIComponent(srcUrl)
-    }`;
-  } catch {
-    return srcUrl;
+    const isStorageUrl = parsed.hostname.endsWith(".supabase.co") &&
+      parsed.pathname.includes(`/storage/v1/object/public/${IG_READY_BUCKET}/`);
+    if (!isStorageUrl) return srcUrl;
+    if (parsed.pathname.includes(`/${IG_READY_BUCKET}/${IG_READY_PREFIX}/`)) return srcUrl;
+
+    const upstream = await fetch(srcUrl, { redirect: "follow" });
+    if (!upstream.ok) {
+      console.warn(`${logPrefix} IG image materialize skipped — source returned HTTP ${upstream.status}`);
+      return srcUrl;
+    }
+
+    const upstreamType = (upstream.headers.get("content-type") || "").toLowerCase();
+    const bytes = new Uint8Array(await upstream.arrayBuffer());
+    const isJpeg = upstreamType.includes("jpeg") || upstreamType.includes("jpg") ||
+      (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff);
+    const jpegBytes = isJpeg ? bytes : await (await Image.decode(bytes)).encodeJPEG(90);
+
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !serviceKey) return srcUrl;
+
+    const hash = await sha256Hex(srcUrl);
+    const path = `${IG_READY_PREFIX}/${hash}.jpg`;
+    const admin = createClient(supabaseUrl, serviceKey);
+    const { error } = await admin.storage.from(IG_READY_BUCKET).upload(
+      path,
+      new Blob([jpegBytes], { type: "image/jpeg" }),
+      { contentType: "image/jpeg", upsert: true },
+    );
+    if (error) {
+      console.warn(`${logPrefix} IG image materialize upload failed: ${error.message}`);
+      return srcUrl;
+    }
+
+    const { data } = admin.storage.from(IG_READY_BUCKET).getPublicUrl(path);
+    const publicUrl = data.publicUrl;
+    if (await waitForPublicImage(publicUrl)) {
+      console.log(`${logPrefix} Materialized IG-safe JPEG URL: ${publicUrl}`);
+      return publicUrl;
+    }
+    console.warn(`${logPrefix} IG materialized JPEG was not fetchable yet; using original URL`);
+  } catch (e) {
+    console.warn(`${logPrefix} IG image materialize failed: ${(e as Error).message}`);
   }
+  return srcUrl;
 }
 
 function isAuthError(error: MetaError | undefined) {
