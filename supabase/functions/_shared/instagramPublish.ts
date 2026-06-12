@@ -28,6 +28,7 @@ type MetaError = {
 };
 
 const PROCESSING_PUBLISH_DELAYS_MS = [15000, 30000, 45000, 60000, 60000, 60000];
+const IMAGE_PUBLISH_DELAYS_MS = [4000, 8000, 16000, 30000];
 const INSTAGRAM_VIDEO_SPEC_ERROR =
   "Instagram rejected the video. Likely cause: frame rate >60 fps, bitrate >25 Mbps, or H.264 level >4.x (common with browser-recorded MP4s). Re-publish from the app — it will auto-normalize the video to IG-safe spec (30 fps, 8 Mbps, level 4.1).";
 
@@ -112,13 +113,20 @@ function isSpuriousStatusError(error: MetaError | undefined) {
   return error.code === 100 && error.error_subcode === 33;
 }
 
+function isTransientMetaError(error: MetaError | undefined) {
+  if (!error) return false;
+  return error.is_transient === true || [1, 2, 4, 17, 32, 613].includes(error.code || 0);
+}
+
 async function detectMediaDetails(imageUrl: string) {
   let contentType = "";
+  let contentLength = "";
   let isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
   if (!isVideo) {
     try {
       const head = await fetch(imageUrl, { method: "HEAD" });
       contentType = head.headers.get("content-type") || "";
+      contentLength = head.headers.get("content-length") || "";
       isVideo = contentType.startsWith("video/");
     } catch {
       // Ignore HEAD failures and fall back to URL detection only.
@@ -127,11 +135,12 @@ async function detectMediaDetails(imageUrl: string) {
     try {
       const head = await fetch(imageUrl, { method: "HEAD" });
       contentType = head.headers.get("content-type") || "";
+      contentLength = head.headers.get("content-length") || "";
     } catch {
       // Ignore HEAD failures and fall back to URL detection only.
     }
   }
-  return { isVideo, contentType };
+  return { isVideo, contentType, contentLength };
 }
 
 function isClearlyUnsupportedInstagramVideo(imageUrl: string, contentType: string) {
@@ -318,9 +327,7 @@ export async function publishInstagramMedia({
       containerData = await containerRes.json();
 
       const err = containerData.error as MetaError | undefined;
-      const isTransient =
-        !!err &&
-        (err.is_transient === true || err.code === 1 || err.code === 2 || err.code === 4 || err.code === 17 || err.code === 32 || err.code === 613);
+      const isTransient = isTransientMetaError(err);
 
       if (isTransient && attempt < TRANSIENT_DELAYS_MS.length) {
         const base = TRANSIENT_DELAYS_MS[attempt];
@@ -361,7 +368,7 @@ export async function publishInstagramMedia({
 
     const attemptDelays = requiresProcessing
       ? PROCESSING_PUBLISH_DELAYS_MS
-      : [0];
+      : [0, ...IMAGE_PUBLISH_DELAYS_MS];
 
     for (let attempt = 0; attempt < attemptDelays.length; attempt++) {
       const delay = attemptDelays[attempt];
@@ -444,13 +451,27 @@ export async function publishInstagramMedia({
       }
 
       if (
-        isNotReadyError(publishResult.error) &&
+        (isNotReadyError(publishResult.error) || isTransientMetaError(publishResult.error)) &&
         attempt < attemptDelays.length - 1
       ) {
         console.warn(
-          `${logPrefix} Container ${containerId} not ready on publish attempt ${attempt + 1}; retrying.`,
+          `${logPrefix} Container ${containerId} not ready/transient on publish attempt ${attempt + 1}; retrying.`,
         );
         continue;
+      }
+
+      if (isNotReadyError(publishResult.error)) {
+        return {
+          error:
+            `Instagram media is still processing (fbtrace ${publishResult.error.fbtrace_id || "n/a"}). Retry in 2–5 minutes; already published pages will be skipped.`,
+        };
+      }
+
+      if (isTransientMetaError(publishResult.error)) {
+        return {
+          error:
+            `Instagram rejected the publish attempt (Meta code ${publishResult.error.code || "n/a"}, fbtrace ${publishResult.error.fbtrace_id || "n/a"}). Meta accepted the media container but could not finish publishing yet; retry in 2–5 minutes.`,
+        };
       }
 
       return {

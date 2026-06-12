@@ -35,4 +35,25 @@ describe("Instagram media proxy (root-cause fix for Meta code 2)", () => {
     expect(src).toContain("fbtrace_id");
     expect(src).toMatch(/fbtrace \$\{e\.fbtrace_id/);
   });
+
+  it("retries delayed image publishes when Meta says the media ID is not ready", () => {
+    const src = readFileSync(
+      "supabase/functions/_shared/instagramPublish.ts",
+      "utf8",
+    );
+    expect(src).toContain("IMAGE_PUBLISH_DELAYS_MS");
+    expect(src).toContain("media id is not available");
+    expect(src).toMatch(/\[0, \.\.\.IMAGE_PUBLISH_DELAYS_MS\]/);
+  });
+
+  it("manual retry skips pages that already succeeded on a partial publish", () => {
+    const publishSrc = readFileSync(
+      "supabase/functions/social-publish/index.ts",
+      "utf8",
+    );
+    const lockSrc = readFileSync("supabase/functions/_shared/publishLock.ts", "utf8");
+    expect(publishSrc).toContain("alreadySuccessfulPages");
+    expect(publishSrc).toContain('"published"');
+    expect(lockSrc).toContain("Preserve already-published pages on retry");
+  });
 });

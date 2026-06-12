@@ -36,11 +36,15 @@ export function usePublishPost() {
       // Guard: prevent duplicate publishing
       const { data: current } = await supabase
         .from("social_posts")
-        .select("status")
+        .select("status, page_results")
         .eq("id", post.id)
         .single();
 
-      if (current?.status === "published") {
+      const pageResults = Array.isArray(current?.page_results)
+        ? current.page_results as Array<{ status?: string }>
+        : [];
+      const hasFailedPages = pageResults.some((page) => page?.status === "failed");
+      if (current?.status === "published" && !hasFailedPages) {
         toast({ title: "Already published", description: "This post has already been published.", variant: "destructive" });
         return false;
       }
@@ -187,9 +191,15 @@ export function usePublishPost() {
       }
       if (data?.error) throw new Error(data.error);
 
+      const publishedCount = Array.isArray(data?.pages) ? data.pages.length : 0;
+      const failedCount = Array.isArray(data?.errors) ? data.errors.length : 0;
       toast({
-        title: "Published!",
-        description: `Post published to ${post.platform} successfully.`,
+        title: failedCount > 0 ? "Partially published" : "Published!",
+        description: failedCount > 0
+          ? `${publishedCount} page(s) published, ${failedCount} still need retry.`
+          : `Post published to ${post.platform} successfully.`,
+        variant: failedCount > 0 ? "destructive" : undefined,
+        duration: failedCount > 0 ? 12000 : undefined,
       });
 
       queryClient.invalidateQueries({ queryKey: ["social_posts"] });
