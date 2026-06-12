@@ -17,6 +17,21 @@ import { publishInstagramMedia } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+type StoredPageResult = {
+  name?: string;
+  status?: string;
+  error?: string;
+  platform_post_id?: string;
+};
+
+function getStoredPageResults(value: unknown): StoredPageResult[] {
+  return Array.isArray(value) ? (value as StoredPageResult[]) : [];
+}
+
+function formatPageError(page: StoredPageResult): string {
+  return `Page "${page.name || "unknown"}": ${page.error || "Unknown publishing error"}`;
+}
+
 /**
  * Refresh a Facebook Page token using the user's long-lived token.
  */
