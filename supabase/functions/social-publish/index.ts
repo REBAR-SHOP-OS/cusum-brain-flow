@@ -482,7 +482,9 @@ Deno.serve((req) =>
           );
       };
       const markSuccess = (name: string, platformPostId?: string) => {
-        pageSuccesses.push(name);
+        if (!pageSuccesses.some((existing) => normalizePageName(existing) === normalizePageName(name))) {
+          pageSuccesses.push(name);
+        }
         enqueuePageResult(name, "success", { platform_post_id: platformPostId });
       };
       const markFailure = (name: string, error: string) => {
@@ -866,11 +868,27 @@ Deno.serve((req) =>
       // Flush queued page_results writes so the final status reflects the real per-page truth.
       await pageResultsQueue.catch(() => {});
 
+      const { data: finalPost } = post_id
+        ? await supabaseAdmin
+          .from("social_posts")
+          .select("page_results")
+          .eq("id", post_id)
+          .maybeSingle()
+        : { data: null };
+      const finalPageResults = getStoredPageResults((finalPost as any)?.page_results);
+      const finalSuccesses = finalPageResults.filter((p) => p.status === "success" && p.name);
+      const finalFailures = finalPageResults.filter((p) => p.status === "failed");
+      const finalPending = finalPageResults.filter((p) => p.status === "pending");
+      const successfulNames = finalSuccesses.map((p) => p.name!);
+      const failedMessages = finalFailures.map(formatPageError);
+      const effectiveSuccesses = finalPageResults.length > 0 ? successfulNames : pageSuccesses;
+      const effectiveErrors = finalPageResults.length > 0 ? failedMessages : pageErrors;
+
       // Determine final result
-      if (pageSuccesses.length > 0) {
+      if (effectiveSuccesses.length > 0) {
         if (post_id && lockId) {
-          const partialError = pageErrors.length > 0
-            ? `Partial: ${pageErrors.join("; ")}`
+          const partialError = effectiveErrors.length > 0
+            ? `Partial: ${effectiveErrors.join("; ")}`
             : null;
           await releasePublishLock(
             supabaseAdmin,
@@ -878,21 +896,22 @@ Deno.serve((req) =>
             lockId,
             "published",
             {
-              ...(partialError ? { last_error: partialError } : {}),
+              last_error: partialError,
             },
           );
         }
         return new Response(
           JSON.stringify({
             success: true,
+            partial: effectiveErrors.length > 0 || finalPending.length > 0,
             platform,
-            pages: pageSuccesses,
-            errors: pageErrors.length > 0 ? pageErrors : undefined,
+            pages: effectiveSuccesses,
+            errors: effectiveErrors.length > 0 ? effectiveErrors : undefined,
           }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       } else {
-        const errMsg = pageErrors.join("; ") || "Unknown publishing error";
+        const errMsg = effectiveErrors.join("; ") || "Unknown publishing error";
         if (post_id && lockId) {
           await releasePublishLock(supabaseAdmin, post_id, lockId, "failed", {
             last_error: errMsg,
