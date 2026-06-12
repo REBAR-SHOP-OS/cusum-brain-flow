@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Video, CheckCircle2, XCircle, Circle } from "lucide-react";
 
 import type { SocialPost } from "@/hooks/useSocialPosts";
+import { resolveDisplayStatus } from "@/lib/socialPostStatus";
 
 /** Parse per-page publish state.
  *  state: 'success' (green) | 'failed' (red) | 'pending' (neutral — not yet attempted) */
@@ -284,8 +285,13 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
                 const platform = post.platform || "other";
                 const pIcon = platformIcons[platform] || platformIcons.twitter;
                 const isSelected = selectedPostIds?.has(post.id) ?? false;
-                const status = post.status;
-                const statusLabel = STATUS_LABELS[status] || status;
+                // Derive displayed status from real signal (page_results + updated_at)
+                // so a stuck-"publishing" row flips to Failed/Published within seconds
+                // of reality instead of waiting for cron stale-lock recovery.
+                const resolved = resolveDisplayStatus(post);
+                const status = resolved.displayStatus;
+                const baseLabel = STATUS_LABELS[status] || status;
+                const statusLabel = resolved.partial ? `${baseLabel} (partial)` : baseLabel;
                 const isApproved = post.neel_approved || post.qa_status === "approved";
                 const isOverdue = status === "scheduled" && isApproved
                   && post.scheduled_date && new Date(post.scheduled_date) < new Date();
