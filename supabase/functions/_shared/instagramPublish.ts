@@ -321,7 +321,7 @@ export async function publishInstagramMedia({
       if (e.is_transient || e.code === 1 || e.code === 2) {
         return {
           error:
-            "Instagram is temporarily unavailable (Meta transient error). Please retry in 1–2 minutes.",
+            `Instagram rejected the media (Meta code ${e.code}, fbtrace ${e.fbtrace_id || "n/a"}). This usually means Meta could not fetch/process the image at this URL. Re-upload the asset or wait 2–5 minutes and retry.`,
         };
       }
       return { error: `Instagram: ${containerData.error.message}` };
