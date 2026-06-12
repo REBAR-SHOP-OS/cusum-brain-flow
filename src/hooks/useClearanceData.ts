@@ -71,7 +71,7 @@ export function useClearanceData() {
       const { data: items, error: itemsError } = await supabase
         .from("cut_plan_items")
         .select(
-          "id, cut_plan_id, bar_code, cut_length_mm, unit_system, source_total_length_text, mark_number, drawing_ref, ref_no, asa_shape_code, total_pieces, bend_completed_pieces, created_at, cut_plans!inner(id, name, status, project_name, project_id, company_id, barlist_id, projects(id, name, customer_id, customers(name)), barlists(name, revision_no, status))"
+          "id, cut_plan_id, bar_code, cut_length_mm, unit_system, source_total_length_text, mark_number, drawing_ref, ref_no, asa_shape_code, total_pieces, bend_completed_pieces, ready_at, cut_plans!inner(id, name, status, project_name, project_id, company_id, barlist_id, projects(id, name, customer_id, customers(name)), barlists(name, revision_no, status))"
         )
         .eq("phase", "clearance")
         .eq("cut_plans.company_id", companyId!);
@@ -140,7 +140,7 @@ export function useClearanceData() {
           if (!blOk || !cpOk) {
             triage = "upstream_not_ready";
           } else {
-            const createdMs = item.created_at ? new Date(item.created_at).getTime() : nowMs;
+            const createdMs = item.ready_at ? new Date(item.ready_at).getTime() : nowMs;
             const ageHrs = (nowMs - createdMs) / 36e5;
             if (ageHrs > STALE_HOURS) triage = "stale";
           }
@@ -177,7 +177,7 @@ export function useClearanceData() {
           storage_zone: ev?.storage_zone ?? null,
           verified_at: ev?.verified_at || null,
           verified_by_name: ev?.verified_by ? profileMap.get(ev.verified_by) || null : null,
-          created_at: item.created_at || null,
+          created_at: item.ready_at || null,
           is_sample,
           verification_state,
           mismatch_reason,
