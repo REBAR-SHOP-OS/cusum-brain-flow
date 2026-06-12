@@ -42,9 +42,9 @@ describe("usePublishPost — image story must skip video pipeline", () => {
   });
 
   it("toast 'Preparing video for Instagram…' only inside video branch", () => {
-    const toastIdx = src.indexOf("Preparing video for Instagram");
     const gateIdx = src.indexOf("if (looksLikeVideo)");
     expect(gateIdx).toBeGreaterThan(0);
+    const toastIdx = src.indexOf('title: "Preparing video for Instagram');
     expect(toastIdx).toBeGreaterThan(gateIdx);
   });
 });
