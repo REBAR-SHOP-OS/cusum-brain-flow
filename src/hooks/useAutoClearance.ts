@@ -611,6 +611,9 @@ export function useAutoClearance({
 
       // Reset refine counter — we have a usable match.
       refineAttemptsRef.current = 0;
+      // Mark the tag as trusted only on a clean auto-decision with strong
+      // score. Partial-accept paths stay untrusted so material-validate runs.
+      trustedTagRef.current = decision === "auto" && best.score >= 0.85 && !partialAutoAccept;
 
       // High confidence (strict MARK+DWG+Ref) — upload tag photo + ensure
       // evidence row in parallel, then write the evidence row update. Move to
