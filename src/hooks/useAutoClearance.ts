@@ -624,9 +624,12 @@ export function useAutoClearance({
       // product mode ONLY after the DB-confirmed gate passes.
       setActiveItemId(matchedItem.id);
       setLastConfidence(best.score);
+      // Reuse the already-compressed shared blob — avoids a second canvas
+      // pass inside uploadToStorage. Falls back to raw blob if prep failed.
+      const sharedBlob = await sharedBlobPromise.catch(() => blob);
       const [evId, path] = await Promise.all([
         ensureEvidenceRow(matchedItem.id),
-        uploadToStorage(matchedItem.id, "tag", blob),
+        uploadToStorage(matchedItem.id, "tag", sharedBlob),
       ]);
       clearanceFlowLog("storage_upload_success", {
         cut_plan_item_id: matchedItem.id,
