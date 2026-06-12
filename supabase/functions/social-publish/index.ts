@@ -556,6 +556,37 @@ Deno.serve((req) =>
           }
         > = [];
 
+        // ── One-shot Instagram image preparation ─────────────────────
+        // For non-video Instagram posts/stories, materialize a single durable
+        // JPEG URL ONCE here and reuse it for every IG page. If preparation
+        // fails, abort before calling Meta and mark every requested IG page
+        // failed with one clear error (instead of producing six identical
+        // Meta code 2 messages from the IG fan-out).
+        let igImageUrl: string | undefined = image_url;
+        if (platform === "instagram" && image_url) {
+          const isVideoUrl = /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(image_url);
+          if (!isVideoUrl) {
+            const prepared = await prepareInstagramImageUrl(image_url, "[social-publish][IG-prep]");
+            if (!prepared.ok) {
+              console.error(`[social-publish] IG image preparation failed: ${prepared.error}`);
+              for (const targetPageName of individualPages) {
+                markFailure(targetPageName || "instagram", prepared.error);
+              }
+              individualPages = [];
+            } else {
+              igImageUrl = prepared.url;
+              if (post_id && prepared.prepared && igImageUrl !== image_url) {
+                await supabaseAdmin
+                  .from("social_posts")
+                  .update({ image_url: igImageUrl })
+                  .eq("id", post_id);
+              }
+            }
+          }
+        }
+
+
+
         for (const targetPageName of individualPages) {
           if (!targetPageName) {
             console.warn(
