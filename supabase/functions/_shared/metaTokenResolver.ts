@@ -5,6 +5,9 @@
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
 
+export const META_RECONNECT_MESSAGE =
+  "Meta connection expired — reconnect Facebook/Instagram in Integrations, then retry publishing.";
+
 export type MetaPlatform = "facebook" | "instagram";
 
 export interface MetaTokenRow {
@@ -24,6 +27,16 @@ export interface ResolvedMetaToken {
   source: "self" | "team";
 }
 
+export type MetaTokenRemoteInspection =
+  | { valid: true }
+  | {
+      valid: false;
+      reason: "auth" | "unknown";
+      message?: string;
+      code?: number;
+      error_subcode?: number;
+    };
+
 function isHealthy(row: MetaTokenRow | null | undefined): row is MetaTokenRow {
   if (!row || !row.access_token) return false;
   if (row.expires_at) {
@@ -33,19 +46,71 @@ function isHealthy(row: MetaTokenRow | null | undefined): row is MetaTokenRow {
   return true;
 }
 
+function isMetaAuthRejection(error: any): boolean {
+  const text = `${error?.message || ""} ${error?.error_user_msg || ""}`.toLowerCase();
+  return (
+    error?.code === 190 ||
+    error?.code === 102 ||
+    text.includes("access token") ||
+    text.includes("session has been invalidated") ||
+    text.includes("session has expired") ||
+    text.includes("invalid oauth")
+  );
+}
+
 /**
- * Optionally validate the token against Meta with a lightweight /me call.
- * Returns true if Meta accepts the token, false otherwise.
+ * Validate the token against Meta with a lightweight /me call and distinguish
+ * confirmed auth revocation from transient/unknown Meta/network failures.
  */
-export async function validateMetaTokenRemote(accessToken: string): Promise<boolean> {
+export async function inspectMetaTokenRemote(accessToken: string): Promise<MetaTokenRemoteInspection> {
   try {
     const res = await fetch(`${GRAPH_API}/me?fields=id&access_token=${encodeURIComponent(accessToken)}`);
-    if (!res.ok) return false;
-    const data = await res.json();
-    if (data?.error) return false;
-    return !!data?.id;
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data?.id && !data?.error) return { valid: true };
+
+    const error = data?.error || {};
+    return {
+      valid: false,
+      reason: isMetaAuthRejection(error) ? "auth" : "unknown",
+      message: error?.message,
+      code: error?.code,
+      error_subcode: error?.error_subcode,
+    };
   } catch {
-    return false;
+    return { valid: false, reason: "unknown" };
+  }
+}
+
+/**
+ * Backward-compatible boolean helper used by status checks.
+ */
+export async function validateMetaTokenRemote(accessToken: string): Promise<boolean> {
+  return (await inspectMetaTokenRemote(accessToken)).valid;
+}
+
+export async function markMetaTokenRejected(
+  supabaseAdmin: any,
+  tokenOwnerUserId: string,
+  message = META_RECONNECT_MESSAGE,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await supabaseAdmin
+    .from("user_meta_tokens")
+    .update({ expires_at: now })
+    .eq("user_id", tokenOwnerUserId)
+    .in("platform", ["facebook", "instagram"]);
+
+  for (const integration_id of ["facebook", "instagram"]) {
+    await supabaseAdmin
+      .from("integration_connections")
+      .upsert({
+        user_id: tokenOwnerUserId,
+        integration_id,
+        status: "error",
+        last_checked_at: now,
+        error_message: message,
+        config: { publish_ready: false, reconnect_required: true },
+      }, { onConflict: "user_id,integration_id" });
   }
 }
 
