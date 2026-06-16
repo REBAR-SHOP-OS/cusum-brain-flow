@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { acquirePublishLock, releasePublishLock, recoverStaleLocks, normalizePageName } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
-import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
+import { META_RECONNECT_MESSAGE, resolveValidMetaToken } from "../_shared/metaTokenResolver.ts";
 import { publishInstagramMedia, prepareInstagramImageUrl } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
@@ -261,7 +261,7 @@ Deno.serve((req) =>
           const tokenPlatform = post.platform === "instagram" ? "instagram" : "facebook";
 
           // Unified resolver: post-owner first → same-company teammate, both health-checked.
-          const resolved = await resolveMetaToken(supabase, post.user_id, tokenPlatform as "facebook" | "instagram");
+          const resolved = await resolveValidMetaToken(supabase, post.user_id, tokenPlatform as "facebook" | "instagram");
           let tokenData: { access_token: string; pages: any; instagram_accounts: any; user_id: string } | null = null;
           let tokenOwnerUserId = post.user_id;
 
@@ -279,7 +279,7 @@ Deno.serve((req) =>
           }
 
           if (!tokenData) {
-            const errMsg = `${post.platform} not connected (no healthy token for owner or any teammate). Please reconnect from Integrations.`;
+            const errMsg = META_RECONNECT_MESSAGE;
             console.error(`[social-cron-publish] ${errMsg}`);
             await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
             results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
