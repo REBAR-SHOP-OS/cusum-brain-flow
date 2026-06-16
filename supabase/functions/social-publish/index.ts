@@ -12,7 +12,7 @@ import {
   releasePublishLock,
 } from "../_shared/publishLock.ts";
 import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
-import { resolveMetaToken } from "../_shared/metaTokenResolver.ts";
+import { META_RECONNECT_MESSAGE, resolveValidMetaToken } from "../_shared/metaTokenResolver.ts";
 import { publishInstagramMedia, prepareInstagramImageUrl } from "../_shared/instagramPublish.ts";
 
 const GRAPH_API = "https://graph.facebook.com/v21.0";
@@ -359,7 +359,7 @@ Deno.serve((req) =>
       let tokenOwnerUserId = userId;
 
       if (platform === "facebook" || platform === "instagram") {
-        const resolved = await resolveMetaToken(
+        const resolved = await resolveValidMetaToken(
           supabaseAdmin,
           userId,
           tokenPlatform as "facebook" | "instagram",
@@ -380,8 +380,7 @@ Deno.serve((req) =>
         }
 
         if (!tokenData) {
-          const errMsg =
-            `${platform} not connected (no healthy token for you or any teammate). Please reconnect from Integrations.`;
+          const errMsg = META_RECONNECT_MESSAGE;
           if (post_id) {
             const lockId = (await supabaseAdmin.from("social_posts").select(
               "publishing_lock_id",
@@ -397,9 +396,8 @@ Deno.serve((req) =>
             }
           }
           return new Response(
-            JSON.stringify({ error: errMsg }),
+            JSON.stringify({ error: errMsg, reconnect_required: true }),
             {
-              status: 400,
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             },
           );
