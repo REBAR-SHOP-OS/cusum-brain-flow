@@ -9,7 +9,7 @@ async function fetchWithRetry(url: string, init: RequestInit = {}, attempts = 3)
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
     try {
-      return await fetchWithRetry(url, { ...init, headers });
+      return await fetch(url, { ...init, headers });
     } catch (err) {
       lastErr = err;
       const msg = String((err as Error)?.message ?? err);
