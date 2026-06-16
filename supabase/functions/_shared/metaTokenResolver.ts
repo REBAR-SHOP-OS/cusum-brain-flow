@@ -81,13 +81,6 @@ export async function inspectMetaTokenRemote(accessToken: string): Promise<MetaT
   }
 }
 
-/**
- * Backward-compatible boolean helper used by status checks.
- */
-export async function validateMetaTokenRemote(accessToken: string): Promise<boolean> {
-  return (await inspectMetaTokenRemote(accessToken)).valid;
-}
-
 export async function markMetaTokenRejected(
   supabaseAdmin: any,
   tokenOwnerUserId: string,
@@ -145,7 +138,7 @@ export async function resolveValidMetaToken(
 /**
  * Resolve a usable Meta token for the given platform.
  * Order: self (healthy) → same-company teammate (healthy).
- * Does not perform a network validation; caller may call validateMetaTokenRemote separately.
+ * Does not perform a network validation; use resolveValidMetaToken for publish paths.
  */
 export async function resolveMetaToken(
   supabaseAdmin: any,
