@@ -114,6 +114,34 @@ export async function markMetaTokenRejected(
   }
 }
 
+export async function resolveValidMetaToken(
+  supabaseAdmin: any,
+  userId: string,
+  platform: MetaPlatform,
+): Promise<ResolvedMetaToken | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const resolved = await resolveMetaToken(supabaseAdmin, userId, platform);
+    if (!resolved) return null;
+
+    const inspected = await inspectMetaTokenRemote(resolved.accessToken);
+    if (inspected.valid) return resolved;
+
+    if (inspected.reason !== "auth") {
+      console.warn(
+        `[metaTokenResolver] Meta token validation inconclusive for owner ${resolved.tokenOwnerUserId}; proceeding without marking expired`,
+      );
+      return resolved;
+    }
+
+    console.warn(
+      `[metaTokenResolver] Meta rejected token for owner ${resolved.tokenOwnerUserId} (code=${inspected.code ?? "n/a"}, subcode=${inspected.error_subcode ?? "n/a"}); marking connection expired`,
+    );
+    await markMetaTokenRejected(supabaseAdmin, resolved.tokenOwnerUserId);
+  }
+
+  return null;
+}
+
 /**
  * Resolve a usable Meta token for the given platform.
  * Order: self (healthy) → same-company teammate (healthy).
