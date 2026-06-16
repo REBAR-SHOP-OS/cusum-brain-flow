@@ -1,29 +1,54 @@
-# Expand Approval Rights to Neel + Sattar
+## Diagnosis
 
-Currently only `neel@rebar.shop` can approve social posts (HARD rule enforced in frontend, DB trigger, and regression tests). User wants `sattar@rebar.shop` to also be an approver.
+The scheduled Instagram story did **not** fail because of a code bug. I traced the publish path and inspected the token store:
 
-## Changes
+- `user_meta_tokens` for Sattar (the publishing user) still has the healthy row created on **2026-05-25**:
+  - `platform = 'instagram'`, 6 pages, 6 IG business accounts, `expires_at = 2026-07-24` (not locally expired).
+- `metaTokenResolver.ts` correctly selects that row (filters by exact `platform='instagram'`, ignores the per-page rows).
+- The previous run of `social-publish` returned Meta's verbatim error:
+  > "The session has been invalidated because the user changed their password or Facebook has changed the session for security reasons."
+- The current run shortens that to "Instagram token expired or missing permissions" via `instagramPublish.ts`, but it is the same Meta-side revocation.
 
-### 1. Frontend gates
-- `src/components/social/ApprovalsPanel.tsx` — change `canApprove` to accept both emails:
-  ```ts
-  const APPROVERS = ["neel@rebar.shop", "sattar@rebar.shop"];
-  const canApprove = APPROVERS.includes(currentUserEmail ?? "");
-  ```
-  Update button label/tooltip ("Neel only" → "Approvers only").
-- `src/components/social/PostReviewPanel.tsx` — same allowlist in the Neel Approval Gate region.
+**Root cause:** Meta has invalidated the long-lived Page/IG access token on its side (password change or security event on the Facebook account that authorized the app). The token is still present and not expired in our DB, but Meta refuses every Graph API call made with it. No edge-function code change can resurrect a revoked token — Meta only re-issues one through a fresh OAuth consent.
 
-### 2. Database trigger
-- New migration replacing `enforce_neel_only_approval` to allow `neel_approved=true` to be set by either `neel@rebar.shop` or `sattar@rebar.shop` (looked up via `auth.users.email` from `auth.uid()`). Keeps service-role/admin bypass forbidden.
+## The actual fix (operational, ~1 minute)
 
-### 3. Regression tests
-- `tests/regression/social/neel-only-approval.test.ts` → rename concept to `approver-allowlist.test.ts` (or update in place): assert allowlist contains both `neel@` and `sattar@`, and does NOT include `radin@`, `zahra@`, or other emails. Update DB-trigger grep to match the new trigger name/body.
+Only you can do this — it requires Facebook login in the browser:
 
-### 4. Memory update
-- Update `mem://index.md` Core rule "Neel Approval Gate (HARD)" → "Approver Gate (HARD): only `neel@rebar.shop` and `sattar@rebar.shop` may set `neel_approved=true`." Update referenced memory file accordingly.
+1. Open the app → **Integrations**.
+2. Find **Facebook / Instagram** → **Disconnect**.
+3. Click **Connect**, sign in to Facebook with the account that admins all 6 Pages.
+4. On the consent screen, keep **all** Pages checked and grant every permission, especially:
+   - `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`, `pages_manage_metadata`
+   - `instagram_basic`, `instagram_content_publish`, `instagram_manage_comments`, `business_management`
+5. After the callback completes, retry publishing the failed story (or wait for the next cron tick).
 
-## Out of scope
-- Column name `neel_approved` stays (renaming would cascade through many files); semantics simply broaden to "approver-approved".
-- No change to who can reject (any reviewer can still reject).
+The OAuth handler will overwrite the `platform='instagram'` and `platform='facebook'` rows with new long-lived tokens and a fresh `expires_at` (~60 days out). All 6 pages will start publishing again.
 
-Confirm to proceed.
+## Verification I will run after you reconnect
+
+- Query `user_meta_tokens` and confirm the `platform='instagram'` row's `expires_at` has moved forward and `updated_at` is recent.
+- Hit `social-publish` via `supabase--curl_edge_functions` against the same scheduled story id and confirm a 200 with returned IG `media_id` per page.
+- Tail `supabase--edge_function_logs` for `social-publish` to confirm no `OAuthException` / code 190.
+
+## Optional cleanup (does not block publishing)
+
+While inspecting the table I noticed 12 stray rows written on 2026-06-15 with synthetic platforms like `facebook_page_<id>` / `instagram_page_<id>`, each with `ig_count=0` and no `expires_at`. They are not read by `resolveMetaToken` (which filters `platform IN ('facebook','instagram')` exactly), so they are dead data, not a bug source. If you want, after the reconnect succeeds I can:
+
+- Delete those 12 orphan rows in a one-shot SQL cleanup, and
+- Add a small uniqueness guard so future OAuth callbacks cannot create per-page rows again.
+
+I will **not** touch them in this fix unless you ask — they are inert.
+
+## Files that would change
+
+**None for the immediate fix.** The fix lives entirely in the Integrations UI you already have.
+
+If you approve the optional cleanup, the only changes would be:
+- A single SQL migration that deletes orphan `user_meta_tokens` rows where `platform NOT IN ('facebook','instagram')` for the current workspace, and
+- A `UNIQUE (user_id, platform)` constraint on `user_meta_tokens` (if not already enforced) to prevent recurrence.
+
+## What I will not do
+
+- I will not write code that "auto-refreshes" a revoked token. Meta does not allow that — only a fresh OAuth consent can replace a revoked long-lived token.
+- I will not bypass the publish-time token validation. The current error is the correct, honest signal.
