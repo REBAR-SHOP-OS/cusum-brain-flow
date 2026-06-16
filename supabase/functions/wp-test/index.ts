@@ -1,5 +1,25 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 
+const UA = "Mozilla/5.0 (compatible; RebarShopERP/1.0; +https://erp.rebar.shop)";
+
+async function fetchWithRetry(url: string, init: RequestInit = {}, attempts = 3): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("User-Agent")) headers.set("User-Agent", UA);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json, */*;q=0.1");
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url, { ...init, headers });
+    } catch (err) {
+      lastErr = err;
+      const msg = String((err as Error)?.message ?? err);
+      if (!/tls handshake|connection|eof|reset|timed out/i.test(msg)) throw err;
+      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 Deno.serve((req) =>
   handleRequest(req, async () => {
     const baseUrl = Deno.env.get("WP_BASE_URL");
@@ -13,7 +33,7 @@ Deno.serve((req) =>
     const result: Record<string, unknown> = { ok: true };
 
     // --- READ TEST ---
-    const readRes = await fetch(`${baseUrl}/posts?per_page=1`, {
+    const readRes = await fetchWithRetry(`${baseUrl}/posts?per_page=1`, {
       headers: { Authorization: authHeader },
     });
     const readBody = await readRes.text();
@@ -32,7 +52,7 @@ Deno.serve((req) =>
 
     // --- WRITE TEST ---
     try {
-      const createRes = await fetch(`${baseUrl}/posts`, {
+      const createRes = await fetchWithRetry(`${baseUrl}/posts`, {
         method: "POST",
         headers: { Authorization: authHeader, "Content-Type": "application/json" },
         body: JSON.stringify({ title: "WRITE_TEST — delete me", status: "draft" }),
@@ -45,7 +65,7 @@ Deno.serve((req) =>
       } else {
         const created = JSON.parse(createBody);
         const createdId = created.id;
-        const deleteRes = await fetch(`${baseUrl}/posts/${createdId}?force=true`, {
+        const deleteRes = await fetchWithRetry(`${baseUrl}/posts/${createdId}?force=true`, {
           method: "DELETE",
           headers: { Authorization: authHeader },
         });
@@ -70,7 +90,7 @@ Deno.serve((req) =>
     } else {
       const wcAuth = `consumer_key=${encodeURIComponent(wcKey)}&consumer_secret=${encodeURIComponent(wcSecret)}`;
       try {
-        const wcReadRes = await fetch(`${wcBase}/products?per_page=1&${wcAuth}`);
+        const wcReadRes = await fetchWithRetry(`${wcBase}/products?per_page=1&${wcAuth}`);
         const wcReadBody = await wcReadRes.text();
         if (!wcReadRes.ok) {
           result.wc_read = { status: "failed", error: `HTTP ${wcReadRes.status}: ${wcReadBody.slice(0, 300)}` };
@@ -83,7 +103,7 @@ Deno.serve((req) =>
           // Write test: PUT same description back to itself (no-op write)
           if (sample?.id) {
             const original = sample.description ?? "";
-            const wcWriteRes = await fetch(`${wcBase}/products/${sample.id}?${wcAuth}`, {
+            const wcWriteRes = await fetchWithRetry(`${wcBase}/products/${sample.id}?${wcAuth}`, {
               method: "PUT",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ description: original }),
