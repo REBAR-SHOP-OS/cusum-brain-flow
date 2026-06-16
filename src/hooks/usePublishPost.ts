@@ -194,6 +194,20 @@ export function usePublishPost() {
         throw new Error(`Server returned non-JSON response (${response.status})`);
       }
 
+      const reconnectRequired = data?.reconnect_required === true ||
+        /reconnect facebook\/instagram|meta connection expired|token expired|session has been invalidated/i.test(data?.error || "");
+
+      if (reconnectRequired) {
+        toast({
+          title: "Reconnect Facebook / Instagram",
+          description: "Meta invalidated the connection. Open Integrations, reconnect Facebook/Instagram, then retry publishing.",
+          variant: "destructive",
+          duration: 15000,
+        });
+        queryClient.invalidateQueries({ queryKey: ["social_posts"] });
+        return false;
+      }
+
       if (!response.ok) {
         throw new Error(data?.error || `Publish failed (${response.status})`);
       }
