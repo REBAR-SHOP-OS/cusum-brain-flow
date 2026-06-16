@@ -172,7 +172,7 @@ Deno.serve((req) =>
             ? new Date(existing.publishing_started_at).getTime()
             : 0;
           const ageMs = startedAt ? Date.now() - startedAt : Number.MAX_SAFE_INTEGER;
-          const STALE_MS = 10 * 60 * 1000;
+          const STALE_MS = 2 * 60 * 1000;
 
           if (ageMs > STALE_MS) {
             console.warn(

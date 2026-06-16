@@ -1,44 +1,35 @@
 
 ## مشکل
-در `src/main.tsx`، `registerSW` بدون شرط روی هر محیطی (از جمله Lovable preview در iframe) صدا زده می‌شود. روی دامنه‌های `id-preview--*.lovable.app` فایل `/sw.js` از پشت یک redirect سرو می‌شود و مرورگر طبق spec اجازه ثبت SW پشت redirect را نمی‌دهد. نتیجه: TypeError مداوم و toast «Something went wrong — Failed to update a ServiceWorker for scope …» که کاربر در تصویر نشان داده.
+در `supabase/functions/social-publish/index.ts` (خط ~۱۷۵)، آستانه‌ی stale-lock روی **۱۰ دقیقه** ست شده. در سناریوی واقعی این پروژه (publish لحظه‌ای، چندین page، شکست به‌علت توکن Meta) پست برای دقایق طولانی در `status='publishing'` گیر می‌کند و کاربر فقط با retry به 409 می‌خورد.
 
-ارور «Publishing Failed» جداست (توکن Meta باطل شده) و راه‌حلش فقط reconnect در Integrations است — نیازی به تغییر کد ندارد و در این پلن گنجانده نمی‌شود.
+علاوه بر این، حالت‌هایی هست که `publishing_started_at` نال است ولی `status='publishing'` (lock یتیم واقعی) و کد فعلی این را stale در نظر نمی‌گیرد — `ageMs = Number.MAX_SAFE_INTEGER` که > STALE_MS است، پس عملاً آزاد می‌شود، ولی فقط اگر مسیر `if (ageMs > STALE_MS)` صحیح اجرا شود (الان اجرا می‌شود — این بخش OK است).
+
+تنها تغییر لازم: کاهش پنجره stale از **۱۰ دقیقه به ۲ دقیقه**. یک Meta publish واقعی معمولاً زیر ۶۰ ثانیه تمام می‌شود و social-cron هم در همان بازه‌ی کوتاه پشت سر هم اجرا نمی‌شود، پس ۲ دقیقه ایمن است و double-publish تولید نمی‌کند.
 
 ## تغییرات
 
-### 1. فایل جدید: `src/lib/pwa/registerServiceWorker.ts`
-یک wrapper امن طبق PWA skill پروژه. منطق:
+### 1. `supabase/functions/social-publish/index.ts`
+- خط ۱۷۵: `const STALE_MS = 10 * 60 * 1000;` → `const STALE_MS = 2 * 60 * 1000;`
+- log را همین‌طور نگه می‌داریم تا audit trail حفظ شود.
+- بقیه‌ی منطق lock-acquire/release دست‌نخورده.
 
-- اگر هر یک از موارد زیر برقرار بود، **ثبت نکن** و هر `/sw.js` ثبت‌شده‌ی قبلی روی همان origin را unregister کن:
-  - `!import.meta.env.PROD`
-  - داخل iframe (`window.top !== window.self`)
-  - hostname با `id-preview--` یا `preview--` شروع شود
-  - hostname برابر `lovableproject.com` یا با `.lovableproject.com` ختم شود
-  - hostname برابر `lovableproject-dev.com` یا با `.lovableproject-dev.com` ختم شود
-  - hostname برابر `beta.lovable.dev` یا با `.beta.lovable.dev` ختم شود
-  - URL فعلی شامل `?sw=off` (kill switch)
-- در غیر این صورت `registerSW({...})` با همان رفتار فعلی (autoUpdate + interval 60s).
-- خروجی: function (no-op در حالت‌های refused) تا main.tsx ساده بماند.
+### 2. آزادسازی فوری lockهای فعلی روی پست مورد بحث
+چون کاربر همین الان مسدود است و نمی‌تواند ۲ دقیقه صبر کند، یک query یک‌باره با `supabase--read_query` ابتدا lockهای فعلیِ گیرکرده را شناسایی می‌کنیم و سپس با `supabase--insert` یا یک edge invocation همان منطق recovery را trigger می‌کنیم. در عمل، خود deploy edge function جدید + یک کلیک Retry Publishing کافی است (چون deploy ~چند ثانیه طول می‌کشد و آستانه‌ی جدید ۲ دقیقه است؛ اگر لازم شد، یک UPDATE مستقیم روی `social_posts` برای پاک‌سازی locks اجرا می‌کنیم).
 
-### 2. ویرایش: `src/main.tsx`
-حذف فراخوانی مستقیم `registerSW` و جایگزینی با import از wrapper جدید:
-```ts
-import { registerServiceWorker } from "@/lib/pwa/registerServiceWorker";
-registerServiceWorker();
-```
+دقیق‌تر:
+- اول: `SELECT id, page_name, publishing_started_at FROM social_posts WHERE status='publishing'` تا ببینیم چه چیزی گیر است.
+- بعد: یک `UPDATE social_posts SET status='scheduled', publishing_lock_id=NULL, publishing_started_at=NULL, last_error='Manually cleared after Meta token revocation incident' WHERE status='publishing'` (محدود به همین کاربر/شرکت بر اساس خروجی query).
 
 ### 3. هیچ تغییری در:
-- `vite.config.ts` (تنظیمات VitePWA و `injectRegister: null` و `navigateFallbackDenylist` همگی صحیح‌اند)
-- `src/lib/browserNotification.ts` (worker پوش `sw-push.js` جداست و طبق skill باید دست‌نخورده بماند)
-- production build (روی `erp.rebar.shop` SW مثل قبل ثبت می‌شود)
+- منطق lock acquire (خطوط ۳۲۰+) — درست کار می‌کند.
+- جدول‌ها یا migration — نیازی نیست.
+- frontend — همان toast فعلی کافی است.
 
 ### 4. Verification (طبق Post-Change Verification)
-- preview را reload کن، در DevTools → Application → Service Workers تأیید کن که در preview هیچ SW ثبت نمی‌شود و toast دیگر نمی‌آید.
-- console logs را با `code--read_console_logs` چک کن که `Failed to update a ServiceWorker` دیگر نباشد.
-
-### 5. اقدام دستی کاربر برای ارور قرمز (خارج از کد)
-**Integrations → Facebook/Instagram → Disconnect → Connect** و reconnect با scopeهای: `pages_show_list`, `pages_manage_posts`, `instagram_basic`, `instagram_content_publish`, `business_management`. سپس Retry Publishing.
+- بعد از deploy: یک‌بار retry روی همان پست؛ یا اگر هنوز در lock بود، query تأیید آزادسازی.
+- لاگ‌های `social-publish` را با `supabase--edge_function_logs` چک کن که پیام `Clearing stale publishing lock` ظاهر شود و response دیگر 409 نباشد.
+- توجه: ارور قرمز اصلی Meta (توکن باطل) جداست؛ این پلن فقط 409 lock را حل می‌کند. publish موفق نیازمند reconnect در Integrations است.
 
 ## فایل‌های لمس‌شده
-- created: `src/lib/pwa/registerServiceWorker.ts`
-- edited: `src/main.tsx`
+- edited: `supabase/functions/social-publish/index.ts` (تنها یک ثابت زمانی)
+- one-off DB cleanup query (در صورت نیاز)
