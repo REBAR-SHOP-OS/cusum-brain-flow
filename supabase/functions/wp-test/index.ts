@@ -1,5 +1,25 @@
 import { handleRequest } from "../_shared/requestHandler.ts";
 
+const UA = "Mozilla/5.0 (compatible; RebarShopERP/1.0; +https://erp.rebar.shop)";
+
+async function fetchWithRetry(url: string, init: RequestInit = {}, attempts = 3): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (!headers.has("User-Agent")) headers.set("User-Agent", UA);
+  if (!headers.has("Accept")) headers.set("Accept", "application/json, */*;q=0.1");
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url, { ...init, headers });
+    } catch (err) {
+      lastErr = err;
+      const msg = String((err as Error)?.message ?? err);
+      if (!/tls handshake|connection|eof|reset|timed out/i.test(msg)) throw err;
+      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 Deno.serve((req) =>
   handleRequest(req, async () => {
     const baseUrl = Deno.env.get("WP_BASE_URL");
