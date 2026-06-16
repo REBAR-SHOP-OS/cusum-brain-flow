@@ -1,7 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
-import { resolveMetaToken, validateMetaTokenRemote } from "../_shared/metaTokenResolver.ts";
+import { inspectMetaTokenRemote, markMetaTokenRejected, META_RECONNECT_MESSAGE, resolveMetaToken } from "../_shared/metaTokenResolver.ts";
 
 
 
@@ -300,8 +300,11 @@ Deno.serve((req) =>
       }
 
       // Remote-validate against Meta to catch revoked tokens
-      const valid = await validateMetaTokenRemote(resolved.accessToken);
-      if (!valid) {
+      const inspected = await inspectMetaTokenRemote(resolved.accessToken);
+      if (!inspected.valid) {
+        if (inspected.reason === "auth") {
+          await markMetaTokenRejected(supabaseAdmin, resolved.tokenOwnerUserId);
+        }
         await supabaseAdmin
           .from("integration_connections")
           .upsert({
@@ -309,11 +312,11 @@ Deno.serve((req) =>
             integration_id: integration,
             status: "error",
             last_checked_at: new Date().toISOString(),
-            error_message: "Token rejected by Meta. Please reconnect Facebook/Instagram.",
+            error_message: META_RECONNECT_MESSAGE,
           }, { onConflict: "user_id,integration_id" });
 
         return new Response(
-          JSON.stringify({ status: "error", error: "Token expired. Please reconnect." }),
+          JSON.stringify({ status: "error", error: META_RECONNECT_MESSAGE }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
