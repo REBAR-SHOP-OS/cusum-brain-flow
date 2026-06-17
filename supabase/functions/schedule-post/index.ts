@@ -146,23 +146,27 @@ Deno.serve((req) =>
       // Stories are media-only — caption is optional, but media is required.
       const hasMedia =
         (fullPost.image_url && String(fullPost.image_url).trim().length > 0) ||
-        (fullPost.cover_image_url && String(fullPost.cover_image_url).trim().length > 0);
+        (fullPost.cover_image_url && String(fullPost.cover_image_url).trim().length > 0) ||
+        (fullPost.video_url && String(fullPost.video_url).trim().length > 0);
       if (!hasMedia && fullPost.title) {
         const { data: siblingMedia } = await serviceClient
           .from("social_posts")
-          .select("image_url, cover_image_url")
+          .select("image_url, cover_image_url, video_url")
           .eq("title", fullPost.title)
           .eq("user_id", fullPost.user_id)
           .neq("id", post_id)
-          .not("image_url", "is", null)
-          .neq("image_url", "")
+          .or("image_url.not.is.null,video_url.not.is.null")
           .limit(1)
           .maybeSingle();
-        if (siblingMedia?.image_url) {
+        const sibHasMedia =
+          (siblingMedia?.image_url && String(siblingMedia.image_url).trim().length > 0) ||
+          (siblingMedia?.video_url && String(siblingMedia.video_url).trim().length > 0);
+        if (sibHasMedia) {
           console.log(`[schedule-post] Backfilling story media for ${post_id} from sibling`);
           backfill = {
-            image_url: siblingMedia.image_url,
-            ...(siblingMedia.cover_image_url ? { cover_image_url: siblingMedia.cover_image_url } : {}),
+            ...(siblingMedia!.image_url ? { image_url: siblingMedia!.image_url } : {}),
+            ...(siblingMedia!.cover_image_url ? { cover_image_url: siblingMedia!.cover_image_url } : {}),
+            ...(siblingMedia!.video_url ? { video_url: siblingMedia!.video_url } : {}),
           };
         } else {
           return json({ error: "Cannot schedule story: media (image or video) is required." }, 400);
