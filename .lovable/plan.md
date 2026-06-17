@@ -1,35 +1,45 @@
+# انتقال موتور تولید عکس به اپ دیگر
 
-## مشکل
-در `supabase/functions/social-publish/index.ts` (خط ~۱۷۵)، آستانه‌ی stale-lock روی **۱۰ دقیقه** ست شده. در سناریوی واقعی این پروژه (publish لحظه‌ای، چندین page، شکست به‌علت توکن Meta) پست برای دقایق طولانی در `status='publishing'` گیر می‌کند و کاربر فقط با retry به 409 می‌خورد.
+می‌خوام «راز پخت» عکس‌های REBAR.SHOP رو طوری بسته‌بندی کنم که هر اپ دیگه‌ای (Lovable یا Node یا Deno) بتونه از همون الگو استفاده کنه. هم سند توضیحی می‌سازم، هم یه فایل کد مستقل.
 
-علاوه بر این، حالت‌هایی هست که `publishing_started_at` نال است ولی `status='publishing'` (lock یتیم واقعی) و کد فعلی این را stale در نظر نمی‌گیرد — `ageMs = Number.MAX_SAFE_INTEGER` که > STALE_MS است، پس عملاً آزاد می‌شود، ولی فقط اگر مسیر `if (ageMs > STALE_MS)` صحیح اجرا شود (الان اجرا می‌شود — این بخش OK است).
+## چرا عکس‌ها انقدر خوب درمیان (خلاصه)
 
-تنها تغییر لازم: کاهش پنجره stale از **۱۰ دقیقه به ۲ دقیقه**. یک Meta publish واقعی معمولاً زیر ۶۰ ثانیه تمام می‌شود و social-cron هم در همان بازه‌ی کوتاه پشت سر هم اجرا نمی‌شود، پس ۲ دقیقه ایمن است و double-publish تولید نمی‌کند.
+مدل پایه `google/gemini-3-pro-image-preview` روی Lovable AI Gateway. اما کیفیت واقعی از این ۴ لایه میاد:
 
-## تغییرات
+1. **رفرنس بصری از Pexels** — قبل از تولید، با کلیدواژه‌های پرامپت یه عکس واقعی از Pexels می‌گیریم و به‌عنوان ورودی دوم به مدل می‌دیم. این تنها چیزیه که خروجی رو از CGI/illustration به photorealistic می‌بره.
+2. **پرامپت ساختاریافته با قوانین سخت** — ABSOLUTE RULES (فقط photoreal، ممنوعیت CGI/3D/cartoon)، قید aspect ratio به‌صورت متنی، بخش MANDATORY ADVERTISING BANNER (headline + wordmark + CTA به‌صورت baked-in)، قید زبان فقط انگلیسی، انتخاب تصادفی از ۱۲ سبک بصری.
+3. **Brand Context + Logo + Pixel Brain** — تزریق نام برند/tagline/value_prop/شماره، لوگو به‌عنوان image دوم با دستور «prominent، not watermark»، و رفرنس‌های محصول واقعی از جدول `knowledge`.
+4. **Post-processing سرور** — برش دقیق به ابعاد رسانه (Story 1080×1920 و …) با `cropToAspectRatioStrict` چون مدل گاهی aspect ratio رو رعایت نمی‌کنه.
 
-### 1. `supabase/functions/social-publish/index.ts`
-- خط ۱۷۵: `const STALE_MS = 10 * 60 * 1000;` → `const STALE_MS = 2 * 60 * 1000;`
-- log را همین‌طور نگه می‌داریم تا audit trail حفظ شود.
-- بقیه‌ی منطق lock-acquire/release دست‌نخورده.
+## چیزی که می‌سازم
 
-### 2. آزادسازی فوری lockهای فعلی روی پست مورد بحث
-چون کاربر همین الان مسدود است و نمی‌تواند ۲ دقیقه صبر کند، یک query یک‌باره با `supabase--read_query` ابتدا lockهای فعلیِ گیرکرده را شناسایی می‌کنیم و سپس با `supabase--insert` یا یک edge invocation همان منطق recovery را trigger می‌کنیم. در عمل، خود deploy edge function جدید + یک کلیک Retry Publishing کافی است (چون deploy ~چند ثانیه طول می‌کشد و آستانه‌ی جدید ۲ دقیقه است؛ اگر لازم شد، یک UPDATE مستقیم روی `social_posts` برای پاک‌سازی locks اجرا می‌کنیم).
+### فایل ۱ — `docs/image-generation-recipe.md`
+سند کامل (~۳۰۰ خط) شامل:
+- توضیح ۴ لایه با مثال
+- پرامپت کامل `buildAdPrompt` به‌صورت template آماده کپی
+- لیست ۱۲ سبک بصری
+- ساختار request به Gateway (headers, body, modalities)
+- ساختار response و نحوه extract کردن image
+- نکات: retry بر 429، fallback به base64 در content، crop بعد از تولید
+- چک‌لیست انتقال به اپ دیگه
 
-دقیق‌تر:
-- اول: `SELECT id, page_name, publishing_started_at FROM social_posts WHERE status='publishing'` تا ببینیم چه چیزی گیر است.
-- بعد: یک `UPDATE social_posts SET status='scheduled', publishing_lock_id=NULL, publishing_started_at=NULL, last_error='Manually cleared after Meta token revocation incident' WHERE status='publishing'` (محدود به همین کاربر/شرکت بر اساس خروجی query).
+### فایل ۲ — `src/lib/imageGenRecipe/generateAdImage.ts`
+یک helper تک‌فایلی، self-contained، بدون وابستگی به Pixel Brain این پروژه. امضا:
+```ts
+generateAdImage({
+  prompt, brandContext, logoUrl?, aspectRatio?,
+  lovableApiKey, pexelsApiKey?,
+}) => Promise<{ imageUrl: string }>
+```
+هم در Deno (Edge Function) هم در Node (با fetch) کار می‌کنه. فقط `LOVABLE_API_KEY` لازم داره؛ Pexels اختیاریه ولی قویاً توصیه‌شده.
 
-### 3. هیچ تغییری در:
-- منطق lock acquire (خطوط ۳۲۰+) — درست کار می‌کند.
-- جدول‌ها یا migration — نیازی نیست.
-- frontend — همان toast فعلی کافی است.
+### فایل ۳ — `docs/image-generation-recipe.example.ts`
+یک نمونه ۲۰ خطی که نشون می‌ده چجوری از helper در یه Edge Function جدید استفاده بشه.
 
-### 4. Verification (طبق Post-Change Verification)
-- بعد از deploy: یک‌بار retry روی همان پست؛ یا اگر هنوز در lock بود، query تأیید آزادسازی.
-- لاگ‌های `social-publish` را با `supabase--edge_function_logs` چک کن که پیام `Clearing stale publishing lock` ظاهر شود و response دیگر 409 نباشد.
-- توجه: ارور قرمز اصلی Meta (توکن باطل) جداست؛ این پلن فقط 409 lock را حل می‌کند. publish موفق نیازمند reconnect در Integrations است.
+## چیزی که تغییر نمی‌کنه
+- `supabase/functions/generate-image/index.ts` (پروژه فعلی) دست نمی‌خوره
+- هیچ migration یا تغییر DB نیست
+- هیچ secret جدیدی اضافه نمی‌شه
 
-## فایل‌های لمس‌شده
-- edited: `supabase/functions/social-publish/index.ts` (تنها یک ثابت زمانی)
-- one-off DB cleanup query (در صورت نیاز)
+## تأیید
+بعد از ساخت، فقط فایل‌ها رو re-read می‌کنم تا مطمئن بشم syntax درسته. تست runtime لازم نیست چون فقط documentation + helper مستقل اضافه می‌شه.
