@@ -90,6 +90,8 @@ Deno.serve((req) =>
             title: fullPost.title,
             content: fullPost.content,
             image_url: fullPost.image_url,
+            video_url: fullPost.video_url,
+            cover_image_url: fullPost.cover_image_url,
             scheduled_date,
             hashtags: fullPost.hashtags,
             page_name: combo.page,
@@ -148,19 +150,31 @@ Deno.serve((req) =>
         (fullPost.image_url && String(fullPost.image_url).trim().length > 0) ||
         (fullPost.cover_image_url && String(fullPost.cover_image_url).trim().length > 0) ||
         (fullPost.video_url && String(fullPost.video_url).trim().length > 0);
-      if (!hasMedia && fullPost.title) {
-        const { data: siblingMedia } = await serviceClient
+      if (!hasMedia) {
+        // Try sibling backfill: prefer title match, fall back to same-day window for the user.
+        const scheduledDay = scheduled_date.substring(0, 10);
+        let sibQuery = serviceClient
           .from("social_posts")
           .select("image_url, cover_image_url, video_url")
-          .eq("title", fullPost.title)
           .eq("user_id", fullPost.user_id)
           .neq("id", post_id)
-          .or("image_url.not.is.null,video_url.not.is.null")
-          .limit(1)
-          .maybeSingle();
+          .or("image_url.not.is.null,video_url.not.is.null,cover_image_url.not.is.null")
+          .limit(1);
+
+        if (fullPost.title) {
+          sibQuery = sibQuery.eq("title", fullPost.title);
+        } else {
+          sibQuery = sibQuery
+            .gte("scheduled_date", `${scheduledDay}T00:00:00`)
+            .lte("scheduled_date", `${scheduledDay}T23:59:59`);
+        }
+
+        const { data: siblingMedia } = await sibQuery.maybeSingle();
         const sibHasMedia =
           (siblingMedia?.image_url && String(siblingMedia.image_url).trim().length > 0) ||
-          (siblingMedia?.video_url && String(siblingMedia.video_url).trim().length > 0);
+          (siblingMedia?.video_url && String(siblingMedia.video_url).trim().length > 0) ||
+          (siblingMedia?.cover_image_url && String(siblingMedia.cover_image_url).trim().length > 0);
+
         if (sibHasMedia) {
           console.log(`[schedule-post] Backfilling story media for ${post_id} from sibling`);
           backfill = {
@@ -171,8 +185,6 @@ Deno.serve((req) =>
         } else {
           return json({ error: "Cannot schedule story: media (image or video) is required." }, 400);
         }
-      } else if (!hasMedia) {
-        return json({ error: "Cannot schedule story: media (image or video) is required." }, 400);
       }
     } else {
       // Posts/reels: backfill caption from sibling rows if this row is empty
