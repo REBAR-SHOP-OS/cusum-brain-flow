@@ -90,6 +90,8 @@ Deno.serve((req) =>
             title: fullPost.title,
             content: fullPost.content,
             image_url: fullPost.image_url,
+            video_url: fullPost.video_url,
+            cover_image_url: fullPost.cover_image_url,
             scheduled_date,
             hashtags: fullPost.hashtags,
             page_name: combo.page,
