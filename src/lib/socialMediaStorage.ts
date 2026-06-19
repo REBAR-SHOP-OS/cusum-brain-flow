@@ -57,7 +57,15 @@ export async function uploadSocialMediaAsset(
   // a safe spec at upload time so it's IG-ready for every platform.
   if (type === "video") {
     try {
-      const norm = await normalizeForInstagram(blob);
+      // Hard timeout so a stuck encoder (e.g. unseekable WebM) never freezes
+      // the "Uploading media…" overlay forever.
+      const NORMALIZE_TIMEOUT_MS = 45_000;
+      const norm = await Promise.race([
+        normalizeForInstagram(blob),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("normalize_timeout")), NORMALIZE_TIMEOUT_MS),
+        ),
+      ]);
       if (norm.reencoded) {
         console.log("[socialMediaStorage] video normalized to IG-safe MP4");
         blob = norm.blob;
@@ -66,6 +74,7 @@ export async function uploadSocialMediaAsset(
       console.warn("[socialMediaStorage] IG-safe normalization failed, uploading original", e);
     }
   }
+
 
   const ext = extensionForBlob(blob, type);
   const fileName = `${type}s/${crypto.randomUUID()}.${ext}`;
