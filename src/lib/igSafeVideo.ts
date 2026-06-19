@@ -262,6 +262,13 @@ export async function normalizeForInstagram(
 ): Promise<NormalizeResult> {
   const original = await blobFromSource(source);
 
+  // WebM passthrough: per-frame seek on VP8/VP9 in HTMLVideoElement is
+  // unreliable in Chromium and can hang the encode loop forever. Upload the
+  // original; platform-specific conversion happens at publish time.
+  if ((original.type || "").toLowerCase().includes("webm")) {
+    return { blob: original, reencoded: false, reason: "webm_passthrough" };
+  }
+
   if (!webCodecsSupported()) {
     return { blob: original, reencoded: false, reason: "webcodecs_unavailable" };
   }
@@ -269,6 +276,7 @@ export async function normalizeForInstagram(
   if (await isProbablyAlreadySafe(original)) {
     return { blob: original, reencoded: false, reason: "already_safe" };
   }
+
 
   try {
     const out = await reencodeWithWebCodecs(original);
