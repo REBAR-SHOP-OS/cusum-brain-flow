@@ -937,7 +937,7 @@ export function PostReviewPanel({
                       <label>
                         <input
                           type="file"
-                          accept="video/*"
+                          accept="video/*,video/webm,video/mp4,video/quicktime,.webm,.mp4,.mov,.m4v"
                           className="hidden"
                           onChange={(e) => {
                             const file = e.target.files?.[0];

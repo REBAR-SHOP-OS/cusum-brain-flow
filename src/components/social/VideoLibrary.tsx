@@ -108,7 +108,7 @@ export function VideoLibrary({ onSelectVideo }: VideoLibraryProps) {
           {videos.length} saved video{videos.length !== 1 ? "s" : ""}
         </p>
         <label>
-          <input type="file" accept="video/*" className="hidden" onChange={handleUpload} />
+          <input type="file" accept="video/*,video/webm,video/mp4,video/quicktime,.webm,.mp4,.mov,.m4v" className="hidden" onChange={handleUpload} />
           <Button variant="outline" size="sm" className="gap-1.5" asChild disabled={uploading}>
             <span>
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
