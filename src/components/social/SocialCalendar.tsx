@@ -1,7 +1,8 @@
 import { addDays, format, isSameDay, isToday, parseISO } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Video, CheckCircle2, XCircle, Circle } from "lucide-react";
+import { Video, CheckCircle2, XCircle, Circle, CalendarDays } from "lucide-react";
+import { getOccasionFor } from "@/data/occasionCalendar";
 
 import type { SocialPost } from "@/hooks/useSocialPosts";
 import { resolveDisplayStatus } from "@/lib/socialPostStatus";
@@ -256,10 +257,24 @@ export function SocialCalendar({ posts, weekStart, onPostClick, onGroupClick, se
               "text-center py-2 mb-2 rounded-lg relative",
               isCurrentDay && "bg-muted"
             )}>
-              <p className="text-sm text-muted-foreground">{format(day, "EEE d")}</p>
+              <div className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
+                <CalendarDays className="w-3.5 h-3.5 opacity-70" />
+                <span>{format(day, "EEE d")}</span>
+              </div>
               {isCurrentDay && (
                 <p className="text-xs font-medium text-primary">Today</p>
               )}
+              {(() => {
+                const occ = getOccasionFor(day);
+                return occ ? (
+                  <p
+                    className="mt-0.5 px-1.5 text-[11px] leading-tight text-primary/80 truncate"
+                    title={occ.theme ? `${occ.name} — ${occ.theme}` : occ.name}
+                  >
+                    • {occ.name}
+                  </p>
+                ) : null;
+              })()}
               {onSelectDay && dayPostIds.length > 0 && (
                 <button
                   onClick={(e) => { e.stopPropagation(); onSelectDay(dayPostIds); }}
