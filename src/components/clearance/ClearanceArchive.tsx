@@ -19,6 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useClearanceArchive, ArchiveRow } from "@/hooks/useClearanceArchive";
+import { useClearanceArchiveFacets } from "@/hooks/useClearanceArchiveFacets";
 import { ArchiveCard } from "./ArchiveCard";
 
 const PAGE = 50;
@@ -59,20 +60,14 @@ export function ClearanceArchive() {
 
   const rows = data || [];
 
-  // Build distinct option lists from current result set
-  const projects = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of rows) {
-      if (r.project_id) {
-        map.set(
-          r.project_id,
-          [r.customer_name, r.project_name].filter(Boolean).join(" / ") || r.project_id
-        );
-      }
-    }
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [rows]);
+  // Full project/operator lists across ALL cleared evidence for the company
+  // (not limited to the 50 rows currently rendered).
+  const { data: facets } = useClearanceArchiveFacets();
+  const projects = facets?.projects ?? [];
+  const operators = facets?.operators ?? [];
 
+  // Manifests are still derived from the visible page — they are scoped to
+  // the chosen project and only meaningful in that context.
   const manifests = useMemo(() => {
     const map = new Map<string, string>();
     for (const r of rows) {
@@ -82,14 +77,6 @@ export function ClearanceArchive() {
     }
     return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
   }, [rows, projectId]);
-
-  const operators = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const r of rows) {
-      if (r.verified_by) map.set(r.verified_by, r.verified_by_name || "Unknown");
-    }
-    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1]));
-  }, [rows]);
 
   const clearAll = () => {
     setProjectId(null);
