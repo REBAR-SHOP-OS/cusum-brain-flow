@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import { format, subDays } from "date-fns";
-import { CalendarIcon, X, Archive as ArchiveIcon, Loader2 } from "lucide-react";
+import { format } from "date-fns";
+import { CalendarIcon, Archive as ArchiveIcon, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,6 @@ import { ArchiveCard } from "./ArchiveCard";
 const PAGE = 50;
 
 export function ClearanceArchive() {
-  const today = useMemo(() => new Date(), []);
   const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
   const [toDate, setToDate] = useState<Date | undefined>(undefined);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -82,8 +81,8 @@ export function ClearanceArchive() {
     setProjectId(null);
     setCutPlanId(null);
     setVerifiedBy(null);
-    setFromDate(subDays(today, 30));
-    setToDate(today);
+    setFromDate(undefined);
+    setToDate(undefined);
     setLimit(PAGE);
   };
 
