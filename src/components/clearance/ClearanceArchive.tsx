@@ -26,8 +26,8 @@ const PAGE = 50;
 
 export function ClearanceArchive() {
   const today = useMemo(() => new Date(), []);
-  const [fromDate, setFromDate] = useState<Date | undefined>(subDays(today, 30));
-  const [toDate, setToDate] = useState<Date | undefined>(today);
+  const [fromDate, setFromDate] = useState<Date | undefined>(undefined);
+  const [toDate, setToDate] = useState<Date | undefined>(undefined);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [cutPlanId, setCutPlanId] = useState<string | null>(null);
   const [verifiedBy, setVerifiedBy] = useState<string | null>(null);
