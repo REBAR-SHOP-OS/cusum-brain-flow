@@ -768,6 +768,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         content: fullContent,
         hashtags: hashtags,
         image_url: imageUrl,
+        image_prompt: imagePrompt,
         updated_at: new Date().toISOString(),
       })
       .eq("id", post_id);
