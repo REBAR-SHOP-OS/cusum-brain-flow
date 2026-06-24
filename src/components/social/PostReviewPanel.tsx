@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { useAuth, getCurrentUser } from "@/lib/auth";
-import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy, Languages, Download } from "lucide-react";
+import { RefreshCw, Sparkles, CalendarDays, Trash2, Loader2, ImageIcon, Video, ChevronDown, Send, Upload, Smartphone, ChevronRight, ZoomIn, Pencil, Check, Play, Copy, Languages, Download, Eye } from "lucide-react";
 import { downloadFile } from "@/lib/downloadUtils";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -180,6 +180,7 @@ export function PostReviewPanel({
   const [showImageEdit, setShowImageEdit] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [imageZoomOpen, setImageZoomOpen] = useState(false);
+  const [imagePromptOpen, setImagePromptOpen] = useState(false);
   const [showVideoPlayer, setShowVideoPlayer] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const [repostPopoverOpen, setRepostPopoverOpen] = useState(false);
@@ -880,6 +881,19 @@ export function PostReviewPanel({
                           className="absolute top-2 right-11 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                         >
                           <Download className="w-4 h-4" />
+                        </button>
+                      )}
+                      {(post as any).image_prompt && !isVideo && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setImagePromptOpen(true);
+                          }}
+                          title="View image prompt"
+                          aria-label="View image prompt"
+                          className="absolute top-2 right-20 w-8 h-8 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          <Eye className="w-4 h-4" />
                         </button>
                       )}
                     </div>
