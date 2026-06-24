@@ -1820,6 +1820,30 @@ export function PostReviewPanel({
               </div>
             </DialogContent>
           </Dialog>
+          {(post as any).image_prompt && (
+            <Dialog open={imagePromptOpen} onOpenChange={setImagePromptOpen}>
+              <DialogContent className="max-w-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold">Image prompt</h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={() => {
+                      navigator.clipboard.writeText((post as any).image_prompt || "");
+                      toast({ title: "Copied", description: "Prompt copied to clipboard." });
+                    }}
+                  >
+                    <Copy className="w-3.5 h-3.5" />
+                    Copy prompt
+                  </Button>
+                </div>
+                <pre className="max-h-[60vh] overflow-auto whitespace-pre-wrap break-words rounded bg-muted/30 border border-border p-3 font-mono text-xs leading-relaxed text-foreground">
+{(post as any).image_prompt}
+                </pre>
+              </DialogContent>
+            </Dialog>
+          )}
           <ImageEditDialog
             open={showImageEdit}
             onOpenChange={setShowImageEdit}
