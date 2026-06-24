@@ -479,6 +479,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
         .from("social_posts")
         .update({
           image_url: imgResult.imageUrl,
+          image_prompt: imagePrompt,
           updated_at: new Date().toISOString(),
         })
         .eq("id", post_id);
