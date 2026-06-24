@@ -14288,6 +14288,7 @@ export type Database = {
           declined_by: string | null
           hashtags: string[] | null
           id: string
+          image_prompt: string | null
           image_url: string | null
           impressions: number | null
           last_error: string | null
@@ -14319,6 +14320,7 @@ export type Database = {
           declined_by?: string | null
           hashtags?: string[] | null
           id?: string
+          image_prompt?: string | null
           image_url?: string | null
           impressions?: number | null
           last_error?: string | null
@@ -14350,6 +14352,7 @@ export type Database = {
           declined_by?: string | null
           hashtags?: string[] | null
           id?: string
+          image_prompt?: string | null
           image_url?: string | null
           impressions?: number | null
           last_error?: string | null
