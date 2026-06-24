@@ -1,8 +1,7 @@
+// @vitest-environment node
 /**
  * Regression: stale `/sw.js` update errors must not surface to the user.
  * See src/lib/pwa/suppressServiceWorkerErrors.ts
- *
- * @vitest-environment node
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 
