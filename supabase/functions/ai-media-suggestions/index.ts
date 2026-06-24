@@ -41,17 +41,47 @@ Top SEO Keywords:
 Brand Context:
 ${brandInfo}`;
 
-    const result = await callAI({
-      provider: "gemini",
-      model: "gemini-2.5-flash-lite",
-      agentName: "social",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Generate 4 ${type} prompt suggestions.` },
-      ],
-      maxTokens: 1000,
-      temperature: 0.8,
-    });
+    const tryCall = (model: string) =>
+      callAI({
+        provider: "gemini",
+        model,
+        agentName: "social",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: `Generate 4 ${type} prompt suggestions.` },
+        ],
+        maxTokens: 1000,
+        temperature: 0.8,
+      });
+
+    const isOverloaded = (e: any) => {
+      const msg = String(e?.message || e || "");
+      return msg.includes("503") || msg.includes("UNAVAILABLE") || msg.includes("overloaded") || msg.includes("high demand");
+    };
+
+    // Primary → retry once → fallback to flash → final fallback to gemini-2.5-pro
+    let result: any;
+    const attempts: Array<{ model: string; wait: number }> = [
+      { model: "gemini-2.5-flash-lite", wait: 0 },
+      { model: "gemini-2.5-flash-lite", wait: 1500 },
+      { model: "gemini-2.5-flash", wait: 0 },
+      { model: "gemini-2.5-pro", wait: 0 },
+    ];
+    let lastErr: any;
+    for (const a of attempts) {
+      if (a.wait) await new Promise((r) => setTimeout(r, a.wait));
+      try {
+        result = await tryCall(a.model);
+        lastErr = null;
+        break;
+      } catch (e) {
+        lastErr = e;
+        if (!isOverloaded(e)) throw e;
+        console.warn(`[ai-media-suggestions] ${a.model} overloaded, trying next…`);
+      }
+    }
+    if (!result) throw lastErr || new Error("All AI models are currently overloaded. Please try again in a moment.");
+
 
     let suggestions: string[] = [];
     try {
