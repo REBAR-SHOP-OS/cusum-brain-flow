@@ -425,9 +425,11 @@ Deno.serve((req) =>
 
       const generateStoryImage = async (
         angle: string, lighting: string, palette: string, headline: string,
-      ): Promise<string | null> => {
+      ): Promise<{ url: string; prompt: string } | null> => {
+        let lastPrompt = "";
         for (let attempt = 0; attempt < 2; attempt++) {
           const prompt = buildStoryPrompt(angle, lighting, palette, headline);
+          lastPrompt = prompt;
           try {
             const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
               method: "POST",
@@ -475,7 +477,7 @@ Deno.serve((req) =>
             const { data: pubUrl } = supabaseAdmin.storage
               .from("social-media-assets")
               .getPublicUrl(fileName);
-            return pubUrl.publicUrl;
+            return { url: pubUrl.publicUrl, prompt: lastPrompt };
           } catch (e) {
             console.error("Story image error:", e);
             if (attempt === 0) continue;
