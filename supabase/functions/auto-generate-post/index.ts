@@ -506,19 +506,19 @@ Deno.serve((req) =>
           );
           for (let k = 0; k < slice.length; k++) {
             const idx = i + k;
-            const imageUrl = results[k];
+            const result = results[k];
             const phId = placeholderIds[idx];
             if (!phId) continue;
-            if (!imageUrl) {
+            if (!result) {
               console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
               await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
               continue;
             }
             await supabaseAdmin
               .from("social_posts")
-              .update({ image_url: imageUrl, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
+              .update({ image_url: result.url, image_prompt: result.prompt, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
               .eq("id", phId);
-            updateResults.push({ id: phId, image_url: imageUrl });
+            updateResults.push({ id: phId, image_url: result.url });
           }
         }
       })().catch((e) => console.error("[story background] failed:", e));
