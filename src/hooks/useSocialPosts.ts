@@ -12,6 +12,7 @@ export interface SocialPost {
   title: string;
   content: string;
   image_url: string | null;
+  image_prompt?: string | null;
   scheduled_date: string | null;
   hashtags: string[];
   user_id: string;

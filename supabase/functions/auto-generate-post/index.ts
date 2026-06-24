@@ -425,9 +425,11 @@ Deno.serve((req) =>
 
       const generateStoryImage = async (
         angle: string, lighting: string, palette: string, headline: string,
-      ): Promise<string | null> => {
+      ): Promise<{ url: string; prompt: string } | null> => {
+        let lastPrompt = "";
         for (let attempt = 0; attempt < 2; attempt++) {
           const prompt = buildStoryPrompt(angle, lighting, palette, headline);
+          lastPrompt = prompt;
           try {
             const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
               method: "POST",
@@ -475,7 +477,7 @@ Deno.serve((req) =>
             const { data: pubUrl } = supabaseAdmin.storage
               .from("social-media-assets")
               .getPublicUrl(fileName);
-            return pubUrl.publicUrl;
+            return { url: pubUrl.publicUrl, prompt: lastPrompt };
           } catch (e) {
             console.error("Story image error:", e);
             if (attempt === 0) continue;
@@ -504,19 +506,19 @@ Deno.serve((req) =>
           );
           for (let k = 0; k < slice.length; k++) {
             const idx = i + k;
-            const imageUrl = results[k];
+            const result = results[k];
             const phId = placeholderIds[idx];
             if (!phId) continue;
-            if (!imageUrl) {
+            if (!result) {
               console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
               await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
               continue;
             }
             await supabaseAdmin
               .from("social_posts")
-              .update({ image_url: imageUrl, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
+              .update({ image_url: result.url, image_prompt: result.prompt, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
               .eq("id", phId);
-            updateResults.push({ id: phId, image_url: imageUrl });
+            updateResults.push({ id: phId, image_url: result.url });
           }
         }
       })().catch((e) => console.error("[story background] failed:", e));

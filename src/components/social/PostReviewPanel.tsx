@@ -1063,8 +1063,32 @@ export function PostReviewPanel({
                            />
                          </PopoverContent>
                        </Popover>
-                     </div>
-                  </div>
+                      </div>
+                      {(post as any).image_prompt ? (
+                        <details className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs">
+                          <summary className="cursor-pointer select-none font-medium text-muted-foreground hover:text-foreground">
+                            View image prompt
+                          </summary>
+                          <div className="mt-2 flex flex-col gap-2">
+                            <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded bg-background/60 p-2 font-mono text-[11px] leading-relaxed text-foreground">
+{(post as any).image_prompt}
+                            </pre>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="self-start gap-1.5"
+                              onClick={() => {
+                                navigator.clipboard.writeText((post as any).image_prompt || "");
+                                toast({ title: "Copied", description: "Prompt copied to clipboard." });
+                              }}
+                            >
+                              Copy prompt
+                            </Button>
+                          </div>
+                        </details>
+                      ) : null}
+                   </div>
+
                 </div>
 
                 {/* ── Content Section (hidden for Stories) ── */}
