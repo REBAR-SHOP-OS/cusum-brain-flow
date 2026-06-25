@@ -915,6 +915,7 @@ export function useAutoClearance({
         ocr: lastOcr,
         validation,
       });
+      setState("completed");
       perfLog("finalize", tNow() - tFinal);
       perfLog("cycle_product_total", tNow() - tStartProduct);
       perfLog("cycle_item_total", tNow() - cycleStartRef.current);
@@ -979,8 +980,6 @@ export function useAutoClearance({
         active_after: Math.max(0, beforeActive - (evidenceOk && phaseOk ? 1 : 0)),
         ok: evidenceOk && phaseOk,
       });
-
-      setState("completed");
       speak("Verified");
       vibrate(120);
 

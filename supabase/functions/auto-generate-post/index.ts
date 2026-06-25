@@ -437,8 +437,8 @@ Deno.serve((req) =>
               body: JSON.stringify({
                 model: "openai/gpt-image-2",
                 prompt,
-                // Story mode always uses the locked 9:16 size.
-                size: "1024x1792",
+                // 9:16 -> "1024x1792" (locked Story size); other ratios use ASPECT_SIZE map.
+                size: isStoryRatio ? "1024x1792" : aspectCfg.gpt,
                 quality: "medium",
                 n: 1,
               }),
@@ -509,16 +509,17 @@ Deno.serve((req) =>
             const result = results[k];
             const phId = placeholderIds[idx];
             if (!phId) continue;
-            if (!result) {
+            const imageUrl = result?.url || null;
+            if (!imageUrl) {
               console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
               await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
               continue;
             }
             await supabaseAdmin
               .from("social_posts")
-              .update({ image_url: result.url, image_prompt: result.prompt, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
+              .update({ image_url: imageUrl, image_prompt: result.prompt, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
               .eq("id", phId);
-            updateResults.push({ id: phId, image_url: result.url });
+            updateResults.push({ id: phId, image_url: imageUrl });
           }
         }
       })().catch((e) => console.error("[story background] failed:", e));
