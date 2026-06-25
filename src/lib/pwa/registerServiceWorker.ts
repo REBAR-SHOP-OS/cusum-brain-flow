@@ -2,7 +2,7 @@ import { registerSW } from "virtual:pwa-register";
 
 const SW_URL = "/sw.js";
 
-function shouldRefuseRegistration(): boolean {
+export function shouldRefuseRegistration(): boolean {
   if (typeof window === "undefined") return true;
   if (!import.meta.env.PROD) return true;
 
@@ -27,7 +27,7 @@ function shouldRefuseRegistration(): boolean {
   return false;
 }
 
-async function unregisterStaleAppSW(): Promise<void> {
+export async function unregisterStaleAppSW(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   try {
     const regs = await navigator.serviceWorker.getRegistrations();
@@ -66,24 +66,4 @@ async function unregisterStaleAppSW(): Promise<void> {
   } catch {
     // best-effort
   }
-}
-
-export function registerServiceWorker(): void {
-  if (shouldRefuseRegistration()) {
-    void unregisterStaleAppSW();
-    return;
-  }
-
-  const updateServiceWorker = registerSW({
-    immediate: true,
-    onNeedRefresh() {
-      updateServiceWorker(true);
-    },
-    onRegisteredSW(_swUrl, registration) {
-      if (!registration) return;
-      setInterval(() => {
-        registration.update();
-      }, 60 * 1000);
-    },
-  });
 }
