@@ -31,10 +31,14 @@ jobs:
       - name: Run quote-engine tests
         run: |
           if [ -d supabase/functions/quote-engine ]; then
-            deno test --allow-net --allow-env --allow-read supabase/functions/quote-engine/ || true
+            TEST_FILES=$(find supabase/functions/quote-engine -type f \( -name '*test.ts' -o -name '*test.tsx' -o -name '*.test.ts' -o -name '*.test.tsx' \))
+            if [ -n "$TEST_FILES" ]; then
+              deno test --allow-net --allow-env --allow-read supabase/functions/quote-engine/
+            else
+              echo "No Deno test files found in supabase/functions/quote-engine; skipping."
+            fi
           fi
-        # `|| true` while edge tests are environment-bound; tighten once
-        # CI secrets for VITE_SUPABASE_* are provisioned.
+        # Skip cleanly when the edge-function folder exists but has no tests yet.
 
   rls-no-permissive:
     name: RLS — no permissive policies
