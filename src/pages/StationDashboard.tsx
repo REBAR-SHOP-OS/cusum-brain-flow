@@ -50,7 +50,7 @@ export default function StationDashboard() {
         const id = window.setTimeout(() => window.scrollTo(0, y), 0);
         // also try after a short delay in case async data shifts layout
         const id2 = window.setTimeout(() => window.scrollTo(0, y), 250);
-        var cleanupIds: number[] = [id, id2];
+        const cleanupIds: number[] = [id, id2];
       }
     } catch {}
 

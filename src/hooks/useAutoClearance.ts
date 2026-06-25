@@ -39,7 +39,7 @@ type RankedMatch = {
 };
 
 function clearanceFlowLog(step: string, details: Record<string, any>) {
-  // eslint-disable-next-line no-console
+   
   console.log("[clearance-camera-flow]", { step, ...details });
 }
 
@@ -49,7 +49,7 @@ const tNow = () => (typeof performance !== "undefined" ? performance.now() : Dat
 function perfLog(label: string, ms: number, extra?: Record<string, any>) {
   if (!PERF) return;
   // single-line, easy to grep: [auto-perf] step=upload ms=412
-  // eslint-disable-next-line no-console
+   
   console.log(`[auto-perf] step=${label} ms=${Math.round(ms)}`, extra ?? "");
 }
 
@@ -421,7 +421,7 @@ export function useAutoClearance({
       if (fixed?.phase) finalPhase = fixed.phase;
     }
 
-    // eslint-disable-next-line no-console
+     
     console.log("[auto-clearance/finalize]", {
       evidenceId,
       cut_plan_item_id: itemId,
@@ -967,7 +967,7 @@ export function useAutoClearance({
         });
       }
 
-      // eslint-disable-next-line no-console
+       
       console.log("[auto-clearance/post-finalize]", {
         evidence_id: finalizedEvidenceId,
         cut_plan_item_id: finalizedItemId,
@@ -1069,7 +1069,7 @@ export function useAutoClearance({
     } finally {
       refreshQueueCount();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [handleTagCapture, handleProductCapture, refreshQueueCount]);
 
   return {

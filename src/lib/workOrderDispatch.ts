@@ -201,7 +201,7 @@ export async function startWorkOrder(workOrderId: string): Promise<DispatchResul
   // 1) Load tasks for this WO that are dispatchable
   const TASK_COLS =
     "id, task_type, status, company_id, setup_key, bar_code, grade, locked_to_machine_id";
-  let { data: tasks, error: tErr } = await supabase
+  const { data: tasks, error: tErr } = await supabase
     .from("production_tasks")
     .select(TASK_COLS)
     .eq("work_order_id", workOrderId)

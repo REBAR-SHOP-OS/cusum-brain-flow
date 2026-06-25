@@ -222,8 +222,8 @@ export async function performMultiPassAnalysis(
   extractedRebar: ExtractedRebarData[];
 }> {
   const discrepancies: string[] = [];
-  let allZones: DetectedZone[] = [];
-  let allExtractedRebar: ExtractedRebarData[] = [];
+  const allZones: DetectedZone[] = [];
+  const allExtractedRebar: ExtractedRebarData[] = [];
 
   if (isPdf) {
     const conversionResult = await convertPdfToImages(fileUrl, 20);

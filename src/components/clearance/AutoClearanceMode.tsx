@@ -49,7 +49,7 @@ export function AutoClearanceMode({
   useEffect(() => {
     if (state !== "completed") return;
     const closeTimer = window.setTimeout(() => {
-      // eslint-disable-next-line no-console
+       
       console.log("[clearance-camera-flow]", {
         step: "camera_close_callback_fired",
         reason: "item_completed",

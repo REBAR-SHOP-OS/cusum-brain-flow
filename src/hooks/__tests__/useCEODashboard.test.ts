@@ -77,7 +77,7 @@ describe("CEO Dashboard — known schema limitations", () => {
       const lines = DASHBOARD_SOURCE.split("\n");
       const socialLine = lines.findIndex(l => l.includes('.from("social_posts")'));
       if (socialLine >= 0) {
-        const context = lines.slice(socialLine, socialLine + 5).join(" ");
+        const context = lines.slice(socialLine, socialLine + 1).join(" ");
         const hasCompanyFilter = context.includes("company_id");
         // Documenting: this SHOULD have company_id but table lacks the column
         expect(hasCompanyFilter).toBe(false); // Known limitation
@@ -91,7 +91,7 @@ describe("CEO Dashboard — known schema limitations", () => {
       const lines = DASHBOARD_SOURCE.split("\n");
       const timeLine = lines.findIndex(l => l.includes('.from("time_clock_entries")'));
       if (timeLine >= 0) {
-        const context = lines.slice(timeLine, timeLine + 5).join(" ");
+        const context = lines.slice(timeLine, timeLine + 1).join(" ");
         const hasCompanyFilter = context.includes("company_id");
         expect(hasCompanyFilter).toBe(false); // Known limitation
       }

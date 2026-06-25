@@ -194,7 +194,7 @@ async function handleCallback(
   }
 
   // Auto-discover LinkedIn Organization pages the user administers
-  let organizationIds: Record<string, string> = {};
+  const organizationIds: Record<string, string> = {};
   try {
     const aclRes = await fetch(
       "https://api.linkedin.com/v2/organizationAcls?q=roleAssignee&role=ADMINISTRATOR&projection=(elements*(organization~(localizedName),organization))",

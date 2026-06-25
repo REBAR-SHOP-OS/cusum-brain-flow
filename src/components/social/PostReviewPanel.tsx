@@ -332,7 +332,7 @@ export function PostReviewPanel({
     // Debounce: wait 1.5s after last caption change before translating
     if (translateDebounceRef.current) clearTimeout(translateDebounceRef.current);
     translateDebounceRef.current = setTimeout(() => {
-      let cancelled = false;
+      const cancelled = false;
       const doTranslate = async () => {
         setAutoTranslating(true);
         setTranslateError(false);
@@ -696,7 +696,7 @@ export function PostReviewPanel({
   const handleContentTypeSave = async (value: string) => {
     setLocalContentType(value);
     // Batch update all siblings (same title + platform + exact time slot)
-    let query = supabase
+    const query = supabase
       .from("social_posts")
       .update({ content_type: value })
       .eq("platform", post.platform)

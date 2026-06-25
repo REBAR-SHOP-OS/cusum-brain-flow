@@ -95,7 +95,7 @@ Deno.serve((req) =>
         let rawOut: string | null = null;
         let paidMinutes = 0;
         let lunchDeducted = 30;
-        let paidBreak = empType === "workshop" ? 30 : 0;
+        const paidBreak = empType === "workshop" ? 30 : 0;
 
         if (dayEntries.length === 0) {
           exceptions.push({ type: "missing_punch", message: "No clock entry for this workday", confidence: 95 });
@@ -186,7 +186,7 @@ Deno.serve((req) =>
     }
 
     // Generate AI notes
-    let aiNotesMap: Record<string, string> = {};
+    const aiNotesMap: Record<string, string> = {};
     try {
       if (aiPrompts.length > 0) {
         const batchPrompt = aiPrompts

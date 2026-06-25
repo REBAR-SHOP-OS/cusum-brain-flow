@@ -351,8 +351,8 @@ async function runOptimization(
         const issues: string[] = [];
         const sourceUrl = item.source_url;
         let fileSize: number | null = null;
-        let imgWidth = item.media_details?.width || null;
-        let imgHeight = item.media_details?.height || null;
+        const imgWidth = item.media_details?.width || null;
+        const imgHeight = item.media_details?.height || null;
 
         try {
           const headRes = await fetch(sourceUrl, { method: "HEAD", redirect: "follow" });

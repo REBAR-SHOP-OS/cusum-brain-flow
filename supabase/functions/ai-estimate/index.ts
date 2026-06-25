@@ -327,7 +327,7 @@ Deno.serve((req) =>
 
     // ─── 2. Separate files by type: spreadsheets (deterministic) vs PDF/images (AI) ───
     let extractedItems: EstimationItemInput[] = [];
-    let spreadsheetItems: EstimationItemInput[] = [];
+    const spreadsheetItems: EstimationItemInput[] = [];
     let hadSpreadsheetFiles = false;
     let hadAIFiles = false;
 

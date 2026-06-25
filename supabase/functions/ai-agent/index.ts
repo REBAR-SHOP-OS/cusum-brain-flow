@@ -501,7 +501,7 @@ Deno.serve((req) =>
     if (preferredModel) mergedContext.preferredModel = preferredModel;
 
     // Document Analysis (Moved logic to shared/agentDocumentUtils but integrated here)
-    let documentResults: { 
+    const documentResults: { 
       fileName: string; 
       text: string; 
       confidence: number; 

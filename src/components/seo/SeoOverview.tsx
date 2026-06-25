@@ -237,7 +237,7 @@ export function SeoOverview() {
       if (!domain?.id) throw new Error("No domain configured");
 
       let ideas: any[] = [];
-      let auditPages: any[] = [];
+      const auditPages: any[] = [];
 
       for (const file of files) {
         const ab = await file.arrayBuffer();

@@ -76,7 +76,7 @@ Deno.serve((req) =>
     }
 
     let mode = "missing";
-    var singleOdooId: string | undefined;
+    let singleOdooId: string | undefined;
     if (reqBody?.mode === "full") mode = "full";
     if (reqBody?.mode === "single" && reqBody?.odoo_id) {
       mode = "single";

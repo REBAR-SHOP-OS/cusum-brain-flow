@@ -39,6 +39,10 @@ vi.mock("@/lib/storageUtils", () => ({
   getSignedFileUrl: vi.fn().mockResolvedValue("https://example.com/signed-url"),
 }));
 
+vi.mock("@/lib/invokeEdgeFunction", () => ({
+  invokeEdgeFunction: vi.fn(),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
 
@@ -75,10 +79,8 @@ describe("Extract Service - End to End Flow", () => {
   });
 
   it("2. runExtract invokes edge function with sessionId and returns", async () => {
-    mockInvoke.mockResolvedValue({
-      data: { status: "processing", sessionId: "session-123" },
-      error: null,
-    });
+    const { invokeEdgeFunction } = await import("@/lib/invokeEdgeFunction");
+    vi.mocked(invokeEdgeFunction).mockResolvedValue({ status: "processing", sessionId: "session-123" });
 
     const { runExtract } = await import("@/lib/extractService");
 
@@ -94,8 +96,9 @@ describe("Extract Service - End to End Flow", () => {
       },
     });
 
-    expect(mockInvoke).toHaveBeenCalledWith("extract-manifest", {
-      body: {
+    expect(vi.mocked(invokeEdgeFunction)).toHaveBeenCalledWith(
+      "extract-manifest",
+      {
         sessionId: "session-123",
         fileUrl: "https://example.com/file.xlsx",
         fileName: "test.xlsx",
@@ -106,14 +109,13 @@ describe("Extract Service - End to End Flow", () => {
           type: "delivery",
         },
       },
-    });
+      expect.objectContaining({ timeoutMs: 120_000 }),
+    );
   });
 
   it("3. runExtract throws when edge function returns error", async () => {
-    mockInvoke.mockResolvedValue({
-      data: { error: "Rate limit exceeded" },
-      error: null,
-    });
+    const { invokeEdgeFunction } = await import("@/lib/invokeEdgeFunction");
+    vi.mocked(invokeEdgeFunction).mockRejectedValue(new Error("Rate limit exceeded"));
 
     const { runExtract } = await import("@/lib/extractService");
 

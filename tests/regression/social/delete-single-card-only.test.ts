@@ -17,7 +17,7 @@ describe("PostReviewPanel handleDelete — single-card only", () => {
   );
 
   it("does not compute a siblings list inside handleDelete", () => {
-    const handleDeleteMatch = source.match(/const handleDelete = async \(\) => \{[\s\S]*?\n  \};/);
+    const handleDeleteMatch = source.match(/const handleDelete = async \(\) => \{[\s\S]*?\n {2}\};/);
     expect(handleDeleteMatch, "handleDelete block not found").toBeTruthy();
     const body = handleDeleteMatch![0];
     expect(body).not.toMatch(/siblings/);
@@ -26,7 +26,7 @@ describe("PostReviewPanel handleDelete — single-card only", () => {
   });
 
   it("calls deletePost.mutateAsync exactly with post.id", () => {
-    const handleDeleteMatch = source.match(/const handleDelete = async \(\) => \{[\s\S]*?\n  \};/)!;
+    const handleDeleteMatch = source.match(/const handleDelete = async \(\) => \{[\s\S]*?\n {2}\};/)!;
     expect(handleDeleteMatch[0]).toMatch(/deletePost\.mutateAsync\(post\.id\)/);
   });
 });
