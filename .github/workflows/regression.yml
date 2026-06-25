@@ -17,6 +17,8 @@ jobs:
           bun-version: latest
       - name: Install deps
         run: bun install --frozen-lockfile --ignore-scripts
+      - name: Remove broken optional canvas package
+        run: rm -rf node_modules/canvas
       - name: Run regression tests
         run: bunx vitest run tests/regression
 
