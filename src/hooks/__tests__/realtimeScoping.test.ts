@@ -32,8 +32,8 @@ function findChannelCalls(filePath: string): { line: number; channel: string }[]
 }
 
 function isDynamic(channelArg: string): boolean {
-  // Dynamic channels use template literals, string concatenation, or a plain
-  // variable reference (an identifier that is not a quoted string literal).
+  // Dynamic channels use template literals, string concatenation, dollar-sign
+  // interpolation, or a plain variable/expression reference (not a quoted literal).
   const trimmed = channelArg.trim();
   const isStringLiteral =
     (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
