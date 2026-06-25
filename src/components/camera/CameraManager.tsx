@@ -131,7 +131,7 @@ export default function CameraManager() {
     if (!companyId) return;
     const { data, error } = await supabase
       .from("cameras")
-      .select("*")
+      .select("id,company_id,camera_id,name,ip_address,port,username,rtsp_path,rtsp_path_secondary,location,assigned_zone,is_active,brand,model,uid,http_port,https_port,online_offline_status,api_status,stream_status,last_seen_at,created_at,updated_at")
       .eq("company_id", companyId)
       .order("name");
     if (error) {

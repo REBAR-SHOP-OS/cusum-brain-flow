@@ -6371,6 +6371,7 @@ export type Database = {
       }
       integration_settings: {
         Row: {
+          company_id: string | null
           config: Json | null
           created_at: string
           id: string
@@ -6380,6 +6381,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          company_id?: string | null
           config?: Json | null
           created_at?: string
           id?: string
@@ -6389,6 +6391,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          company_id?: string | null
           config?: Json | null
           created_at?: string
           id?: string
@@ -6397,7 +6400,15 @@ export type Database = {
           status?: string | null
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "integration_settings_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       inventory_count_lines: {
         Row: {
