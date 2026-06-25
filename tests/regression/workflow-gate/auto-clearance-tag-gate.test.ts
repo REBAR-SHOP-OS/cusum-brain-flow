@@ -34,7 +34,7 @@ import {
   assertEvidenceComplete,
   ClearanceGateError,
 } from "@/lib/clearanceEvidenceGate";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 import * as mock from "@/integrations/supabase/client";
 
 const setRow = (row: any) => {

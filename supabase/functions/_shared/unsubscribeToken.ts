@@ -16,7 +16,7 @@ function getSecret(): string {
 }
 
 function b64url(bytes: Uint8Array): string {
-  let s = btoa(String.fromCharCode(...bytes));
+  const s = btoa(String.fromCharCode(...bytes));
   return s.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 function b64urlDecode(s: string): Uint8Array {

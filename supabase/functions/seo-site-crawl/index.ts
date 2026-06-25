@@ -190,8 +190,8 @@ Deno.serve((req) =>
 
     const allPages: PageResult[] = [];
     const visited = new Set<string>();
-    let titleMap = new Map<string, string[]>();
-    let descMap = new Map<string, string[]>();
+    const titleMap = new Map<string, string[]>();
+    const descMap = new Map<string, string[]>();
 
     for (const url of urlsToVisit) {
       if (visited.size >= max_pages) break;

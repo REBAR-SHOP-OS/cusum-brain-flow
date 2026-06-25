@@ -123,7 +123,7 @@ export function useTeamMessages(channelId: string | null) {
 
     const realtimeId = `team-msgs-${channelId}-${user.id}-${crypto.randomUUID()}`;
     const channel = supabase
-      .channel(realtimeId)
+      .channel(`team-msgs-${channelId}-${user.id}-${crypto.randomUUID()}`)
       .on(
         "postgres_changes",
         {

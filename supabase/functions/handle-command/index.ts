@@ -9,7 +9,7 @@ interface CommandRequest {
 
 function parseIntent(input: string) {
   const inputLower = input.toLowerCase();
-  let intent = "ai_ask"; // Default intent
+  const intent = "ai_ask"; // Default intent
 
   if (inputLower.startsWith("navigate to")) {
     const page = input.substring("navigate to".length).trim();

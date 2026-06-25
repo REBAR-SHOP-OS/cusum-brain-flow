@@ -212,7 +212,7 @@ async function handleChat(messages: any[], currentPage?: string) {
     systemMessages.push({ role: "system", content: `The visitor is currently on: ${currentPage}` });
   }
 
-  let allMessages = [...systemMessages, ...messages];
+  const allMessages = [...systemMessages, ...messages];
   
   // Allow up to 3 rounds of tool calling
   for (let round = 0; round < 3; round++) {
@@ -299,7 +299,7 @@ async function handleChatStream(messages: any[], currentPage?: string) {
   }
 
   // First do a non-streaming call to handle tool calls
-  let allMessages = [...systemMessages, ...messages];
+  const allMessages = [...systemMessages, ...messages];
   const toolResults: any[] = [];
 
   for (let round = 0; round < 3; round++) {

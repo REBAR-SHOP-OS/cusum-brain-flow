@@ -683,7 +683,7 @@ Rules:
           }
 
           // Parse the JSON from the response
-          let jsonStr = rawContent
+          const jsonStr = rawContent
             .replace(/^```json?\s*/i, "")
             .replace(/```\s*$/, "")
             .trim();

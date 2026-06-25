@@ -1462,7 +1462,7 @@ async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, us
   };
 
   // Accept both "lineItems" and "items" as parameter names
-  let lineItems = (body.lineItems || body.items) as { description: string; amount?: number; unitPrice?: number; quantity?: number; serviceId?: string }[] | undefined;
+  const lineItems = (body.lineItems || body.items) as { description: string; amount?: number; unitPrice?: number; quantity?: number; serviceId?: string }[] | undefined;
   let customerId = body.customerId as string | undefined;
   const customerName = body.customerName as string | undefined;
   const customerEmail = body.customerEmail as string | undefined;

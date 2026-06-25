@@ -786,13 +786,13 @@ Deno.serve((req) =>
       matchScore?: number;
     }> = [];
 
-    let created = 0;
+    const created = 0;
     let skipped = 0;
     let filtered = 0;
     let routed = 0;
     let escalated = 0;
 
-    let nextNumber = await getNextLeadNumber(supabaseAdmin);
+    const nextNumber = await getNextLeadNumber(supabaseAdmin);
     let currentNum = parseInt(nextNumber.replace("S", ""), 10);
 
     for (const email of candidateEmails) {

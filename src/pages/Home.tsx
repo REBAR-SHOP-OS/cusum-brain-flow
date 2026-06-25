@@ -133,7 +133,7 @@ export default function Home() {
       ? accessOverride.agents
       : getVisibleAgents(user?.email);
     // If no config found (unknown user), show all for backward compat
-    let filtered = allowedAgents.length > 0
+    const filtered = allowedAgents.length > 0
       ? helpers.filter((h) => allowedAgents.includes(h.id))
       : (isSuperAdmin ? [...helpers] : []);
     if (!mapping) return filtered;

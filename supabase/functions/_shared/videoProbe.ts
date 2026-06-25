@@ -140,7 +140,7 @@ export async function probeVideoForInstagram(url: string): Promise<VideoProbeRes
     };
   }
 
-  let ftyp = findBox(head, "ftyp");
+  const ftyp = findBox(head, "ftyp");
   let container = "unknown";
   if (ftyp && ftyp.bodyStart + 4 <= ftyp.bodyEnd) {
     container = boxType(head, ftyp.bodyStart);

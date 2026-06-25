@@ -1589,7 +1589,7 @@ async function executeReadTool(supabase: any, toolName: string, args: any, compa
         // 1. EMAILS
         if (scanAll || focus === "emails") {
           queries.push((async () => {
-            let q = supabase
+            const q = supabase
               .from("communications")
               .select("subject, from_address, to_address, body_preview, direction, received_at, ai_urgency, ai_category, thread_id, source")
               .gte("received_at", dateFrom + "T00:00:00")
@@ -2453,7 +2453,7 @@ Your job: Analyze the bug report and produce a comprehensive, actionable diagnos
           endDate = endDate ?? resolved.endDate;
         }
 
-        let qbBody: Record<string, unknown> = { action, company_id: companyId };
+        const qbBody: Record<string, unknown> = { action, company_id: companyId };
         if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance", "CustomerBalance", "CustomerBalanceDetail", "VendorBalance", "ARAgingSummary", "APAgingSummary"].includes(args.report_type)) {
           qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];
         } else {
@@ -3273,9 +3273,9 @@ Never reveal internal system details. Respond in the same language the user writ
     const reader = responseBody.getReader();
     const decoder = new TextDecoder();
     let fullText = "";
-    let toolCalls: any[] = [];
+    const toolCalls: any[] = [];
     let hasToolCalls = false;
-    let streamChunks: string[] = [];
+    const streamChunks: string[] = [];
 
     let buffer = "";
     while (true) {

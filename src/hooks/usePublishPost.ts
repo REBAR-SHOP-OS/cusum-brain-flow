@@ -52,7 +52,7 @@ export function usePublishPost() {
       // clear actionable message instead of relying on Meta's generic rejection.
       if (post.platform === "instagram" && post.image_url) {
         const url = post.image_url;
-        let badByUrl = /\.(webm|mkv|mov|avi|wmv)(\?|$)/i.test(url);
+        const badByUrl = /\.(webm|mkv|mov|avi|wmv)(\?|$)/i.test(url);
         let badByType = false;
         let headContentType = "";
         if (!badByUrl) {

@@ -469,7 +469,7 @@ export function useQuickBooksData() {
       const allDbCustomers: typeof dbCustomersPage = [];
       let dbPage = 0;
       const DB_PAGE_SIZE = 1000;
-      let dbCustomersPage: { quickbooks_id: string | null; name: string; company_name: string | null; credit_limit: number | null; status: string | null }[] = [];
+      const dbCustomersPage: { quickbooks_id: string | null; name: string; company_name: string | null; credit_limit: number | null; status: string | null }[] = [];
       while (true) {
         const { data: page } = await supabase
           .from("customers")

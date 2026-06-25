@@ -19,7 +19,7 @@ Deno.serve((req) =>
 
     let contactName: string | null = null;
     let customerName: string | null = null;
-    let contactContext: Record<string, any> = {};
+    const contactContext: Record<string, any> = {};
 
     if (normalized.length >= 7) {
       const { data: contact } = await svc

@@ -240,7 +240,7 @@ class BackgroundAdDirectorService {
     // Upload intro/outro reference images
     let introImageUrl: string | undefined;
     let outroImageUrl: string | undefined;
-    let sourceMediaUrls: string[] = [];
+    const sourceMediaUrls: string[] = [];
     const { uploadToStorage: uploadFn } = await import("@/lib/storageUpload");
     if (introImage) {
       try {

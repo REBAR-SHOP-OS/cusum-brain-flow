@@ -710,7 +710,7 @@ export function ProVideoEditor({
       let changed = false;
 
       // Cleanup orphan extracted tracks (clip removed / url changed)
-      let next = prev.filter(t => {
+      const next = prev.filter(t => {
         if (!t.extractedFromVideo) return true;
         const keep = !!(t.audioUrl && validUrls.has(t.audioUrl));
         if (!keep) changed = true;
@@ -1829,7 +1829,7 @@ export function ProVideoEditor({
         }
 
         // First pass: generate VO at normal speed
-        let response = await fetch(
+        const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
           {
             method: "POST",
@@ -2048,7 +2048,7 @@ export function ProVideoEditor({
         }
 
         // Generate TTS
-        let response = await fetch(
+        const response = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
           {
             method: "POST",

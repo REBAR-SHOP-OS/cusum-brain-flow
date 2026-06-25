@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { AppSidebar } from "../AppSidebar";
 import { MobileNavV2 } from "../MobileNavV2";
@@ -8,15 +9,18 @@ import ShopFloor from "@/pages/ShopFloor";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 function renderWithProviders(ui: React.ReactElement) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <TooltipProvider>
-      <MemoryRouter
-        initialEntries={["/home"]}
-        future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
-      >
-        {ui}
-      </MemoryRouter>
-    </TooltipProvider>,
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <MemoryRouter
+          initialEntries={["/home"]}
+          future={{ v7_startTransition: true, v7_relativeSplatPath: true }}
+        >
+          {ui}
+        </MemoryRouter>
+      </TooltipProvider>
+    </QueryClientProvider>,
   );
 }
 

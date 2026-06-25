@@ -357,13 +357,13 @@ Deno.serve((req) =>
       .lt("received_at", todayISO + "T23:59:59.999Z")
       .limit(200);
 
-    let tasksQuery = serviceClient
+    const tasksQuery = serviceClient
       .from("tasks")
       .select("title, status, assigned_to, created_at, completed_at")
       .gte("created_at", todayISO)
       .limit(200);
 
-    let sessionsQuery = serviceClient
+    const sessionsQuery = serviceClient
       .from("chat_sessions")
       .select("user_id, agent_name, created_at")
       .gte("created_at", todayISO)

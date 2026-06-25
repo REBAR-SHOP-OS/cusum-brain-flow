@@ -707,7 +707,7 @@ export async function executeToolCall(
       }
 
       // Build camelCase body that each QB handler expects
-      let qbBody: Record<string, unknown> = { action, company_id: companyId };
+      const qbBody: Record<string, unknown> = { action, company_id: companyId };
       if (["BalanceSheet", "AgedReceivables", "AgedPayables", "TrialBalance"].includes(reportType)) {
         // These handlers read body.asOfDate (use endDate as the as-of date)
         qbBody.asOfDate = endDate ?? new Date().toISOString().split("T")[0];

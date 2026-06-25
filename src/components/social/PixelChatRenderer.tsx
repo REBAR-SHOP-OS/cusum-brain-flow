@@ -97,7 +97,7 @@ function extractPostData(content: string): ExtractedPost[] {
     /^.*647[-.\s]?260[-.\s]?9403.*$/gm,
   ];
   const contactLines: string[] = [];
-  let textForContact = mainContent;
+  const textForContact = mainContent;
   for (const pattern of contactPatterns) {
     let m;
     while ((m = pattern.exec(textForContact)) !== null) {

@@ -142,7 +142,7 @@ Deno.serve((req) =>
       }
 
       // Step 5: If Instagram, get Instagram Business Account IDs
-      let instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
+      const instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
       if (pages.length > 0) {
         for (const page of pages) {
           try {
@@ -417,7 +417,7 @@ Deno.serve((req) =>
         );
       }
 
-      let instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
+      const instagramAccounts: Array<{ id: string; username: string; pageId: string }> = [];
       const allPages: Array<{ id: string; name: string }> = [];
 
       for (const row of pageTokenRows) {

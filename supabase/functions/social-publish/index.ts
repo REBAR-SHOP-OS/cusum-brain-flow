@@ -137,7 +137,7 @@ Deno.serve((req) =>
         `[social-publish] Received: platform=${platform}, content_type=${content_type}, post_id=${post_id}`,
       );
 
-      let message = rawMessage;
+      const message = rawMessage;
 
       // Load the full post record for duplicate checking and multi-page publishing
       let postRecord: any = null;
