@@ -25,6 +25,16 @@ function extensionForBlob(blob: Blob, type: "image" | "video"): string {
   return "jpg";
 }
 
+async function normalizeForInstagramUpload(blob: Blob): Promise<ReturnType<typeof normalizeForInstagram>> {
+  const NORMALIZE_TIMEOUT_MS = 45_000;
+  return await Promise.race([
+    normalizeForInstagram(blob),
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error("normalize_timeout")), NORMALIZE_TIMEOUT_MS),
+    ),
+  ]);
+}
+
 /**
  * Uploads a generated image or video to Supabase storage and returns a permanent public URL.
  * Handles data: URIs (base64), blob: URIs, and remote https: URLs.
@@ -59,13 +69,7 @@ export async function uploadSocialMediaAsset(
     try {
       // Hard timeout so a stuck encoder (e.g. unseekable WebM) never freezes
       // the "Uploading media…" overlay forever.
-      const NORMALIZE_TIMEOUT_MS = 45_000;
-      const norm = await Promise.race([
-        normalizeForInstagram(blob),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("normalize_timeout")), NORMALIZE_TIMEOUT_MS),
-        ),
-      ]);
+      const norm = await normalizeForInstagramUpload(blob);
       if (norm.reencoded) {
         console.log("[socialMediaStorage] video normalized to IG-safe MP4");
         blob = norm.blob;

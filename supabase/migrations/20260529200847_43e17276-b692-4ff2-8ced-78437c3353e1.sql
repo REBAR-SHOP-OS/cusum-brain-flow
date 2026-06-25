@@ -2,7 +2,7 @@ CREATE OR REPLACE FUNCTION public.mirror_cut_plan_item_to_extract_row()
 RETURNS trigger
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path TO 'public'
+SET search_path = public
 AS $function$
 DECLARE
   v_session_id uuid;
@@ -90,3 +90,19 @@ BEGIN
   RETURN NEW;
 END;
 $function$;
+
+DROP TRIGGER IF EXISTS trg_mirror_cut_plan_item_to_extract_row ON public.cut_plan_items;
+
+CREATE TRIGGER trg_mirror_cut_plan_item_to_extract_row
+AFTER UPDATE ON public.cut_plan_items
+FOR EACH ROW
+WHEN (
+  OLD.mark_number     IS DISTINCT FROM NEW.mark_number
+  OR OLD.total_pieces    IS DISTINCT FROM NEW.total_pieces
+  OR OLD.cut_length_mm   IS DISTINCT FROM NEW.cut_length_mm
+  OR OLD.bend_dimensions IS DISTINCT FROM NEW.bend_dimensions
+  OR OLD.asa_shape_code  IS DISTINCT FROM NEW.asa_shape_code
+  OR OLD.bar_code        IS DISTINCT FROM NEW.bar_code
+  OR OLD.drawing_ref     IS DISTINCT FROM NEW.drawing_ref
+)
+EXECUTE FUNCTION public.mirror_cut_plan_item_to_extract_row();

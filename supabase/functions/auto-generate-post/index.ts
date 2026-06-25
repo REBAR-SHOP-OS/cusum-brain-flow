@@ -437,8 +437,8 @@ Deno.serve((req) =>
               body: JSON.stringify({
                 model: "openai/gpt-image-2",
                 prompt,
-                // 9:16 → "1024x1792" (locked Story size); other ratios use ASPECT_SIZE map.
-                size: isStoryRatio ? "1024x1792" : aspectCfg.gpt,
+                // Story mode always uses the locked 9:16 size.
+                size: "1024x1792",
                 quality: "medium",
                 n: 1,
               }),
