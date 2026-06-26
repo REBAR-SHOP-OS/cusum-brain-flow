@@ -22,6 +22,7 @@ const SW_ERROR_PATTERNS = [
   "Failed to register a ServiceWorker",
   "script resource is behind a redirect",
   "ServiceWorker script",
+  "with script ('",
   "/sw.js",
 ];
 
