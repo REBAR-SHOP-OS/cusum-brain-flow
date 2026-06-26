@@ -685,6 +685,8 @@ Return an array of 5 objects:
 
         // Post-processing: enforce slogan/caption separation
         for (const post of generatedPosts) {
+          // Strip any markdown link syntax the model may have injected (e.g. [www.rebar.shop](http://www.rebar.shop))
+          if (post.content) post.content = stripMarkdownLinks(post.content);
           // If AI returned image_slogan, ensure content doesn't overlap
           const slogan = (post.image_slogan || "").toLowerCase().trim();
           const caption = (post.content || "").toLowerCase();
