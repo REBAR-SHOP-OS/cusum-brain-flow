@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { stripMarkdownLinks } from "../_shared/stripMarkdownLinks.ts";
 
 // ─── Same visual styles pool as Pixel agent ───
 const VISUAL_STYLES_POOL = [
@@ -551,6 +552,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
     const newContent = JSON.parse(jsonStr);
 
     if (!newContent.caption || !newContent.imageText) throw new Error("Missing required fields in caption response");
+    // Strip markdown link syntax the model may have injected (e.g. [www.rebar.shop](http://www.rebar.shop))
+    newContent.caption = stripMarkdownLinks(newContent.caption);
     console.log("Generated content:", JSON.stringify({ title: newContent.title, imageText: newContent.imageText }));
 
     // Post-processing: enforce slogan/caption separation
@@ -578,7 +581,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
             const rewrittenCaption = rewriteData.choices?.[0]?.message?.content?.trim();
             if (rewrittenCaption && rewrittenCaption.length > 30) {
               console.log(`✅ Caption rewritten to avoid slogan overlap.`);
-              newContent.caption = rewrittenCaption;
+              newContent.caption = stripMarkdownLinks(rewrittenCaption);
             }
           }
         } catch (e) {

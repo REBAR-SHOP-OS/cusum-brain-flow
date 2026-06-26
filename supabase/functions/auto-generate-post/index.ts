@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { stripMarkdownLinks } from "../_shared/stripMarkdownLinks.ts";
 import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
@@ -684,6 +685,8 @@ Return an array of 5 objects:
 
         // Post-processing: enforce slogan/caption separation
         for (const post of generatedPosts) {
+          // Strip any markdown link syntax the model may have injected (e.g. [www.rebar.shop](http://www.rebar.shop))
+          if (post.content) post.content = stripMarkdownLinks(post.content);
           // If AI returned image_slogan, ensure content doesn't overlap
           const slogan = (post.image_slogan || "").toLowerCase().trim();
           const caption = (post.content || "").toLowerCase();

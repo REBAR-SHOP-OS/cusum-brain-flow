@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { PLATFORM_PAGES } from "@/lib/socialConstants";
+import { stripMarkdownLinks } from "@/lib/stripMarkdownLinks";
 
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -247,7 +248,7 @@ export function PostReviewPanel({
     setLocalContentType(post.content_type || "post");
     // Sync text fields from post data — strip Persian block from editable content
     setLocalTitle(post.title || "");
-    const rawC = post.content || "";
+    const rawC = stripMarkdownLinks(post.content || "");
     const persianSepIdx = rawC.indexOf("---PERSIAN---");
     let nextEditable = "";
     if (persianSepIdx !== -1) {
