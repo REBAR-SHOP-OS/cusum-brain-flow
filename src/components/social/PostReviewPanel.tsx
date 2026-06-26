@@ -248,7 +248,7 @@ export function PostReviewPanel({
     setLocalContentType(post.content_type || "post");
     // Sync text fields from post data — strip Persian block from editable content
     setLocalTitle(post.title || "");
-    const rawC = post.content || "";
+    const rawC = stripMarkdownLinks(post.content || "");
     const persianSepIdx = rawC.indexOf("---PERSIAN---");
     let nextEditable = "";
     if (persianSepIdx !== -1) {
