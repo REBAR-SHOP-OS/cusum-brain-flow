@@ -40,7 +40,7 @@ describe("stale ServiceWorker cleanup", () => {
       setItem: vi.fn((key: string, value: string) => storage.set(key, value)),
     };
 
-    const windowMock = {
+    const windowMock: any = {
       location: {
         hostname: "id-preview--unit-test.lovable.app",
         origin: "https://id-preview--unit-test.lovable.app",
