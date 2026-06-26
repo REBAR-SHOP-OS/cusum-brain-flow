@@ -552,6 +552,8 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
     const newContent = JSON.parse(jsonStr);
 
     if (!newContent.caption || !newContent.imageText) throw new Error("Missing required fields in caption response");
+    // Strip markdown link syntax the model may have injected (e.g. [www.rebar.shop](http://www.rebar.shop))
+    newContent.caption = stripMarkdownLinks(newContent.caption);
     console.log("Generated content:", JSON.stringify({ title: newContent.title, imageText: newContent.imageText }));
 
     // Post-processing: enforce slogan/caption separation
