@@ -1,70 +1,68 @@
-## Root cause
+## ریشه‌ی ارور
 
-A previous build registered a ServiceWorker at `/sw.js` for the preview origin (`id-preview--…lovable.app`). The current code no longer uses it, but the browser keeps the old registration and silently re-fetches `/sw.js` to update it.
+این تست شد و معلوم شد ارور هنوز هر چند دقیقه ظاهر می‌شه چون **سه لایه‌ای** که قبلاً ساختیم در محیط preview واقعاً جلوی ارور رو نگرفتن. علت دقیق:
 
-On preview origins, `/sw.js` now returns **HTTP 302 → `lovable.dev/auth-bridge?...`** (verified via curl). The Service Worker spec forbids redirects on the script resource, so Chromium throws:
+### 1) چرا اصلاً ارور صادر می‌شه
+- مرورگر شما یک ثبت قدیمی ServiceWorker روی `/sw.js` برای دامنه preview داره (از یک بیلد قبلی).
+- Chromium هر ~۳۰ ثانیه در پس‌زمینه `/sw.js` رو دوباره fetch می‌کنه تا اسکریپت SW رو آپدیت کنه.
+- روی preview، `/sw.js` با **HTTP 302** به `lovable.dev/auth-bridge` redirect می‌شه.
+- مشخصات SW اجازه‌ی redirect روی منبع اسکریپت رو نمی‌ده → `TypeError: Failed to update a ServiceWorker … script resource is behind a redirect`.
 
-```
-TypeError: Failed to update a ServiceWorker for scope (...): The script resource is behind a redirect, which is disallowed.
-```
+پس منبع، **یک SW ثبت‌شده‌ی قدیمی** هست که نمی‌میره.
 
-This surfaces as:
-1. The red "Something went wrong / Failed to update a ServiceWorker…" toast (Lovable preview's runtime-error overlay reading `unhandledrejection`).
-2. A repeating entry in our app logs.
+### 2) چرا تلاش قبلی برای پاکسازی شکست خورد
+`unregisterStaleAppSW()` در `src/lib/pwa/registerServiceWorker.ts` فقط یک بار در بوت صدا زده می‌شه و `registration.unregister()` رو فراخوانی می‌کنه. اما:
+- وقتی SW داره client فعلی رو کنترل می‌کنه (`navigator.serviceWorker.controller != null`)، `unregister()` فقط رجیستری رو علامت‌دار می‌کنه — worker زنده می‌مونه و **چک‌های آپدیت پس‌زمینه ادامه پیدا می‌کنن** تا وقتی همه‌ی client های کنترل‌شده بسته بشن یا صفحه hard-reload بشه.
+- تب preview باز می‌مونه → SW هیچ‌وقت کاملاً آزاد نمی‌شه → ارور هر ~30s تکرار می‌شه.
 
-Today's mitigations don't fully work in preview:
-- `registerServiceWorker.ts` calls `unregisterStaleAppSW()` only at boot. Chromium queues background updates anyway, and unregister can be deferred while the SW still controls an open client.
-- `useGlobalErrorHandler` filters this message, but it mounts inside React (after Lovable's preview collector has already received the event), and Lovable's overlay is outside our app.
-- The kill-switch `public/sw.js` is correct, but it never reaches the browser because preview redirects the request.
+### 3) چرا تُست هنوز نشون داده می‌شه
+- `installServiceWorkerErrorSuppressor()` در بیلد فعلی preview (هَش `index-hIw7CQEF.js`) **هنوز deploy نشده**؛ این فایل قبل از اضافه‌شدن suppressor بیلد شده. به همین خاطر `[GlobalErrorHandler] Unhandled rejection` لاگ می‌شه و سپس `toast.error("Something went wrong", ...)` نمایش داده می‌شه — این تُست از کد خودمونه نه از Lovable overlay.
+- در preview، تا وقتی بیلد جدید سرو نشه، هر دو لایه (suppressor + لیست ignore در `useGlobalErrorHandler`) بی‌اثرن.
 
-## Fix (safe, additive, non-destructive)
+---
 
-Surgical changes only. No schema, no business logic, no routes touched.
+## رفع ریشه‌ای (additive، non-destructive)
 
-### 1. `src/main.tsx` — earliest possible suppression + cleanup
+### A. کنترل کنترل (Force-uncontrol) قبل از unregister
+در `src/lib/pwa/registerServiceWorker.ts`، تابع `unregisterStaleAppSW` رو ارتقا بدیم:
 
-Before `registerServiceWorker()` and before `createRoot`, install a one-shot global guard that runs in the capture phase:
+1. اگر `navigator.serviceWorker.controller` وجود داره، یک پیام `{ type: "SKIP_WAITING" }` به `controller.postMessage` بفرستیم (بدون خطر چون legacy SW این پیام رو نمی‌فهمه و نادیده می‌گیره).
+2. بعد همه‌ی registration ها رو unregister کنیم (همون منطق فعلی، با match گسترش‌یافته).
+3. cacheها رو پاک کنیم (همین الان داره انجام می‌شه).
+4. **مرحله‌ی جدید:** بعد از unregister، اگر `controller` هنوز null نشده، روی preview origin یک بار `location.reload()` ملایم بزنیم — فقط در شرایط:
+   - host با `id-preview--` یا `preview--` شروع بشه
+   - و در sessionStorage کلید `sw_cleanup_reloaded` ست نشده باشه (تا loop نشه)
+   پس‌از reload، چون registration حذف شده، SW دیگه page رو کنترل نمی‌کنه و چک آپدیت متوقف می‌شه.
 
-- `window.addEventListener("unhandledrejection", handler, { capture: true })` and a matching `"error"` capture listener.
-- If the message contains any of:
-  - `"Failed to update a ServiceWorker"`
-  - `"Failed to register a ServiceWorker"`
-  - `"script resource is behind a redirect"`
-  - `"/sw.js"`
-  
-  call `event.preventDefault()` **and** `event.stopImmediatePropagation()`. This stops Lovable's preview overlay listener from receiving it (it's the source of the toast) and prevents the entry in runtime logs.
-- Listener stays registered for the lifetime of the page (no removal) so it also covers background updates that fire minutes later.
+### B. حلقه‌ی نگه‌بان آپدیت آپدیت (Watchdog) — fallback
+اگر کاربر reload رو نخواد یا blocked بشه، یک `setInterval` ساده (هر 60 ثانیه) که `getRegistrations()` رو بررسی می‌کنه و هر registration ای که scriptURL ش به `/sw.js` ختم می‌شه رو دوباره unregister می‌کنه. این تضمین می‌کنه حتی اگر یک reload کافی نباشه، در طول session پاک می‌شه.
 
-### 2. `src/lib/pwa/registerServiceWorker.ts` — make cleanup more aggressive
+### C. سخت‌سازی suppressor (دفاع در عمق)
+در `src/lib/pwa/suppressServiceWorkerErrors.ts`:
+- علاوه بر pattern های فعلی، اطمینان حاصل کنیم رشته‌ی Chromium جدید `with script ('...sw.js')` هم match می‌شه (الان `'/sw.js'` به‌تنهایی هست که در URL کامل match می‌کنه — یک تست واحد جدید اضافه می‌کنیم برای قفل کردن این رفتار).
+- در `useGlobalErrorHandler.isIgnoredError`، الگوی `script resource is behind a redirect` در حال حاضر هست؛ تایید با تست.
 
-Keep current behavior, but harden `unregisterStaleAppSW`:
+### D. اعتبارسنجی
+1. بعد از deploy: باز کردن preview → DevTools → Application → Service Workers → باید رجیستری `/sw.js` نباشه (پس از حداکثر یک reload خودکار).
+2. console باید فقط یک‌بار `[sw-cleanup] reloaded to release controller` لاگ کنه (info-level) و دیگه ارور SW نباشه.
+3. تست رگرسیون جدید `tests/regression/pwa/sw-cleanup-force-reload.test.ts`:
+   - شبیه‌سازی `controller != null` + `getRegistrations()` با یک `/sw.js` worker
+   - تأیید که `unregister` فراخوانی شده، sessionStorage flag ست شده، و `location.reload` صدا زده شده
+   - تأیید که در فراخوانی دوم (بعد از reload) دیگه reload صدا نمی‌خوره (no loop)
 
-- Unregister **every** existing registration whose `scope` matches `window.location.origin + "/"` OR whose script URL path is `/sw.js` (current check only matches the latter via `endsWith` and can miss installing/redundant workers).
-- After unregister, also `caches.keys()` → `caches.delete(...)` to drop any app-shell caches the old worker created.
-- Run this on every page load on preview origins (already gated by `shouldRefuseRegistration`).
+---
 
-### 3. Regression test
+## فایل‌های تغییر یافته (همگی additive)
 
-Add `tests/regression/pwa/sw-redirect-error-suppressed.test.ts`:
+1. `src/lib/pwa/registerServiceWorker.ts` — افزودن منطق force-uncontrol + reload-once + watchdog interval.
+2. `src/lib/pwa/suppressServiceWorkerErrors.ts` — افزودن یک pattern صریح‌تر (بدون حذف موارد فعلی).
+3. `tests/regression/pwa/sw-cleanup-force-reload.test.ts` — تست رگرسیون جدید.
+4. `.lovable/plan.md` — به‌روزرسانی توضیح ریشه‌ای.
 
-- Simulate an `unhandledrejection` whose `reason` is a `TypeError` with the SW redirect message.
-- Assert `defaultPrevented === true` after the main.tsx guard runs.
-- Assert the message is in the ignore list of `useGlobalErrorHandler` (already true; lock it in).
+## خارج از scope
+- حذف `public/sw.js` (همچنان روی production مفیده).
+- تغییر در Lovable preview auth-bridge redirect (تحت کنترل ما نیست).
+- هیچ تغییری در business logic, schema, یا UI.
 
-### 4. Verification steps after build mode
-
-- Re-load preview, confirm no "Something went wrong / Failed to update a ServiceWorker…" toast appears.
-- DevTools → Application → Service Workers: legacy `/sw.js` registration is gone after one reload.
-- Run `vitest` on the new regression test.
-
-## Technical notes
-
-- The kill-switch `public/sw.js` stays in place — it still works on production/custom-domain origins where `/sw.js` is served directly (no auth-bridge redirect), so any user that lands on the production origin completes the cleanup naturally.
-- No change to `public/sw-push.js` (web-push worker), no change to `_headers` / `_redirects`, no PWA install behavior change.
-- Filter is scoped narrowly to ServiceWorker-redirect strings to avoid masking unrelated rejections.
-
-## Out of scope
-
-- Removing `public/sw.js` (still needed for production cleanup).
-- Touching Lovable preview's auth-bridge redirect (not under our control).
-- Any UI / business logic change.
+## نکته‌ی مهم برای کاربر
+حتی بعد از merge این fix، **یک‌بار** ارور ممکنه دوباره ظاهر بشه چون reload خودکار قبل از suppressor شدن تب فعلی اجرا می‌شه. از reload بعد، کاملاً پاک می‌شه و دیگه برنمی‌گرده.

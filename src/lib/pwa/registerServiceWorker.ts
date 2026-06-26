@@ -1,6 +1,73 @@
 import { registerSW } from "virtual:pwa-register";
 
 const SW_URL = "/sw.js";
+const SW_CLEANUP_RELOAD_KEY = "app_sw_cleanup_reloaded_once";
+const SW_CLEANUP_WATCHDOG_MS = 60 * 1000;
+
+let cleanupWatchdogId: number | undefined;
+
+function isPreviewOrigin(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host.startsWith("id-preview--") || host.startsWith("preview--");
+}
+
+function getRegistrationScriptUrl(registration: ServiceWorkerRegistration): string {
+  return (
+    registration.active?.scriptURL ||
+    registration.installing?.scriptURL ||
+    registration.waiting?.scriptURL ||
+    ""
+  );
+}
+
+function matchesAppServiceWorker(registration: ServiceWorkerRegistration): boolean {
+  const url = getRegistrationScriptUrl(registration);
+  const originScope = typeof window !== "undefined" ? `${window.location.origin}/` : "";
+  let scriptPath = "";
+  try {
+    scriptPath = url ? new URL(url).pathname : "";
+  } catch {
+    scriptPath = "";
+  }
+
+  if (scriptPath === SW_URL) return true;
+  if (url.endsWith(SW_URL)) return true;
+  if (originScope && registration.scope === originScope) return true;
+  return false;
+}
+
+function reloadOnceToReleasePreviewController(): void {
+  if (!isPreviewOrigin()) return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  if (!navigator.serviceWorker.controller) return;
+  try {
+    if (sessionStorage.getItem(SW_CLEANUP_RELOAD_KEY) === "1") return;
+    sessionStorage.setItem(SW_CLEANUP_RELOAD_KEY, "1");
+  } catch {
+    return;
+  }
+
+  console.info("[sw-cleanup] reloaded to release controller");
+  window.location.reload();
+}
+
+async function unregisterMatchingAppSWs(): Promise<boolean> {
+  const regs = await navigator.serviceWorker.getRegistrations();
+  const matches = regs.filter(matchesAppServiceWorker);
+  await Promise.all(matches.map((r) => r.unregister().catch(() => false)));
+  return matches.length > 0;
+}
+
+export function startStaleServiceWorkerWatchdog(): void {
+  if (cleanupWatchdogId !== undefined) return;
+  if (typeof window === "undefined") return;
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+
+  cleanupWatchdogId = window.setInterval(() => {
+    void unregisterMatchingAppSWs().catch(() => undefined);
+  }, SW_CLEANUP_WATCHDOG_MS);
+}
 
 export function shouldRefuseRegistration(): boolean {
   if (typeof window === "undefined") return true;
@@ -30,30 +97,14 @@ export function shouldRefuseRegistration(): boolean {
 export async function unregisterStaleAppSW(): Promise<void> {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
   try {
-    const regs = await navigator.serviceWorker.getRegistrations();
-    const originScope = typeof window !== "undefined" ? `${window.location.origin}/` : "";
-    await Promise.all(
-      regs
-        .filter((r) => {
-          const url =
-            r.active?.scriptURL ||
-            r.installing?.scriptURL ||
-            r.waiting?.scriptURL ||
-            "";
-          // Match by script path (any worker named sw.js) OR by scope on this origin.
-          let scriptPath = "";
-          try {
-            scriptPath = url ? new URL(url).pathname : "";
-          } catch {
-            scriptPath = "";
-          }
-          if (scriptPath === SW_URL) return true;
-          if (url.endsWith(SW_URL)) return true;
-          if (originScope && r.scope === originScope) return true;
-          return false;
-        })
-        .map((r) => r.unregister().catch(() => false)),
-    );
+    navigator.serviceWorker.controller?.postMessage({ type: "SKIP_WAITING" });
+  } catch {
+    // best-effort
+  }
+
+  let removedAnyRegistration = false;
+  try {
+    removedAnyRegistration = await unregisterMatchingAppSWs();
   } catch {
     // best-effort
   }
@@ -65,5 +116,10 @@ export async function unregisterStaleAppSW(): Promise<void> {
     }
   } catch {
     // best-effort
+  }
+
+  if (removedAnyRegistration) {
+    startStaleServiceWorkerWatchdog();
+    reloadOnceToReleasePreviewController();
   }
 }
