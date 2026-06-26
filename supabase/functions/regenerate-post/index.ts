@@ -581,7 +581,7 @@ Respond with ONLY a valid JSON object (no markdown, no code fences):
             const rewrittenCaption = rewriteData.choices?.[0]?.message?.content?.trim();
             if (rewrittenCaption && rewrittenCaption.length > 30) {
               console.log(`✅ Caption rewritten to avoid slogan overlap.`);
-              newContent.caption = rewrittenCaption;
+              newContent.caption = stripMarkdownLinks(rewrittenCaption);
             }
           }
         } catch (e) {
