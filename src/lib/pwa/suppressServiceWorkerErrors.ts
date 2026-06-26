@@ -22,7 +22,6 @@ const SW_ERROR_PATTERNS = [
   "Failed to register a ServiceWorker",
   "script resource is behind a redirect",
   "ServiceWorker script",
-  "with script ('",
   "/sw.js",
 ];
 
@@ -43,6 +42,13 @@ function messageOf(value: unknown): string {
 
 export function isStaleServiceWorkerError(message: string): boolean {
   if (!message) return false;
+  if (
+    message.includes("ServiceWorker") &&
+    message.includes("with script") &&
+    message.includes("sw.js")
+  ) {
+    return true;
+  }
   return SW_ERROR_PATTERNS.some((p) => message.includes(p));
 }
 
