@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { stripMarkdownLinks } from "../_shared/stripMarkdownLinks.ts";
 
 // ─── Same visual styles pool as Pixel agent ───
 const VISUAL_STYLES_POOL = [
