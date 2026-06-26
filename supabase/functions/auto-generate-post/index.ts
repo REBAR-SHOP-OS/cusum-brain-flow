@@ -2,6 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, AIError } from "../_shared/aiRouter.ts";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { stripMarkdownLinks } from "../_shared/stripMarkdownLinks.ts";
 import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
 import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
 
