@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Regression: editing a single card (pages, content type, scheduled date) must
  * scope the DB update strictly to that card's id. Matching by title/platform/
