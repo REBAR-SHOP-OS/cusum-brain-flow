@@ -700,9 +700,7 @@ export function PostReviewPanel({
     const query = supabase
       .from("social_posts")
       .update({ content_type: value })
-      .eq("platform", post.platform)
-      .eq("title", post.title)
-      .eq("scheduled_date", post.scheduled_date);
+      .eq("id", post.id);
     const { error } = await query;
     if (error) {
       toast({ title: "Failed to update content type", description: error.message, variant: "destructive" });
@@ -713,44 +711,30 @@ export function PostReviewPanel({
   };
 
   const handlePagesSaveMulti = async (values: string[]) => {
-    // Compute per-platform page selection (intersect with each platform's catalogue)
-    const perPlatform: { platform: string; pages: string[] }[] = localPlatforms
-      .filter((p) => p !== "unassigned")
-      .map((platform) => {
-        const catalogue = new Set((PLATFORM_PAGES[platform] || []).map((o) => o.value));
-        const pages = values.filter((v) => catalogue.has(v));
-        return { platform, pages };
-      });
+    // HARD RULE: a card edit must NEVER touch sibling cards. Scope by post.id only.
+    // Intersect selection with this card's platform catalogue.
+    const catalogue = new Set((PLATFORM_PAGES[post.platform] || []).map((o) => o.value));
+    const pages = values.filter((v) => catalogue.has(v));
 
-    // Validate: every selected platform must have at least one page
-    const empty = perPlatform.find((x) => x.pages.length === 0);
-    if (empty) {
-      const label = empty.platform.charAt(0).toUpperCase() + empty.platform.slice(1);
+    if (pages.length === 0) {
+      const label = post.platform.charAt(0).toUpperCase() + post.platform.slice(1);
       toast({
         title: `Select at least one page for ${label}`,
-        description: "Each selected platform needs at least one page.",
+        description: "This card needs at least one page.",
         variant: "destructive",
       });
       return;
     }
 
-    setLocalPages(values);
+    setLocalPages(pages);
 
-    // Update each platform's sibling row(s) with only that platform's pages
     try {
-      const results = await Promise.all(
-        perPlatform.map(({ platform, pages }) =>
-          supabase
-            .from("social_posts")
-            .update({ page_name: pages.join(", ") })
-            .eq("platform", platform)
-            .eq("title", post.title)
-            .eq("scheduled_date", post.scheduled_date)
-        )
-      );
-      const firstErr = results.find((r) => r.error)?.error;
-      if (firstErr) {
-        toast({ title: "Failed to update pages", description: firstErr.message, variant: "destructive" });
+      const { error } = await supabase
+        .from("social_posts")
+        .update({ page_name: pages.join(", ") })
+        .eq("id", post.id);
+      if (error) {
+        toast({ title: "Failed to update pages", description: error.message, variant: "destructive" });
         return;
       }
     } catch (err: any) {
@@ -1352,21 +1336,11 @@ export function PostReviewPanel({
                         <DateSchedulePopover
                           post={post}
                          onSetDate={async (date) => {
-                            const originalDay = post.scheduled_date?.substring(0, 10);
-                            
-                            let query = supabase
+                            // HARD RULE: only the clicked card moves. Never touch siblings.
+                            const { error } = await supabase
                               .from("social_posts")
                               .update({ scheduled_date: date.toISOString() })
-                              .eq("platform", post.platform)
-                              .eq("title", post.title);
-                            if (originalDay) {
-                              query = query
-                                .gte("scheduled_date", `${originalDay}T00:00:00`)
-                                .lte("scheduled_date", `${originalDay}T23:59:59`);
-                            } else {
-                              query = query.eq("id", post.id);
-                            }
-                            const { error } = await query;
+                              .eq("id", post.id);
                             if (error) {
                               console.error("[PostReviewPanel] Set Date FAILED:", error.message);
                               toast({ title: "Failed to set date", description: error.message, variant: "destructive" });
@@ -1374,7 +1348,7 @@ export function PostReviewPanel({
                             }
                             queryClient.invalidateQueries({ queryKey: ["social_posts"] });
                             setDatePopoverOpen(false);
-                            toast({ title: "Date updated", description: `All copies moved to ${format(date, "PPP p")}` });
+                            toast({ title: "Date updated", description: `Card moved to ${format(date, "PPP p")}` });
                           }}
                         />
                       </PopoverContent>
