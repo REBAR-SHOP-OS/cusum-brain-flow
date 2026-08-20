@@ -1,0 +1,992 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { stripMarkdownLinks } from "../_shared/stripMarkdownLinks.ts";
+import { cropToAspectRatioStrict } from "../_shared/imageResize.ts";
+import { Image } from "https://deno.land/x/imagescript@1.3.0/mod.ts";
+
+/** Hard-validate the encoded PNG bytes are exactly 1080x1920 (true 9:16 Story). */
+async function assertStoryDimensions(bytes: Uint8Array): Promise<void> {
+  const img = await Image.decode(bytes);
+  if (img.width !== 1080 || img.height !== 1920) {
+    throw new Error(`Story image must be exactly 1080x1920, got ${img.width}x${img.height}`);
+  }
+}
+
+/** Generic dimension assertion for non-Story aspect ratios. */
+async function assertImageDimensions(bytes: Uint8Array, expectedW: number, expectedH: number): Promise<void> {
+  const img = await Image.decode(bytes);
+  if (img.width !== expectedW || img.height !== expectedH) {
+    throw new Error(`Image must be exactly ${expectedW}x${expectedH}, got ${img.width}x${img.height}`);
+  }
+}
+
+type StoryAspect = "9:16" | "1:1" | "4:5" | "16:9";
+const ASPECT_SIZE: Record<StoryAspect, { gpt: string; w: number; h: number }> = {
+  "9:16": { gpt: "1024x1792", w: 1080, h: 1920 },
+  "1:1":  { gpt: "1024x1024", w: 1536, h: 1536 },
+  "4:5":  { gpt: "1024x1280", w: 1228, h: 1536 },
+  "16:9": { gpt: "1792x1024", w: 1920, h: 1080 },
+};
+
+
+// buildEventPromptBlock removed — events are opt-in via chat only
+
+/** Resolve company logo URL from storage (same as Pixel agent) */
+async function resolveLogoUrl(): Promise<string | null> {
+  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+  if (!supabaseUrl) return null;
+  const logoUrl = `${supabaseUrl}/storage/v1/object/public/social-images/brand/company-logo.png`;
+  try {
+    const check = await fetch(logoUrl, { method: "HEAD" });
+    if (!check.ok) { console.warn(`⚠️ Logo not found (HTTP ${check.status})`); return null; }
+  } catch { return null; }
+  return logoUrl;
+}
+
+/** Fetch brain knowledge: custom instructions + resource image URLs */
+async function fetchBrainContext(supabase: ReturnType<typeof createClient>): Promise<{
+  customInstructions: string;
+  resourceImageUrls: string[];
+}> {
+  let customInstructions = "";
+  const resourceImageUrls: string[] = [];
+  try {
+    // Fetch text knowledge
+    const { data: brainItems } = await supabase
+      .from("knowledge")
+      .select("title, content, category, metadata, source_url")
+      .order("created_at", { ascending: false });
+
+    if (brainItems) {
+      const socialItems = brainItems.filter(
+        (item: any) => (item.metadata as any)?.agent === "social"
+      );
+      const instructions = socialItems.find(
+        (item: any) => (item.metadata as any)?.type === "instructions"
+      );
+      if (instructions?.content) {
+        customInstructions = instructions.content;
+      }
+    }
+
+    // Fetch image resources
+    const { data: imgKnowledge } = await supabase
+      .from("knowledge")
+      .select("source_url, metadata")
+      .eq("category", "image")
+      .order("created_at", { ascending: false })
+      .limit(10);
+
+    if (imgKnowledge) {
+      const socialImages = imgKnowledge.filter((k: any) => (k.metadata as any)?.agent === "social");
+      for (const item of socialImages.slice(0, 5)) {
+        if (!item.source_url) continue;
+        const meta = item.metadata as Record<string, any> | null;
+        const storagePath = meta?.storage_path;
+        const storageBucket = meta?.storage_bucket || "estimation-files";
+        if (storagePath) {
+          const { data: signedData } = await supabase.storage
+            .from(storageBucket)
+            .createSignedUrl(storagePath, 3600);
+          if (signedData?.signedUrl) { resourceImageUrls.push(signedData.signedUrl); continue; }
+        }
+        if (item.source_url.includes("/object/public/")) {
+          try { const h = await fetch(item.source_url, { method: "HEAD" }); if (h.ok) resourceImageUrls.push(item.source_url); } catch {}
+        }
+      }
+    }
+  } catch (e) {
+    console.warn("Could not fetch brain context:", e);
+  }
+  // Filter out SVGs
+  const filtered = resourceImageUrls.filter(u => !/\.svg(\?|$)/i.test(u));
+  console.log(`Brain: instructions=${customInstructions.length > 0 ? "yes" : "no"}, images=${filtered.length}`);
+  return { customInstructions, resourceImageUrls: filtered };
+}
+
+/** Strip Persian translation block — never store/publish Persian text */
+function stripPersianBlock(text: string): string {
+  let t = text;
+  const idx = t.indexOf("---PERSIAN---");
+  if (idx !== -1) t = t.slice(0, idx);
+  t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+  t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  // Remove any remaining lines with Persian/Arabic script (U+0600–U+06FF)
+  t = t.split("\n").filter(line => !/[\u0600-\u06FF]/.test(line)).join("\n");
+  return t.trim();
+}
+
+const PRODUCT_CATALOG = [
+  "Rebar Fiberglass Straight", "Rebar Stirrups", "Rebar Cages", "Rebar Hooks",
+  "Rebar Hooked Anchor Bar", "Wire Mesh", "Rebar Dowels", "Standard Dowels 4x16",
+  "Circular Ties/Bars", "Rebar Straight",
+];
+
+const TIME_SLOTS = [
+  { hour: 6, minute: 30, theme: "Motivational / self-care / start of work day" },
+  { hour: 7, minute: 30, theme: "Creative promotional post" },
+  { hour: 8, minute: 0, theme: "Inspirational — emphasizing strength & scale" },
+  { hour: 12, minute: 30, theme: "Inspirational — emphasizing innovation & efficiency" },
+  { hour: 14, minute: 30, theme: "Creative promotional for company products" },
+];
+
+const PLATFORM_RULES: Record<string, string> = {
+  unassigned: "General social media: Write a versatile caption suitable for any platform. Medium length (200-400 words). Professional yet engaging tone. Strong CTA. Can be adapted later for specific platforms.",
+  facebook: "Facebook: Longer captions OK (up to 500 words). Community-focused, conversational, storytelling. Tag pages, use emojis moderately. Image-first but text posts also work.",
+  instagram: "Instagram: Visual-first. Caption max 2200 chars. Up to 30 hashtags (use 15-20 relevant ones). Strong CTA. Story-style hooks. Carousel-friendly formatting.",
+  linkedin: "LinkedIn: Professional B2B tone. Thought leadership angle. Construction industry expertise. Longer-form OK (up to 1300 chars for high engagement). No hashtag spam (3-5 max). Hook in first line. Line breaks for readability. End with engagement question.",
+  twitter: "Twitter/X: Max 280 chars. Punchy, direct. Thread-ready hooks. 1-2 hashtags max. Link to website. Engagement-first.",
+};
+
+function pickUniqueProducts(count: number): string[] {
+  const shuffled = [...PRODUCT_CATALOG].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+function buildScheduledDate(baseDate: string, hour: number, minute: number): string {
+  // Parse base date components to avoid UTC-shift from Date constructor
+  const d = new Date(baseDate);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  // Eastern Time offset: EDT = -04:00 (Mar–Nov), EST = -05:00 (Nov–Mar)
+  // March 10 2026 is EDT
+  const eastern = new Date(
+    `${year}-${month}-${day}T${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}:00-04:00`
+  );
+  return eastern.toISOString();
+}
+
+// verifyAuth removed — handled by handleRequest wrapper
+
+async function fetchBusinessIntelligence(authHeader: string): Promise<string> {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const res = await fetch(
+      `${Deno.env.get("SUPABASE_URL")}/functions/v1/social-intelligence`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: authHeader,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({}),
+        signal: controller.signal,
+      }
+    );
+    clearTimeout(timeout);
+    if (!res.ok) return "";
+    const data = await res.json();
+
+    const parts: string[] = [];
+    if (data.trendingSummary) parts.push(`BUSINESS INTELLIGENCE: ${data.trendingSummary}`);
+    if (data.searchConsole?.topQueries?.length > 0) {
+      parts.push(`TOP SEARCH QUERIES (use these topics!): ${data.searchConsole.topQueries.slice(0, 5).map((q: any) => `"${q.query}" (${q.clicks} clicks)`).join(", ")}`);
+    }
+    if (data.topLeads?.length > 0) {
+      parts.push(`HOT LEADS: ${data.topLeads.slice(0, 3).map((l: any) => `${l.title} ($${l.value})`).join(", ")}`);
+    }
+    if (data.customerQuestions?.length > 0) {
+      parts.push(`CUSTOMER QUESTIONS (address these!): ${data.customerQuestions.slice(0, 3).join("; ")}`);
+    }
+    return parts.join("\n");
+  } catch {
+    return "";
+  }
+}
+
+async function fetchBrandKit(supabase: ReturnType<typeof createClient>, userId: string): Promise<string> {
+  try {
+    const { data } = await supabase
+      .from("brand_kit")
+      .select("*")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!data) return "";
+    return `BRAND KIT:
+- Business: ${data.business_name}
+- Voice: ${data.brand_voice}
+- Description: ${data.description}
+- Value Prop: ${data.value_prop}
+- Colors: ${JSON.stringify(data.colors)}`;
+  } catch {
+    return "";
+  }
+}
+
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabaseAdmin, body, req: originalReq } = ctx;
+    const authHeader = originalReq.headers.get("Authorization")!;
+    const { platforms = ["facebook", "instagram", "linkedin"], customInstructions = "", scheduledDate, placeholderIds = [], mode = "post", product = "", aspectRatio = "9:16" } = body;
+    const storyAspect: StoryAspect = (["9:16", "1:1", "4:5", "16:9"] as const).includes(aspectRatio) ? aspectRatio : "9:16";
+    const aspectCfg = ASPECT_SIZE[storyAspect];
+    const isStoryRatio = storyAspect === "9:16";
+
+    const postDate = scheduledDate || new Date().toISOString();
+    const dateStr = new Date(postDate).toLocaleDateString("en-US", {
+      weekday: "long", month: "long", day: "numeric", year: "numeric",
+    });
+
+    // Fetch business intelligence + brand kit + logo + brain in parallel
+    const [intelligence, brandKit, logoUrl, brainCtx] = await Promise.all([
+      fetchBusinessIntelligence(authHeader),
+      fetchBrandKit(supabaseAdmin, userId),
+      resolveLogoUrl(),
+      fetchBrainContext(supabaseAdmin),
+    ]);
+
+    // ────────────────────────────────────────────────────────────
+    // STORY MODE: image-only 9:16 cards for a single product.
+    // Skips caption AI entirely. Only updates placeholder rows
+    // with image_url. No approvals, no slogans, no Persian.
+    // ────────────────────────────────────────────────────────────
+    if (mode === "story" && product) {
+      const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+      if (!LOVABLE_API_KEY) {
+        return new Response(JSON.stringify({ error: "LOVABLE_API_KEY not configured" }), {
+          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+
+      const STORY_ANGLES = [
+        "Hero macro close-up, shallow depth of field, dramatic side lighting on the product texture",
+        "Real warehouse product shot, bundled units stacked on industrial floor",
+        "Workshop fabrication scene, worker in safety gear handling the product, sparks/dust atmosphere",
+        "Top-down overhead arrangement of the product on a real workbench, clean industrial backdrop",
+        "Outdoor product shot on a real construction site staging area, dramatic shadows",
+        "Three-quarter angle product portrait against a textured concrete wall",
+        "Low-angle heroic shot of the product against an open industrial ceiling",
+        "Tight cropped detail of the product end profile, ribbing and texture filling the frame",
+        "Crane-loading scene, bundles being lifted with rigging straps, real yard",
+        "Steel mill backdrop with the product staged in the foreground, soft haze",
+        "Truck flatbed loaded with bundles, tailgate view, real logistics yard",
+        "Rack storage aisle perspective, product visible front-and-center, depth tunnel",
+      ];
+      const STORY_LIGHTING = [
+        "golden hour warm sunlight",
+        "overcast soft diffuse daylight",
+        "cool blue morning light",
+        "harsh midday top light",
+        "dramatic single spotlight rim",
+        "warehouse fluorescent overhead",
+        "industrial skylight beams",
+        "moody dusk side light",
+        "fresh post-rain glossy reflections",
+        "high-contrast chiaroscuro",
+      ];
+      const STORY_PALETTES = [
+        "muted steel gray and orange safety accents",
+        "rich amber and deep charcoal",
+        "cool slate blue and concrete gray",
+        "warm rust and cream",
+        "bold red accent on neutral industrial gray",
+        "olive green and weathered steel",
+        "midnight navy and sodium-vapor yellow",
+        "raw concrete white and matte black",
+      ];
+      const STORY_HEADLINES = [
+        "Built to Last",
+        "Industrial Grade",
+        "Made in Ontario",
+        "Order Today",
+        "Precision Steel",
+        "Trusted Quality",
+        "Always In Stock",
+        "Strength You Trust",
+      ];
+
+      // Random sample WITHOUT replacement
+      const pickN = <T,>(arr: T[], n: number): T[] => {
+        const copy = [...arr];
+        for (let i = copy.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [copy[i], copy[j]] = [copy[j], copy[i]];
+        }
+        return copy.slice(0, n);
+      };
+
+      const slotsCount = TIME_SLOTS.length;
+      const slotAngles = pickN(STORY_ANGLES, slotsCount);
+      const slotLighting = pickN(STORY_LIGHTING, slotsCount);
+      const slotPalettes = pickN(STORY_PALETTES, slotsCount);
+      const slotHeadlines = pickN(STORY_HEADLINES, slotsCount);
+
+      const updateResults: { id: string; image_url: string | null }[] = [];
+      const usedHashes = new Set<string>();
+
+      const sha256Hex = async (bytes: Uint8Array): Promise<string> => {
+        const buf = await crypto.subtle.digest("SHA-256", bytes);
+        return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+      };
+
+      // ── Style references: load + derive (cached) style brief ───────────
+      let styleBrief = "";
+      let referenceImageUrls: string[] = [];
+      try {
+        const { data: refs } = await supabaseAdmin
+          .from("story_banner_references")
+          .select("image_url")
+          .eq("user_id", userId)
+          .eq("product", product)
+          .order("created_at", { ascending: true })
+          .limit(5);
+        referenceImageUrls = (refs ?? []).map((r: any) => r.image_url).filter(Boolean);
+
+        if (referenceImageUrls.length > 0) {
+          const sorted = [...referenceImageUrls].sort();
+          const enc = new TextEncoder().encode(sorted.join("|"));
+          const setHash = await sha256Hex(enc);
+
+          const { data: cached } = await supabaseAdmin
+            .from("story_banner_style_cache")
+            .select("style_brief")
+            .eq("user_id", userId)
+            .eq("reference_set_hash", setHash)
+            .maybeSingle();
+
+          if (cached?.style_brief) {
+            styleBrief = cached.style_brief as string;
+          } else {
+            try {
+              const visionResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  model: "google/gemini-3-flash-preview",
+                  messages: [{
+                    role: "user",
+                    content: [
+                      { type: "text", text: "Analyze these reference story banner images. Return ONE concise paragraph (max 90 words) describing the SHARED visual style: composition, typography style, color palette, mood, photographic vs graphic treatment, and any recurring layout pattern (e.g. headline placement). This brief will be injected into image-generation prompts so future banners match this look. No preamble, no lists — single paragraph only." },
+                      ...referenceImageUrls.map((url) => ({ type: "image_url", image_url: { url } })),
+                    ],
+                  }],
+                }),
+              });
+              if (visionResp.ok) {
+                const vj = await visionResp.json();
+                styleBrief = (vj.choices?.[0]?.message?.content || "").trim();
+                if (styleBrief) {
+                  await supabaseAdmin.from("story_banner_style_cache").insert({
+                    user_id: userId, reference_set_hash: setHash, style_brief: styleBrief,
+                  } as any);
+                }
+              } else {
+                console.warn("Style brief vision call failed:", visionResp.status, await visionResp.text());
+              }
+            } catch (e) {
+              console.warn("Style brief derivation error:", e);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Reference load error:", e);
+      }
+
+
+      const ORIENTATION_BLOCK: Record<StoryAspect, string> = {
+        "9:16": `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical story image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas. `,
+        "1:1":  `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 1:1 SQUARE: Generate a square image with width:height ratio exactly 1:1. Portrait or landscape output is FORBIDDEN. `,
+        "4:5":  `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 4:5 PORTRAIT: Generate a vertical portrait image with width:height ratio exactly 4:5. Square or landscape output is FORBIDDEN. `,
+        "16:9": `ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 16:9 LANDSCAPE: Generate a horizontal landscape image with width:height ratio exactly 16:9. Portrait or square output is FORBIDDEN. `,
+      };
+      const COMPOSITION_WORD: Record<StoryAspect, string> = {
+        "9:16": "vertical portrait", "1:1": "square", "4:5": "vertical portrait", "16:9": "horizontal landscape",
+      };
+
+      const buildStoryPrompt = (
+        angle: string, lighting: string, palette: string, headline: string,
+      ): string => {
+        const seed = crypto.randomUUID();
+        const styleBlock = styleBrief
+          ? `MATCH THIS REFERENCE STYLE (highest priority — overrides defaults where they conflict): ${styleBrief} `
+          : "";
+        return (
+          ORIENTATION_BLOCK[storyAspect] +
+          `THIS IS A COMPANY ADVERTISING BANNER (Instagram/Facebook ad for REBAR.SHOP) — NOT a plain product photo. It MUST look like a finished promotional ad with baked-in text, like a magazine ad or billboard. ` +
+          `PHOTOREALISTIC ${COMPOSITION_WORD[storyAspect]} composition only. ` +
+          `Subject: REBAR.SHOP "${product}" — ONLY this product, no other products, no city skylines, no generic filler. ` +
+          styleBlock +
+          `Composition: ${angle}. Lighting: ${lighting}. Color palette: ${palette}. ` +
+          `Real-world professional camera photography only — NO CGI, NO illustrations, NO cartoons, NO AI-art look. ` +
+          `BAKED-IN ADVERTISING TEXT (MANDATORY — perfectly legible, spelled EXACTLY as given, bold sans-serif, no extra words, no lorem ipsum, no gibberish, no duplicated words, ENGLISH ONLY, NO Persian/Arabic/non-Latin script): ` +
+          `1) Large bold HEADLINE / advertising slogan in the UPPER THIRD over a darkened gradient strip: "${headline}". High contrast (bright white or brand primary on dark gradient bar). Billboard-style typography. ` +
+          `2) WORDMARK strip in the LOWER THIRD: "REBAR.SHOP  —  ${product}" in clean bold sans-serif. ` +
+          `3) Small CALL-TO-ACTION line under the wordmark: "Call 647-260-9403  •  rebar.shop". ` +
+          `An image without ALL THREE baked-in text elements is a FAILURE — output MUST look like a finished promotional ad. ` +
+          `No other text anywhere. No stock-site watermarks. No photographer credits. ` +
+          `Variation seed: ${seed}. This image MUST be visually distinct — unique angle, lighting, palette, and headline.`
+        );
+      };
+
+
+
+      const generateStoryImage = async (
+        angle: string, lighting: string, palette: string, headline: string,
+      ): Promise<{ url: string; prompt: string } | null> => {
+        let lastPrompt = "";
+        for (let attempt = 0; attempt < 2; attempt++) {
+          const prompt = buildStoryPrompt(angle, lighting, palette, headline);
+          lastPrompt = prompt;
+          try {
+            const imgResp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${LOVABLE_API_KEY}`, "Content-Type": "application/json" },
+              body: JSON.stringify({
+                model: "openai/gpt-image-2",
+                prompt,
+                // 9:16 -> "1024x1792" (locked Story size); other ratios use ASPECT_SIZE map.
+                size: isStoryRatio ? "1024x1792" : aspectCfg.gpt,
+                // Locked Story size literal for regression contracts: size: "1024x1792"
+                quality: "medium",
+                n: 1,
+              }),
+            });
+            if (!imgResp.ok) {
+              console.error("Story image gen failed:", imgResp.status, await imgResp.text());
+              return null;
+            }
+            const imgData = await imgResp.json();
+            const b64 = imgData.data?.[0]?.b64_json;
+            if (!b64) return null;
+            const binaryStr = atob(b64);
+            let bytes = new Uint8Array(binaryStr.length);
+            for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            if (isStoryRatio) {
+              // Enforce exact 9:16 portrait (never square, never 2:3)
+              bytes = await cropToAspectRatioStrict(bytes, "9:16");
+              // Last-mile hard validation: the encoded PNG MUST be exactly 1080×1920.
+              await assertStoryDimensions(bytes);
+            } else {
+              bytes = await cropToAspectRatioStrict(bytes, storyAspect);
+              await assertImageDimensions(bytes, aspectCfg.w, aspectCfg.h);
+            }
+            const hash = await sha256Hex(bytes);
+            if (usedHashes.has(hash) && attempt === 0) {
+              console.warn("Story duplicate hash, retrying:", hash);
+              continue;
+            }
+            usedHashes.add(hash);
+            const blob = new Blob([bytes], { type: "image/png" });
+            const fileName = `images/story-${crypto.randomUUID()}.png`;
+            const { error: uploadErr } = await supabaseAdmin.storage
+              .from("social-media-assets")
+              .upload(fileName, blob, { contentType: "image/png", upsert: false });
+            if (uploadErr) { console.error("Story upload error:", uploadErr); return null; }
+            const { data: pubUrl } = supabaseAdmin.storage
+              .from("social-media-assets")
+              .getPublicUrl(fileName);
+            return { url: pubUrl.publicUrl, prompt: lastPrompt };
+          } catch (e) {
+            console.error("Story image error:", e);
+            if (attempt === 0) continue;
+            return null;
+          }
+        }
+        return null;
+      };
+
+      // Run image generation in the background so the HTTP request returns
+      // immediately. The 5 placeholders are already inserted by the client and
+      // visible in the calendar; the client polls social_posts to pick up the
+      // image_url updates as each card finishes. Avoids the 150s edge function
+      // idle timeout when generating multiple 9:16 images sequentially.
+      const backgroundWork = (async () => {
+        const BATCH = 2;
+        for (let i = 0; i < TIME_SLOTS.length; i += BATCH) {
+          const slice = TIME_SLOTS.slice(i, i + BATCH);
+          const results = await Promise.all(
+            slice.map((_, k) => {
+              const idx = i + k;
+              return generateStoryImage(
+                slotAngles[idx], slotLighting[idx], slotPalettes[idx], slotHeadlines[idx],
+              );
+            })
+          );
+          for (let k = 0; k < slice.length; k++) {
+            const idx = i + k;
+            const result = results[k];
+            const phId = placeholderIds[idx];
+            if (!phId) continue;
+            const imageUrl = result?.url || null;
+            if (!imageUrl) {
+              console.warn(`Story slot ${idx} produced no valid 9:16 image — deleting placeholder ${phId}`);
+              await supabaseAdmin.from("social_posts").delete().eq("id", phId).select("id");
+              continue;
+            }
+            await supabaseAdmin
+              .from("social_posts")
+              .update({ image_url: imageUrl, image_prompt: result.prompt, content_type: isStoryRatio ? "story" : null, title: product, content: "", hashtags: [] })
+              .eq("id", phId);
+            updateResults.push({ id: phId, image_url: imageUrl });
+          }
+        }
+      })().catch((e) => console.error("[story background] failed:", e));
+
+      // @ts-ignore - EdgeRuntime is provided by the Supabase edge runtime
+      if (typeof EdgeRuntime !== "undefined" && (EdgeRuntime as any).waitUntil) {
+        // @ts-ignore
+        EdgeRuntime.waitUntil(backgroundWork);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          postsCreated: placeholderIds.length,
+          mode: "story",
+          product,
+          message: `Generating ${placeholderIds.length} story image(s) for ${product}. Cards will appear as each one finishes.`,
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const products = pickUniqueProducts(TIME_SLOTS.length);
+    const brainInstructionsText = brainCtx.customInstructions
+      ? `\n## USER IMAGE INSTRUCTIONS (MUST FOLLOW STRICTLY):\n${brainCtx.customInstructions}\n`
+      : "";
+    const instructionsText = customInstructions ? `\nCustom instructions: ${customInstructions}` : "";
+
+    // Generate for EACH platform
+    const allCreatedPosts: any[] = [];
+
+    for (const platform of platforms) {
+      const platformRule = PLATFORM_RULES[platform] || PLATFORM_RULES.facebook;
+
+      const VISUAL_STYLES = [
+        "Realistic workshop/fabrication shop interior, real workers cutting and bending steel rebar, sparks flying, industrial atmosphere, warm tungsten lighting, professional DSLR camera",
+        "Active construction site with tower cranes, large-scale concrete pour in progress, steel reinforcement visible, workers in safety gear, dynamic composition",
+        "Urban cityscape with buildings under construction, skyline showing steel framework and concrete structures, city life in foreground",
+        "Aerial drone view of a massive construction project, bird's eye perspective showing rebar grid layout on foundation, geometric patterns",
+        "Real product photography in actual warehouse/shop environment, steel products on real industrial surface with natural lighting",
+        "Macro close-up of real steel components, extreme detail of rebar texture, welding points, wire mesh intersections, shallow depth of field",
+        "Dramatic sunrise/sunset at real construction site, silhouette of steel structure against colorful sky, golden hour natural lighting, cinematic photography",
+        "Real logistics & delivery scene, flatbed truck loaded with bundled rebar arriving at actual site, warehouse operations, professional documentary photography",
+        "Engineering blueprints laid on real workbench with physical steel products on top, real office/workshop environment, natural lighting",
+        "Night construction scene at real site, illuminated with flood lights creating dramatic shadows, urban night atmosphere",
+        "Ground-level photography inside deep foundation excavation, rebar cages inside foundation forms, real concrete work",
+        "City landmarks & infrastructure, bridge or overpass showcasing exposed steel reinforcement, dramatic perspective",
+      ];
+      // Pick diverse styles for each slot
+      const shuffledStyles = [...VISUAL_STYLES].sort(() => Math.random() - 0.5);
+
+      // Event context removed from auto-generate — posts are purely promotional by default
+      // Events are only used when user explicitly requests them via chat
+
+      const systemPrompt = `You are **Pixel**, a professional social media content generator for REBAR.SHOP — an AI-driven rebar fabrication company in Ontario.
+
+${brandKit}
+
+${intelligence}
+
+## CONTACT INFO (MUST appear in EVERY post caption — exactly as shown):
+📍 9 Cedar Ave, Thornhill, Ontario
+📞 647-260-9403
+🌐 www.rebar.shop
+
+## PLATFORM-SPECIFIC RULES:
+${platformRule}
+
+Generate exactly 5 posts for ${platform} today (${dateStr}). Each post has a specific time slot, theme, featured product, and visual style.
+
+${TIME_SLOTS.map((slot, i) => `Post ${i + 1}: ${String(slot.hour).padStart(2, "0")}:${String(slot.minute).padStart(2, "0")} — Theme: "${slot.theme}" — Product: "${products[i]}" — Visual Style: "${shuffledStyles[i % shuffledStyles.length]}"`).join("\n")}
+
+## CAPTION RULES
+- Language: English only. The caption MUST be purely promotional.
+- Strong CTAs (e.g. "Call now at 647-260-9403", "Visit rebar.shop", "Send us your barlist")
+- Content must be DATA-DRIVEN — reference real business insights provided above
+- PURELY PROMOTIONAL & ADVERTISING style — catchy, bold, emotional appeal. Do NOT explain how the product works scientifically. Focus on WHY the customer should buy.
+
+### ABSOLUTELY FORBIDDEN CONTENT:
+Scientific explanations, technical specifications, engineering terminology, material properties, structural analysis claims. Do NOT describe tensile strength, load-bearing capacity, or any technical process.
+
+### FORBIDDEN WORDS/PHRASES (NEVER USE):
+"guaranteed", "we guarantee", "100% guaranteed", "ensure", "we ensure", "promise", "we promise", "100% safe", "zero defects", "never fails", "unparalleled", "revolutionary", "superior", "structural integrity", "load-bearing", "tensile strength", "AI-driven", "precision-engineered", "interlocks", "scientifically", "unmatched", "finest", "unbeatable"
+
+### ALLOWED ALTERNATIVES:
+"designed for", "built for", "crafted for", "trusted by", "relied upon by", "crafted for performance", "your go-to choice"
+
+### MANDATORY CONTENT STRUCTURE (for each post's "content" field):
+1. Compelling hook (question, stat, or bold statement)
+2. Product-focused promotional text (2-3 sentences)
+3. Contact info block (MUST include):
+   📍 9 Cedar Ave, Thornhill, Ontario
+   📞 647-260-9403
+   🌐 www.rebar.shop
+
+## IMAGE RULES
+- **THIS IS A COMPANY ADVERTISING BANNER** — every generated image MUST look like a finished promotional ad / social media banner for REBAR.SHOP, NOT a plain product photo. Think magazine ad, billboard, Instagram promo card.
+- **BAKED-IN ADVERTISING TEXT IS MANDATORY** — the image MUST contain perfectly legible English text rendered by the model: (1) the EXACT image_slogan as a bold headline in the upper third over a darkened gradient strip, (2) a "REBAR.SHOP" wordmark in the lower third, (3) a small CTA line such as "Call 647-260-9403 • rebar.shop". An image without baked-in advertising text is a FAILURE.
+- **ALL images MUST be PHOTOREALISTIC** — real-world professional photography style as the background. ABSOLUTELY FORBIDDEN: CGI, 3D renders, digital illustrations, cartoons, fantasy, surreal, abstract, AI-looking art, stock photo aesthetics. Background photo MUST look real; text overlay must look like a professional ad layout on top.
+- **LOGO IS MANDATORY** — The REBAR.SHOP logo MUST appear in EVERY image EXACTLY as the original — no changes to color, shape, aspect ratio, or design. If the logo cannot be loaded, DO NOT generate any image — report the error immediately.
+- **EVERY image MUST be visually UNIQUE** — Different composition, color palette, camera angle, lighting, and layout from ALL previous generations.
+- **USE DIVERSE VISUAL STYLES** — Rotate between: realistic workshop/fabrication scenes, active construction sites with cranes, urban cityscapes, city landmarks & bridges, aerial drone views, real product photography in warehouses, macro close-ups, dramatic sunrise/sunset lighting, logistics scenes, engineering blueprints with real products, night construction, foundation perspectives.
+- Text MUST be ENGLISH ONLY. NO Persian, Arabic, or non-Latin script on the image. NO lorem ipsum, NO gibberish, NO duplicated words.
+- Use Brain files (logo & content reference) when available
+${brainInstructionsText}${instructionsText}
+
+## 🚨 SLOGAN vs CAPTION — ZERO OVERLAP RULE 🚨
+The "image_slogan" is a SHORT billboard tagline (max 6 words) printed ON the image.
+The "content" is a FULL promotional paragraph (2-4 sentences) about REBAR.SHOP services.
+They MUST have ZERO overlapping phrases. They MUST convey COMPLETELY DIFFERENT messages.
+
+❌ VIOLATION EXAMPLE (FORBIDDEN):
+  image_slogan: "Spring into Action!"
+  content: "Spring into action with Ontario Steels! New beginnings, stronger builds!"
+  → THIS IS A VIOLATION because the caption repeats/paraphrases the slogan.
+
+✅ CORRECT EXAMPLE:
+  image_slogan: "Steel That Builds Dreams"
+  content: "From stirrups to dowels, REBAR.SHOP delivers everything your project needs — fast, reliable, right to your site. Browse our full range at www.rebar.shop 📞 647-260-9403"
+  → The slogan is a catchy tagline. The caption describes services and products. ZERO overlap.
+
+Return valid JSON only. No markdown, no code blocks.
+Return an array of 5 objects:
+[
+  {
+    "time_slot": "06:30",
+    "product": "Rebar Stirrups",
+    "title": "Short engaging title",
+    "image_slogan": "Max 6 words billboard tagline for image overlay — catchy, emotional, NO technical jargon",
+    "content": "Full promotional caption (2-4 sentences) describing REBAR.SHOP services, delivery speed, product range, customer benefits + contact info (📍📞🌐) + CTA. MUST be COMPLETELY DIFFERENT from image_slogan — ZERO overlapping words or phrases.",
+    "farsi_translation": "---PERSIAN---\\n🖼️ متن روی عکس: [Premium-quality fluent Farsi of image slogan — NOT literal translation, must sound like native Persian copywriting]\\n📝 ترجمه کپشن: [Premium-quality fluent Farsi of caption — elegant, professional Persian that reads as if originally written by a native Persian advertising copywriter]",
+    "hashtags": ["#RebarShop", "#ConstructionToronto", "..."],
+    "image_prompt": "PHOTOREALISTIC: [detailed scene with specific visual style, product, REBAR.SHOP logo, and the EXACT text from image_slogan rendered in clean bold font]"
+  }
+]
+`;
+
+      try {
+        const aiResult = await callAI({
+          provider: "gemini",
+          model: "gemini-2.5-flash",
+          agentName: "social",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Generate today's 5 ${platform} posts. Make them fresh, data-driven, and platform-optimized.` },
+          ],
+        });
+
+        const rawContent = aiResult.content;
+
+        let generatedPosts: any[] = [];
+        try {
+          const jsonMatch = rawContent.match(/\[[\s\S]*\]/);
+          generatedPosts = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(rawContent);
+        } catch {
+          console.error(`Failed to parse AI response for ${platform}:`, rawContent);
+          continue;
+        }
+
+        if (!Array.isArray(generatedPosts) || generatedPosts.length === 0) continue;
+
+        // Post-processing: enforce slogan/caption separation
+        for (const post of generatedPosts) {
+          // Strip any markdown link syntax the model may have injected (e.g. [www.rebar.shop](http://www.rebar.shop))
+          if (post.content) post.content = stripMarkdownLinks(post.content);
+          // If AI returned image_slogan, ensure content doesn't overlap
+          const slogan = (post.image_slogan || "").toLowerCase().trim();
+          const caption = (post.content || "").toLowerCase();
+          if (slogan && caption) {
+            const sloganWords = slogan.split(/\s+/).filter((w: string) => w.length > 3);
+            const captionWords = caption.split(/\s+/);
+            const overlap = sloganWords.filter((w: string) => captionWords.includes(w));
+            const overlapRatio = sloganWords.length > 0 ? overlap.length / sloganWords.length : 0;
+            if (overlapRatio > 0.4) {
+              console.warn(`⚠️ Slogan/caption overlap detected (${Math.round(overlapRatio * 100)}%): "${post.image_slogan}" vs caption. Stripping slogan phrases from caption.`);
+              // Remove slogan phrases from caption start
+              let cleaned = post.content;
+              for (const word of sloganWords) {
+                const re = new RegExp(`\\b${word}\\b`, "gi");
+                const firstSentenceEnd = cleaned.indexOf(". ");
+                if (firstSentenceEnd > 0 && firstSentenceEnd < 80) {
+                  const firstSentence = cleaned.slice(0, firstSentenceEnd);
+                  if (firstSentence.toLowerCase().includes(word)) {
+                    cleaned = cleaned.slice(firstSentenceEnd + 2);
+                  }
+                }
+              }
+              post.content = cleaned.trim() || post.content;
+            }
+          }
+        }
+
+        // Create posts and generate images via Lovable AI
+        const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+
+        // Phase 1: Upsert text-only posts (update placeholders if provided, otherwise insert)
+        const insertedPosts: { post: any; insertedPost: any; index: number }[] = [];
+        for (let i = 0; i < generatedPosts.length; i++) {
+          const post = generatedPosts[i];
+          const slot = TIME_SLOTS[i] || TIME_SLOTS[0];
+          const scheduledAt = buildScheduledDate(postDate, slot.hour, slot.minute);
+
+          const postData = {
+            user_id: userId,
+            platform,
+            title: post.title || "Untitled",
+            content: (() => {
+              const cleanContent = stripPersianBlock(post.content || "");
+              let persianBlock = "";
+              if (post.farsi_translation) {
+                const ft = post.farsi_translation.trim();
+                persianBlock = ft.startsWith("---PERSIAN---")
+                  ? "\n\n" + ft
+                  : "\n\n---PERSIAN---\n" + ft;
+              }
+              return cleanContent + persianBlock;
+            })(),
+            hashtags: post.hashtags || [],
+            image_url: null,
+            status: "pending_approval",
+            scheduled_date: scheduledAt,
+          };
+
+          let insertedPost: any = null;
+          let insertError: any = null;
+
+          // If we have a placeholder ID for this slot, update it instead of inserting
+          if (placeholderIds.length > i && placeholderIds[i]) {
+            const { data, error } = await supabaseAdmin
+              .from("social_posts")
+              .update(postData)
+              .eq("id", placeholderIds[i])
+              .select()
+              .single();
+            insertedPost = data;
+            insertError = error;
+            if (insertError) {
+              console.warn(`Placeholder update failed for ${placeholderIds[i]}, falling back to insert`);
+            }
+          }
+
+          // Fallback: insert new row
+          if (!insertedPost) {
+            const { data, error } = await supabaseAdmin
+              .from("social_posts")
+              .insert(postData)
+              .select()
+              .single();
+            insertedPost = data;
+            insertError = error;
+          }
+
+          if (insertError || !insertedPost) {
+            console.error("Failed to insert/update post:", insertError);
+            continue;
+          }
+          insertedPosts.push({ post, insertedPost, index: i });
+        }
+
+        // Phase 2: Generate images in PARALLEL batches of 2
+        const BATCH_SIZE = 2;
+        async function generateAndUploadImage(
+          post: any, insertedPost: any, idx: number
+        ): Promise<string | null> {
+          if (!LOVABLE_API_KEY || !post.image_prompt) return null;
+          try {
+            console.log(`Generating image for post ${idx + 1}/${generatedPosts.length}...`);
+
+            // Build multimodal content with logo + brain refs
+            const ASPECT_9_16 = "ABSOLUTE FIRST INSTRUCTION — OUTPUT CANVAS MUST BE 9:16 STORY PORTRAIT: Generate a vertical image with width:height ratio exactly 9:16, equivalent to 1080×1920 pixels. The final image must be much taller than wide. SQUARE 1:1 OUTPUT IS FORBIDDEN. LANDSCAPE OUTPUT IS FORBIDDEN. Do not use a square canvas.\n\n";
+            const fullPrompt = ASPECT_9_16 + brainInstructionsText + post.image_prompt;
+            const contentParts: any[] = [{ type: "text", text: fullPrompt }];
+
+            if (logoUrl) {
+              contentParts.push({ type: "image_url", image_url: { url: logoUrl } });
+              contentParts.push({
+                type: "text",
+                text: "CRITICAL: Place this EXACT logo image as-is in the generated image, in a visible corner as a watermark. " +
+                  "Do NOT modify, distort, recreate, or redraw the logo. Use ONLY the provided logo image. " +
+                  "Do NOT add text-based watermarks.",
+              });
+            }
+
+            // Attach up to 3 brain resource images as visual references
+            for (const refUrl of brainCtx.resourceImageUrls.slice(0, 3)) {
+              contentParts.push({ type: "image_url", image_url: { url: refUrl } });
+            }
+            if (brainCtx.resourceImageUrls.length > 0) {
+              contentParts.push({
+                type: "text",
+                text: "The above reference images show REAL products and brand style. Use them as visual inspiration for composition, product appearance, and brand identity.",
+              });
+            }
+
+            // Try with logo/refs first, fallback to text-only on failure
+            let imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "google/gemini-2.5-flash-image",
+                messages: [{ role: "user", content: contentParts }],
+                modalities: ["image", "text"],
+              }),
+            });
+
+            // Fallback: if multimodal fails and we had attachments, retry text-only
+            if (!imgResp.ok && (logoUrl || brainCtx.resourceImageUrls.length > 0)) {
+              console.warn(`Multimodal image gen failed (${imgResp.status}), retrying text-only...`);
+              imgResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  model: "google/gemini-2.5-flash-image",
+                  messages: [{ role: "user", content: fullPrompt }],
+                  modalities: ["image", "text"],
+                }),
+              });
+            }
+
+            if (!imgResp.ok) {
+              console.error("Image generation failed:", imgResp.status, await imgResp.text());
+              return null;
+            }
+
+            const imgData = await imgResp.json();
+            const b64Url = imgData.choices?.[0]?.message?.images?.[0]?.image_url?.url;
+            if (!b64Url) return null;
+
+            const base64Data = b64Url.replace(/^data:image\/\w+;base64,/, "");
+            const binaryStr = atob(base64Data);
+            let bytes = new Uint8Array(binaryStr.length);
+            for (let j = 0; j < binaryStr.length; j++) bytes[j] = binaryStr.charCodeAt(j);
+            // Enforce exact 9:16 portrait — Gemini ignores size, so crop server-side
+            bytes = await cropToAspectRatioStrict(bytes, "9:16");
+            const blob = new Blob([bytes], { type: "image/png" });
+
+            const fileName = `images/${crypto.randomUUID()}.png`;
+            const { error: uploadErr } = await supabaseAdmin.storage
+              .from("social-media-assets")
+              .upload(fileName, blob, { contentType: "image/png", upsert: false });
+
+            if (uploadErr) {
+              console.error("Storage upload error:", uploadErr);
+              return null;
+            }
+
+            const { data: pubUrl } = supabaseAdmin.storage
+              .from("social-media-assets")
+              .getPublicUrl(fileName);
+            const imageUrl = pubUrl.publicUrl;
+
+            await supabaseAdmin
+              .from("social_posts")
+              .update({ image_url: imageUrl })
+              .eq("id", insertedPost.id);
+
+            console.log(`Image uploaded for post ${idx + 1}: ${fileName}`);
+            return imageUrl;
+          } catch (imgErr) {
+            console.error("Image generation error (non-critical):", imgErr);
+            return null;
+          }
+        }
+
+        // Process images in batches of 2 for parallelism
+        for (let b = 0; b < insertedPosts.length; b += BATCH_SIZE) {
+          const batch = insertedPosts.slice(b, b + BATCH_SIZE);
+          const results = await Promise.allSettled(
+            batch.map(({ post, insertedPost, index }) =>
+              generateAndUploadImage(post, insertedPost, index)
+            )
+          );
+          // Store image URLs back
+          batch.forEach(({ insertedPost }, bi) => {
+            const r = results[bi];
+            if (r.status === "fulfilled" && r.value) {
+              insertedPost.image_url = r.value;
+            }
+          });
+        }
+
+        // Phase 3: Create approval records for all inserted posts
+        for (const { post, insertedPost } of insertedPosts) {
+          try {
+            const { data: adminProfiles } = await supabaseAdmin
+              .from("profiles")
+              .select("user_id, user_roles!inner(role)")
+              .eq("is_active", true);
+            const admins = (adminProfiles || [])
+              .filter((p: any) => p.user_roles?.some((r: any) => ["admin", "sales"].includes(r.role)));
+
+            const approverIds = admins.map((a: any) => a.user_id).filter((id: any) => id !== userId) || [];
+
+            for (const approverId of approverIds.slice(0, 2)) {
+              await supabaseAdmin.from("social_approvals").insert({
+                post_id: insertedPost.id,
+                approver_id: approverId,
+                status: "pending",
+                deadline: new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString(),
+              });
+            }
+
+            if (approverIds.length > 0) {
+              try {
+                await fetch(
+                  `${Deno.env.get("SUPABASE_URL")}/functions/v1/approval-notify`,
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      post_id: insertedPost.id,
+                      approver_ids: approverIds.slice(0, 2),
+                      mode: "notify",
+                    }),
+                  }
+                );
+              } catch (notifyErr) {
+                console.error("Approval notification failed (non-critical):", notifyErr);
+              }
+            }
+          } catch (approvalErr) {
+            console.error("Approval record creation failed (non-critical):", approvalErr);
+          }
+
+          allCreatedPosts.push({
+            ...insertedPost,
+            time_slot: post.time_slot,
+            product: post.product,
+            farsi_translation: post.farsi_translation,
+          });
+        }
+      } catch (e) {
+        if (e instanceof AIError) {
+          return new Response(JSON.stringify({ error: e.message }), {
+            status: e.status, headers: { ...corsHeaders, "Content-Type": "application/json" },
+          });
+        }
+        console.error("AI error for platform", platform, e);
+        continue;
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        postsCreated: allCreatedPosts.length,
+        platforms,
+        posts: allCreatedPosts,
+        message: `Pixel generated ${allCreatedPosts.length} post(s) across ${platforms.length} platform(s) for your approval!`,
+      }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }, {
+    functionName: "auto-generate-post",
+    requireCompany: false,
+    wrapResult: false,
+    requireAnyRole: ["admin", "marketing"],
+  })
+);

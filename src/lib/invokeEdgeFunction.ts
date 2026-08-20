@@ -1,0 +1,97 @@
+import { supabase } from "@/integrations/supabase/client";
+
+/**
+ * Bypasses supabase.functions.invoke() which swallows error bodies on non-2xx.
+ * Uses raw fetch so we always get the real server error message.
+ * Includes a 30s timeout to prevent indefinite hangs on cold starts.
+ */
+export async function invokeEdgeFunction<T = any>(
+  functionName: string,
+  body: Record<string, unknown>,
+  options?: { timeoutMs?: number; retries?: number; allowErrorResponse?: boolean },
+): Promise<T> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.access_token) {
+    throw new Error("Not authenticated");
+  }
+
+  const timeoutMs = options?.timeoutMs ?? 30000;
+  const maxRetries = options?.retries ?? 0;
+  const allowErrorResponse = options?.allowErrorResponse ?? false;
+
+  let lastError: Error | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      let data: any;
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(`Edge function ${functionName} returned non-JSON response (${response.status})`);
+      }
+
+      // Detect "soft errors": HTTP 200 with { ok:false, error, status } payload
+      // (used for recoverable business errors like 402 credits / 429 rate limit).
+      const isSoftError =
+        response.ok &&
+        data &&
+        typeof data === "object" &&
+        data.ok === false &&
+        (typeof data.error === "string" || typeof data.status === "number");
+
+      if (!response.ok || isSoftError) {
+        const effectiveStatus = isSoftError ? (data.status ?? response.status) : response.status;
+
+        if (allowErrorResponse) {
+          return {
+            ...data,
+            status: effectiveStatus,
+          } as T;
+        }
+
+        const errMsg = data?.error || `Edge function ${functionName} failed (${effectiveStatus})`;
+        const err = new Error(errMsg);
+        (err as any).status = effectiveStatus;
+        throw err;
+      }
+
+      if (data?.error) {
+        throw new Error(data.error);
+      }
+
+      return data as T;
+    } catch (err: any) {
+      clearTimeout(timer);
+      if (err.name === "AbortError") {
+        lastError = new Error(`Edge function ${functionName} timed out after ${timeoutMs / 1000}s. Please try again.`);
+      } else {
+        lastError = err;
+      }
+      const isRetryable = err.name === "AbortError" || err.message?.includes("Failed to fetch") || err.message?.includes("NetworkError") || ((err as any).status ?? 0) >= 500;
+      if (attempt < maxRetries && isRetryable) {
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+        continue;
+      }
+      break;
+    }
+  }
+
+  throw lastError!;
+}

@@ -1,0 +1,110 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
+import { User } from "lucide-react";
+
+interface MentionItem {
+  id: string;
+  label: string;
+  subtitle?: string;
+  type: "team";
+}
+
+interface MentionMenuProps {
+  isOpen: boolean;
+  filter: string;
+  selectedIndex: number;
+  onSelect: (item: MentionItem) => void;
+  onClose: () => void;
+  extraUsers?: { id: string; label: string; subtitle?: string }[];
+}
+
+export function MentionMenu({ isOpen, filter, selectedIndex, onSelect, onClose, extraUsers = [] }: MentionMenuProps) {
+  const menuRef = useRef<HTMLDivElement>(null);
+  const [items, setItems] = useState<MentionItem[]>([]);
+
+  const loadMentions = useCallback(async () => {
+    try {
+      const { data } = await supabase
+        .from("profiles_safe" as any)
+        .select("id, full_name, title, email")
+        .ilike("email", "%@rebar.shop")
+        .ilike("full_name", `%${filter}%`)
+        .limit(10);
+
+      const profiles = (data as unknown as { id: string; full_name: string; title: string | null; email: string }[]) || [];
+
+      const rebarItems: MentionItem[] = profiles.map((p) => ({
+        id: p.id,
+        label: p.full_name,
+        subtitle: p.title || "Team member",
+        type: "team" as const,
+      }));
+
+      // Merge extra users (vendors/3rd party) filtered by current filter
+      const extraFiltered: MentionItem[] = extraUsers
+        .filter((u) => u.label.toLowerCase().includes(filter.toLowerCase()))
+        .filter((u) => !rebarItems.some((r) => r.id === u.id))
+        .map((u) => ({
+          id: u.id,
+          label: u.label,
+          subtitle: u.subtitle || "External",
+          type: "team" as const,
+        }));
+
+      setItems([...rebarItems, ...extraFiltered]);
+    } catch (err) {
+      console.error("Failed to load mentions:", err);
+    }
+  }, [filter, extraUsers]);
+
+  useEffect(() => {
+    if (isOpen) loadMentions();
+  }, [isOpen, loadMentions]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    if (isOpen) document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [isOpen, onClose]);
+
+  if (!isOpen || items.length === 0) return null;
+
+  return (
+    <div
+      ref={menuRef}
+      className="absolute bottom-full left-0 mb-2 w-[280px] bg-popover border border-border rounded-xl shadow-xl z-50 animate-in fade-in slide-in-from-bottom-2 duration-200 overflow-hidden"
+    >
+      <div className="px-3 py-2 border-b border-border">
+        <span className="text-xs font-medium text-muted-foreground">Mention someone</span>
+      </div>
+      <div className="max-h-[200px] overflow-y-auto py-1">
+        {items.map((item, i) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onSelect(item)}
+            className={cn(
+              "w-full flex items-center gap-3 px-3 py-2 text-left transition-colors",
+              i === selectedIndex % items.length
+                ? "bg-primary/10"
+                : "hover:bg-muted/50"
+            )}
+          >
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-secondary flex items-center justify-center">
+              <User className="w-3.5 h-3.5 text-muted-foreground" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-medium truncate">{item.label}</div>
+              <div className="text-xs text-muted-foreground truncate">{item.subtitle}</div>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}

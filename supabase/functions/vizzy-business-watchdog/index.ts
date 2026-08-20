@@ -1,0 +1,439 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { sendCeoSmsAlert } from "../_shared/smsAlertHelper.ts";
+
+/**
+ * Vizzy Business Watchdog — runs every 15 minutes via pg_cron.
+ * Scans all business domains for anomalies and writes alerts to notifications.
+ * Uses metadata.dedupe_key to prevent duplicate alerts within 24 hours.
+ *
+ * SMS Policy:
+ *   Only truly critical/safety alerts trigger SMS (broken integrations,
+ *   missed deliveries, long shifts). Max 3 SMS per day from watchdog.
+ *   Production, invoice, lead, and email alerts are in-app only.
+ */
+
+/** Alert types that justify an SMS to the CEO */
+const SMS_WORTHY_PREFIXES = ["broken-int-", "missed-delivery-", "long-shift-"];
+const MAX_DAILY_SMS = 3;
+
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase } = ctx;
+
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  const alerts: Array<{ user_id: string; type: string; title: string; description: string; priority: string; dedupe: string; link_to?: string }> = [];
+
+  // Get all admin users to notify
+  const { data: adminRoles } = await supabase
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin");
+  const adminUserIds = (adminRoles || []).map((r: any) => r.user_id);
+
+  if (adminUserIds.length === 0) {
+    return new Response(JSON.stringify({ status: "no admins found" }), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    // Run all checks in parallel
+    await Promise.all([
+      checkUnansweredEmails(supabase, now, alerts, adminUserIds),
+      checkStalledLeads(supabase, alerts, adminUserIds),
+      checkAtRiskProduction(supabase, alerts, adminUserIds),
+      checkMissedDeliveries(supabase, today, alerts, adminUserIds),
+      checkOverdueInvoices(supabase, today, alerts, adminUserIds),
+      checkLongShifts(supabase, now, alerts, adminUserIds),
+      checkBrokenIntegrations(supabase, alerts, adminUserIds),
+    ]);
+
+    // Deduplicate: check existing notifications from last 24h with same dedupe keys
+    const dedupeKeys = alerts.map((a) => a.dedupe);
+    const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString();
+
+    let existingKeys = new Set<string>();
+    if (dedupeKeys.length > 0) {
+      const { data: existing } = await supabase
+        .from("notifications")
+        .select("metadata")
+        .gte("created_at", twentyFourHoursAgo)
+        .eq("agent_name", "watchdog");
+      existingKeys = new Set(
+        (existing || [])
+          .map((n: any) => n.metadata?.dedupe_key)
+          .filter(Boolean)
+      );
+    }
+
+    // Insert only new alerts
+    const newAlerts = alerts.filter((a) => !existingKeys.has(a.dedupe));
+    if (newAlerts.length > 0) {
+      const rows = newAlerts.map((a) => ({
+        user_id: a.user_id,
+        type: a.type,
+        title: a.title,
+        description: a.description,
+        priority: a.priority,
+        agent_name: "watchdog",
+        agent_color: "#ef4444",
+        status: "unread",
+        link_to: a.link_to || null,
+        metadata: { dedupe_key: a.dedupe, source: "vizzy-business-watchdog" },
+      }));
+      await supabase.from("notifications").insert(rows);
+
+      // SMS CEO — ONLY for safety/security/delivery-critical alerts
+      const smsAlerts = newAlerts.filter((a) =>
+        SMS_WORTHY_PREFIXES.some((prefix) => a.dedupe.startsWith(prefix))
+      );
+
+      if (smsAlerts.length > 0) {
+        // Check daily SMS cap
+        const todayStart = `${today}T00:00:00.000Z`;
+        const { data: todaySmsLogs } = await supabase
+          .from("notifications")
+          .select("id", { count: "exact", head: true })
+          .eq("agent_name", "watchdog")
+          .gte("created_at", todayStart)
+          .not("metadata->>sms_sent", "is", null);
+
+        const smsSentToday = todaySmsLogs?.length ?? 0;
+        const smsRemaining = MAX_DAILY_SMS - smsSentToday;
+
+        if (smsRemaining > 0) {
+          const toSend = smsAlerts.slice(0, smsRemaining);
+          const smsLines = toSend.map((a) => `⚠️ ${a.title}`).join("\n");
+          const smsText = `🚨 Watchdog (${toSend.length} critical):\n${smsLines}`;
+          const sent = await sendCeoSmsAlert(smsText).catch((e) => {
+            console.error("[watchdog] SMS alert error:", e);
+            return false;
+          });
+
+          // Mark these alerts so we can count them for the daily cap
+          if (sent) {
+            const sentDedupes = toSend.map((a) => a.dedupe);
+            // Tag the notifications we just created with sms_sent
+            for (const dk of sentDedupes) {
+              await supabase
+                .from("notifications")
+                .update({ metadata: { dedupe_key: dk, source: "vizzy-business-watchdog", sms_sent: true } })
+                .eq("agent_name", "watchdog")
+                .eq("metadata->>dedupe_key", dk)
+                .gte("created_at", todayStart);
+            }
+          }
+        } else {
+          console.log(`[watchdog] Daily SMS cap reached (${MAX_DAILY_SMS}), skipping SMS for ${smsAlerts.length} critical alerts`);
+        }
+      }
+    }
+
+    // Save critical findings to vizzy_memory so Vizzy's Brain stays up-to-date
+    if (newAlerts.length > 0) {
+      const highPriorityAlerts = newAlerts.filter((a) => a.priority === "high");
+      if (highPriorityAlerts.length > 0) {
+        const summaryContent = highPriorityAlerts
+          .map((a) => `⚠️ ${a.title}: ${a.description}`)
+          .join("\n");
+
+        // Get company_id from the first admin's profile
+        const { data: adminProfile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("user_id", adminUserIds[0])
+          .maybeSingle();
+
+        if (adminProfile?.company_id) {
+          // Dedupe: only write one watchdog memory per 15-min cycle
+          const fifteenMinAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+          const { data: recentWatchdogMemory } = await supabase
+            .from("vizzy_memory")
+            .select("id")
+            .eq("company_id", adminProfile.company_id)
+            .eq("category", "watchdog_alert")
+            .gte("created_at", fifteenMinAgo)
+            .limit(1);
+
+          if (!recentWatchdogMemory || recentWatchdogMemory.length === 0) {
+            for (const uid of adminUserIds) {
+              await supabase.from("vizzy_memory").insert({
+                user_id: uid,
+                company_id: adminProfile.company_id,
+                category: "watchdog_alert",
+                content: `[Watchdog ${now.toISOString().split("T")[0]}] ${highPriorityAlerts.length} critical findings:\n${summaryContent}`,
+                metadata: { source: "watchdog", alert_count: highPriorityAlerts.length, timestamp: now.toISOString() },
+              });
+            }
+          }
+
+          // Cleanup: keep only last 20 watchdog_alert memories
+          const { data: oldWatchdogMemories } = await supabase
+            .from("vizzy_memory")
+            .select("id, created_at")
+            .eq("company_id", adminProfile.company_id)
+            .eq("category", "watchdog_alert")
+            .order("created_at", { ascending: false });
+
+          if (oldWatchdogMemories && oldWatchdogMemories.length > 20) {
+            const idsToDelete = oldWatchdogMemories.slice(20).map((m: any) => m.id);
+            await supabase.from("vizzy_memory").delete().in("id", idsToDelete);
+          }
+        }
+      }
+    }
+
+    console.log(`[watchdog] Scanned: ${alerts.length} anomalies found, ${newAlerts.length} new alerts created`);
+
+      return new Response(
+        JSON.stringify({ timestamp: now.toISOString(), total_anomalies: alerts.length, new_alerts: newAlerts.length }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } catch (err) {
+      console.error("[watchdog] Error:", err);
+      return new Response(
+        JSON.stringify({ error: String(err) }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  }, { functionName: "vizzy-business-watchdog", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+);
+
+// ─── CHECK FUNCTIONS ───
+
+async function checkUnansweredEmails(
+  supabase: any, now: Date, alerts: any[], adminUserIds: string[]
+) {
+  const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000).toISOString();
+  const { data: inbound } = await supabase
+    .from("communications")
+    .select("id, subject, from_address, received_at, thread_id")
+    .eq("direction", "inbound")
+    .eq("source", "gmail")
+    .lt("received_at", fourHoursAgo)
+    .gte("received_at", new Date(now.getTime() - 24 * 60 * 60 * 1000).toISOString())
+    .limit(200);
+
+  if (!inbound?.length) return;
+
+  // Get outbound thread_ids in same period
+  const threadIds = [...new Set((inbound as any[]).map((e) => e.thread_id).filter(Boolean))];
+  if (threadIds.length === 0) return;
+
+  const { data: replied } = await supabase
+    .from("communications")
+    .select("thread_id")
+    .eq("direction", "outbound")
+    .in("thread_id", threadIds.slice(0, 200));
+
+  const repliedThreads = new Set((replied || []).map((r: any) => r.thread_id));
+  const unanswered = (inbound as any[]).filter((e) => e.thread_id && !repliedThreads.has(e.thread_id));
+
+  for (const email of unanswered.slice(0, 10)) {
+    for (const uid of adminUserIds) {
+      alerts.push({
+        user_id: uid,
+        type: "warning",
+        title: `Unanswered email from ${email.from_address?.split("@")[0] || "unknown"}`,
+        description: `"${email.subject || "No subject"}" received ${timeSince(new Date(email.received_at))} ago — no reply sent.`,
+        priority: "medium",
+        dedupe: `unanswered-email-${email.id}`,
+      });
+    }
+  }
+}
+
+async function checkStalledLeads(supabase: any, alerts: any[], adminUserIds: string[]) {
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: stalled } = await supabase
+    .from("leads")
+    .select("id, title, stage, updated_at, expected_value")
+    .in("stage", ["new", "contacted", "qualified", "proposal", "negotiation"])
+    .lt("updated_at", sevenDaysAgo)
+    .limit(20);
+
+  for (const lead of stalled || []) {
+    for (const uid of adminUserIds) {
+      alerts.push({
+        user_id: uid,
+        type: "warning",
+        title: `Stalled lead: ${lead.title}`,
+        description: `Stage "${lead.stage}" unchanged for ${timeSince(new Date(lead.updated_at))}. Value: $${lead.expected_value || 0}`,
+        priority: "medium", // Downgraded — no SMS for stalled leads
+        dedupe: `stalled-lead-${lead.id}`,
+        link_to: `/crm?lead=${lead.id}`,
+      });
+    }
+  }
+}
+
+/**
+ * AGGREGATED production check — creates ONE summary alert per admin per day
+ * instead of hundreds of individual item alerts.
+ */
+async function checkAtRiskProduction(supabase: any, alerts: any[], adminUserIds: string[]) {
+  const { data: items } = await supabase
+    .from("cut_plan_items")
+    .select("id, bar_code, total_pieces, completed_pieces, phase")
+    .in("phase", ["queued", "cutting", "bending"])
+    .limit(200);
+
+  if (!items?.length) return;
+
+  // Filter at-risk items (<50% progress)
+  const atRisk = (items as any[]).filter((item) => {
+    const progress = item.total_pieces > 0 ? (item.completed_pieces || 0) / item.total_pieces : 0;
+    return progress < 0.5;
+  });
+
+  if (atRisk.length === 0) return;
+
+  // Group by phase for summary
+  const byPhase: Record<string, number> = {};
+  let criticalCount = 0; // < 20% progress
+  for (const item of atRisk) {
+    const phase = item.phase || "unknown";
+    byPhase[phase] = (byPhase[phase] || 0) + 1;
+    const progress = item.total_pieces > 0 ? (item.completed_pieces || 0) / item.total_pieces : 0;
+    if (progress < 0.2) criticalCount++;
+  }
+
+  const phaseBreakdown = Object.entries(byPhase)
+    .map(([phase, count]) => `${count} ${phase}`)
+    .join(", ");
+
+  const today = new Date().toISOString().split("T")[0];
+
+  for (const uid of adminUserIds) {
+    alerts.push({
+      user_id: uid,
+      type: "alert",
+      title: `${atRisk.length} production items at risk`,
+      description: `${criticalCount} critical (<20% done), ${atRisk.length} total below 50%. Breakdown: ${phaseBreakdown}.`,
+      priority: "medium", // In-app only — no SMS for production summaries
+      dedupe: `atrisk-prod-summary-${today}`,
+      link_to: "/production",
+    });
+  }
+}
+
+async function checkMissedDeliveries(supabase: any, today: string, alerts: any[], adminUserIds: string[]) {
+  const { data: deliveries } = await supabase
+    .from("deliveries")
+    .select("id, delivery_number, status, scheduled_date")
+    .eq("scheduled_date", today)
+    .not("status", "in", '("in_transit","delivered","completed")')
+    .limit(20);
+
+  for (const d of deliveries || []) {
+    for (const uid of adminUserIds) {
+      alerts.push({
+        user_id: uid,
+        type: "warning",
+        title: `Delivery not dispatched: ${d.delivery_number || d.id.slice(0, 8)}`,
+        description: `Scheduled for today but status is "${d.status}".`,
+        priority: "high",
+        dedupe: `missed-delivery-${d.id}-${today}`,
+        link_to: "/deliveries",
+      });
+    }
+  }
+}
+
+async function checkOverdueInvoices(supabase: any, today: string, alerts: any[], adminUserIds: string[]) {
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const { data: invoices } = await supabase
+    .from("accounting_mirror")
+    .select("id, balance, data, quickbooks_id")
+    .eq("entity_type", "Invoice")
+    .gt("balance", 0)
+    .limit(200);
+
+  const overdue = (invoices || []).filter((inv: any) => {
+    const dueDate = inv.data?.DueDate;
+    return dueDate && dueDate < thirtyDaysAgo;
+  });
+
+  for (const inv of overdue.slice(0, 10)) {
+    const customerName = inv.data?.CustomerRef?.name || inv.data?.CustomerRef?.Name || "Unknown";
+    for (const uid of adminUserIds) {
+      alerts.push({
+        user_id: uid,
+        type: "alert",
+        title: `Overdue invoice: ${customerName}`,
+        description: `$${inv.balance} overdue since ${inv.data?.DueDate}. QB#${inv.quickbooks_id}`,
+        priority: "medium", // Downgraded — no SMS for invoices
+        dedupe: `overdue-inv-${inv.id}`,
+        link_to: "/accounting",
+      });
+    }
+  }
+}
+
+async function checkLongShifts(supabase: any, now: Date, alerts: any[], adminUserIds: string[]) {
+  const tenHoursAgo = new Date(now.getTime() - 10 * 60 * 60 * 1000).toISOString();
+  const { data: entries } = await supabase
+    .from("time_entries")
+    .select("id, user_id, clock_in, clock_out")
+    .is("clock_out", null)
+    .lt("clock_in", tenHoursAgo)
+    .limit(20);
+
+  if (!entries?.length) return;
+
+  const userIds = [...new Set((entries as any[]).map((e) => e.user_id))];
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("user_id, full_name")
+    .in("user_id", userIds);
+  const nameMap = new Map((profiles || []).map((p: any) => [p.user_id, p.full_name]));
+
+  for (const entry of entries) {
+    const name = nameMap.get(entry.user_id) || "Unknown";
+    for (const uid of adminUserIds) {
+      alerts.push({
+        user_id: uid,
+        type: "warning",
+        title: `Long shift: ${name}`,
+        description: `Clocked in ${timeSince(new Date(entry.clock_in))} ago without clock-out.`,
+        priority: "high",
+        dedupe: `long-shift-${entry.id}`,
+        link_to: "/hr",
+      });
+    }
+  }
+}
+
+async function checkBrokenIntegrations(supabase: any, alerts: any[], adminUserIds: string[]) {
+  const { data: broken } = await supabase
+    .from("integration_connections")
+    .select("id, integration_id, status, user_id")
+    .eq("status", "error")
+    .limit(20);
+
+  for (const conn of broken || []) {
+    for (const uid of adminUserIds) {
+      alerts.push({
+        user_id: uid,
+        type: "alert",
+        title: `Integration down: ${conn.integration_id}`,
+        description: `${conn.integration_id} connection has an error. Needs reconnection.`,
+        priority: "high",
+        dedupe: `broken-int-${conn.id}`,
+        link_to: "/settings/integrations",
+      });
+    }
+  }
+}
+
+// ─── HELPERS ───
+
+function timeSince(date: Date): string {
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
+  return `${Math.floor(seconds / 86400)}d`;
+}

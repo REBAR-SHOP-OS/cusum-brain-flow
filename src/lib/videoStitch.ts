@@ -1,0 +1,1005 @@
+/**
+ * Stitches multiple video clips sequentially into one continuous video.
+ * Supports optional logo watermark, subtitle burn-in, and end card overlays.
+ * Returns a blob URL of the combined video.
+ *
+ * v2 — Reliability overhaul:
+ *   • Pre-validates every clip before starting the recorder
+ *   • Retries failed clip playback once, then renders black frame + skips
+ *   • Safety setTimeout fallback so a stuck clip never blocks forever
+ *   • Post-stitch validation: verifies the output blob is playable
+ *   • Honest output format (.webm)
+ */
+
+import { supabase } from "@/integrations/supabase/client";
+
+// Target dimensions per aspect ratio (social-standard 1080p class)
+export const RATIO_DIMS: Record<string, [number, number]> = {
+  "16:9": [1920, 1080],
+  "9:16": [1080, 1920],
+  "1:1": [1080, 1080],
+};
+
+/**
+ * "object-fit: cover" geometry — scale source to fully cover the target,
+ * center-crop the overflowing axis. Subject (assumed centered) stays in frame.
+ */
+export function fitCover(srcW: number, srcH: number, dstW: number, dstH: number) {
+  if (!srcW || !srcH) return { sx: 0, sy: 0, sw: srcW || 1, sh: srcH || 1 };
+  const srcRatio = srcW / srcH;
+  const dstRatio = dstW / dstH;
+  let sx = 0, sy = 0, sw = srcW, sh = srcH;
+  if (srcRatio > dstRatio) {
+    // source wider than target → crop sides
+    sw = srcH * dstRatio;
+    sx = (srcW - sw) / 2;
+  } else if (srcRatio < dstRatio) {
+    // source taller than target → crop top/bottom
+    sh = srcW / dstRatio;
+    sy = (srcH - sh) / 2;
+  }
+  return { sx, sy, sw, sh };
+}
+
+/**
+ * "object-fit: contain" geometry — scale source to fully fit inside the target,
+ * letterbox (black bars) on the overflowing axis. Nothing is cropped.
+ */
+export function fitContain(srcW: number, srcH: number, dstW: number, dstH: number) {
+  if (!srcW || !srcH) return { dx: 0, dy: 0, dw: dstW, dh: dstH };
+  const srcRatio = srcW / srcH;
+  const dstRatio = dstW / dstH;
+  let dw: number, dh: number;
+  if (srcRatio > dstRatio) {
+    dw = dstW;
+    dh = dstW / srcRatio;
+  } else {
+    dh = dstH;
+    dw = dstH * srcRatio;
+  }
+  return { dx: (dstW - dw) / 2, dy: (dstH - dh) / 2, dw, dh };
+}
+
+export type StitchTransitionType =
+  | "None" | "Crossfade" | "Cross Blur" | "Fade Black" | "Fade White"
+  | "Burn" | "Tiles"
+  | "Wipe Up" | "Wipe Down" | "Wipe Left" | "Wipe Right"
+  | "Slide Up" | "Slide Down"
+  | "Zoom In" | "Zoom Out"
+  | "Horizontal Banding";
+
+export interface StitchOverlayOptions {
+  logo?: { url: string; enabled: boolean; size?: number };
+  /** Target aspect ratio for the final canvas. Defaults to source dims. */
+  aspectRatio?: "16:9" | "9:16" | "1:1";
+  /**
+   * How to fit each source video into the canvas:
+   *  - "cover" (default): fill canvas, center-crop overflow (object-fit: cover)
+   *  - "contain": fit fully inside canvas, letterbox overflow (object-fit: contain)
+   */
+  fitMode?: "cover" | "contain";
+  /** Explicit canvas width override (takes priority over aspectRatio + source dims). */
+  canvasWidth?: number;
+  /** Explicit canvas height override (takes priority over aspectRatio + source dims). */
+  canvasHeight?: number;
+  endCard?: {
+    enabled: boolean;
+    brandName: string;
+    tagline: string;
+    website: string;
+    primaryColor: string;
+    bgColor: string;
+    logoUrl?: string | null;
+  };
+  subtitles?: {
+    enabled: boolean;
+    segments: { text: string; startTime: number; endTime: number }[];
+  };
+  audioUrl?: string;
+  musicUrl?: string;
+  musicVolume?: number; // 0-1, default 0.3
+  crossfadeDuration?: number; // seconds, default 0.5 — used as fallback when perClipTransitions is missing
+  /**
+   * Per-clip outgoing transition (index N is the transition FROM clip N TO clip N+1).
+   * Length should equal clips.length; the last entry is ignored. Missing entries fall back
+   * to a Crossfade with crossfadeDuration.
+   */
+  perClipTransitions?: { type: StitchTransitionType | string; duration: number }[];
+}
+
+export interface StitchProgress {
+  stage: "loading" | "rendering" | "endcard" | "validating" | "done" | "error";
+  clipIndex?: number;
+  clipTotal?: number;
+  message: string;
+}
+
+// ─── Helpers ───────────────────────────────────────────────
+
+async function fetchAsBlob(url: string): Promise<string> {
+  // Already a blob URL — return as-is
+  if (url.startsWith("blob:")) return url;
+
+  // MUST convert to blob URL so canvas drawing is same-origin (not tainted).
+  try {
+    const resp = await fetch(url, { mode: "cors" });
+    if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+    const blob = await resp.blob();
+    return URL.createObjectURL(blob);
+  } catch (e) {
+    // Try no-cors as fallback — opaque response, but we can still get blob
+    try {
+      const resp2 = await fetch(url, { mode: "no-cors" });
+      const blob = await resp2.blob();
+      if (blob.size > 0) return URL.createObjectURL(blob);
+    } catch { /* fall through */ }
+
+    // Last resort: proxy through edge function to bypass CORS
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        const proxyResp = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/generate-video`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            },
+            body: JSON.stringify({ action: "download", provider: "veo", videoUrl: url }),
+          }
+        );
+        if (proxyResp.ok) {
+          const blob = await proxyResp.blob();
+          if (blob.size > 0) return URL.createObjectURL(blob);
+        }
+      }
+    } catch { /* fall through */ }
+
+    console.error(`[fetchAsBlob] Failed to fetch as blob: ${url}`, e);
+    throw new Error(`Cannot fetch clip for stitching (CORS blocked). URL: ${url.substring(0, 80)}...`);
+  }
+}
+
+async function loadImage(src: string): Promise<HTMLImageElement | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
+function drawSubtitle(ctx: CanvasRenderingContext2D, w: number, h: number, text: string) {
+  if (!text) return;
+  const fontSize = Math.max(18, Math.round(h / 20));
+  ctx.font = `700 ${fontSize}px 'Inter', 'SF Pro Display', -apple-system, sans-serif`;
+  const maxWidth = w * 0.8;
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    const test = line ? `${line} ${word}` : word;
+    if (ctx.measureText(test).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else {
+      line = test;
+    }
+  }
+  if (line) lines.push(line);
+
+  const lineHeight = fontSize * 1.4;
+  const padX = fontSize * 1.8;
+  const padY = fontSize * 0.7;
+
+  // Measure widest line for pill width
+  let maxLineW = 0;
+  for (const ln of lines) {
+    const lw = ctx.measureText(ln).width;
+    if (lw > maxLineW) maxLineW = lw;
+  }
+
+  const pillW = maxLineW + padX * 2;
+  const pillH = lines.length * lineHeight + padY * 2;
+  const pillX = (w - pillW) / 2;
+  const pillY = h - pillH - 40;
+  const radius = 16;
+
+  // Gradient pill background
+  ctx.save();
+  const grad = ctx.createLinearGradient(pillX, pillY, pillX, pillY + pillH);
+  grad.addColorStop(0, "rgba(0, 0, 0, 0.72)");
+  grad.addColorStop(1, "rgba(8, 8, 8, 0.88)");
+  ctx.beginPath();
+  ctx.roundRect(pillX, pillY, pillW, pillH, radius);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Glass border
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Text with glow
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.shadowColor = "rgba(255, 255, 255, 0.45)";
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 0;
+  ctx.shadowOffsetY = 0;
+  ctx.fillStyle = "#ffffff";
+
+  // Apply letter spacing via manual character rendering would be heavy;
+  // use (letterSpacing) if supported, otherwise just render normally
+  try { (ctx as any).letterSpacing = "0.5px"; } catch {}
+
+  lines.forEach((ln, i) => {
+    ctx.fillText(ln, w / 2, pillY + padY + i * lineHeight);
+  });
+
+  // Reset
+  ctx.shadowColor = "transparent";
+  ctx.shadowBlur = 0;
+  try { (ctx as any).letterSpacing = "0px"; } catch {}
+  ctx.restore();
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+function drawLogo(ctx: CanvasRenderingContext2D, w: number, h: number, logoImg: HTMLImageElement, logoSize: number) {
+  const aspect = logoImg.naturalWidth / (logoImg.naturalHeight || 1);
+  const drawW = logoSize;
+  const drawH = logoSize / aspect;
+  const padding = 16;
+  ctx.globalAlpha = 0.7;
+  ctx.drawImage(logoImg, w - drawW - padding, h - drawH - padding, drawW, drawH);
+  ctx.globalAlpha = 1.0;
+}
+
+function drawEndCard(
+  ctx: CanvasRenderingContext2D, w: number, h: number,
+  opts: NonNullable<StitchOverlayOptions["endCard"]>,
+  logoImg: HTMLImageElement | null,
+) {
+  ctx.fillStyle = opts.bgColor || "#1e293b";
+  ctx.fillRect(0, 0, w, h);
+  if (logoImg) {
+    const maxLogoH = h * 0.18;
+    const aspect = logoImg.naturalWidth / (logoImg.naturalHeight || 1);
+    const lh = maxLogoH;
+    const lw = lh * aspect;
+    ctx.drawImage(logoImg, (w - lw) / 2, h * 0.18, lw, lh);
+  }
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const nameFontSize = Math.round(h / 10);
+  ctx.font = `bold ${nameFontSize}px sans-serif`;
+  ctx.fillStyle = opts.primaryColor || "#ef4444";
+  ctx.fillText(opts.brandName, w / 2, h * 0.48);
+  const tagFontSize = Math.round(h / 20);
+  ctx.font = `${tagFontSize}px sans-serif`;
+  ctx.fillStyle = "#e2e8f0";
+  ctx.fillText(opts.tagline, w / 2, h * 0.60);
+  const divW = w * 0.25;
+  ctx.strokeStyle = opts.primaryColor || "#ef4444";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo((w - divW) / 2, h * 0.68);
+  ctx.lineTo((w + divW) / 2, h * 0.68);
+  ctx.stroke();
+  const urlFontSize = Math.round(h / 18);
+  ctx.font = `bold ${urlFontSize}px sans-serif`;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(opts.website, w / 2, h * 0.76);
+  ctx.textAlign = "start";
+  ctx.textBaseline = "alphabetic";
+}
+
+// ─── Pre-validation ────────────────────────────────────────
+
+interface ValidatedClip {
+  video: HTMLVideoElement;
+  targetDuration: number;
+  blobUrl: string;
+}
+
+async function preloadAndValidate(
+  clips: { videoUrl: string; targetDuration: number; blob?: Blob }[],
+  onProgress?: (p: StitchProgress) => void,
+): Promise<ValidatedClip[]> {
+  const results: ValidatedClip[] = [];
+
+  for (let i = 0; i < clips.length; i++) {
+    onProgress?.({ stage: "loading", clipIndex: i, clipTotal: clips.length, message: `Loading clip ${i + 1}/${clips.length}` });
+    const clip = clips[i];
+    let blobUrl = await fetchAsBlob(clip.videoUrl);
+
+    const load = (url: string, timeoutMs: number): Promise<HTMLVideoElement> =>
+      new Promise((resolve, reject) => {
+        const v = document.createElement("video");
+        v.playsInline = true;
+        v.preload = "auto";
+        v.muted = true;
+        let settled = false;
+        const finishOk = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timeout);
+          if (!v.videoWidth || !v.videoHeight) {
+            reject(new Error(`Clip ${i + 1} has no video dimensions`));
+          } else {
+            resolve(v);
+          }
+        };
+        const timeout = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          reject(new Error(`Clip ${i + 1} load timed out`));
+        }, timeoutMs);
+        // Accept whichever event fires first
+        v.onloadedmetadata = finishOk;
+        v.onloadeddata = finishOk;
+        v.onerror = () => {
+          if (settled) return;
+          // MediaRecorder WebMs sometimes fire `error` after the decoder has
+          // already initialized — if we have valid dimensions, treat it as success.
+          if (v.videoWidth > 0 && v.videoHeight > 0) {
+            settled = true;
+            clearTimeout(timeout);
+            resolve(v);
+            return;
+          }
+          settled = true;
+          clearTimeout(timeout);
+          console.error(
+            `[stitchClips] Clip ${i + 1} load error — url=${url.substring(0, 40)}… ` +
+            `videoWidth=${v.videoWidth} readyState=${v.readyState} networkState=${v.networkState}`,
+          );
+          reject(new Error(`Clip ${i + 1} failed to load`));
+        };
+        v.src = url;
+        try { v.load(); } catch (_e) {}
+      });
+
+    // Retry strategy: 1st attempt 25s; on failure, sleep 400ms, rebuild blob URL
+    // (if raw Blob is available) since MediaRecorder URLs sometimes get into a
+    // bad state after first failed decode, then 2nd attempt 25s.
+    let video: HTMLVideoElement;
+    try {
+      video = await load(blobUrl, 25_000);
+    } catch (firstErr) {
+      console.warn(`[stitchClips] Clip ${i + 1} first load failed, retrying...`, firstErr);
+      await new Promise((r) => setTimeout(r, 400));
+      if (clip.blob) {
+        try { URL.revokeObjectURL(blobUrl); } catch (_e) {}
+        blobUrl = URL.createObjectURL(clip.blob);
+      }
+      try {
+        video = await load(blobUrl, 25_000);
+      } catch (secondErr) {
+        throw new Error(`Clip ${i + 1} failed to load after retry: ${(firstErr as Error).message}`);
+      }
+    }
+
+    results.push({ video, targetDuration: clip.targetDuration, blobUrl });
+  }
+
+  return results;
+}
+
+// ─── Post-stitch validation ────────────────────────────────
+
+async function validateBlob(blob: Blob, expectedDuration?: number): Promise<{ valid: boolean; error?: string; duration?: number }> {
+  if (blob.size === 0) return { valid: false, error: "Output blob is empty (0 bytes)" };
+  if (blob.size < 1000) return { valid: false, error: `Output blob suspiciously small (${blob.size} bytes)` };
+
+  const url = URL.createObjectURL(blob);
+  return new Promise((resolve) => {
+    const testVideo = document.createElement("video");
+    const timeout = setTimeout(() => {
+      URL.revokeObjectURL(url);
+      resolve({ valid: false, error: "Output video failed to load metadata within 10s" });
+    }, 10_000);
+
+    testVideo.onloadedmetadata = () => {
+      clearTimeout(timeout);
+      const dur = testVideo.duration;
+      URL.revokeObjectURL(url);
+      if (!dur || dur <= 0) {
+        resolve({ valid: false, error: `Output video has invalid duration: ${dur}` });
+      } else if (!isFinite(dur) && expectedDuration && expectedDuration > 0) {
+        console.warn(`[validateBlob] Browser reported Infinity duration, using expected: ${expectedDuration.toFixed(1)}s`);
+        resolve({ valid: true, duration: expectedDuration });
+      } else {
+        resolve({ valid: true, duration: dur });
+      }
+    };
+    testVideo.onerror = () => {
+      clearTimeout(timeout);
+      URL.revokeObjectURL(url);
+      resolve({ valid: false, error: "Output video is not playable" });
+    };
+    testVideo.src = url;
+  });
+}
+
+// ─── Main Stitch Function ──────────────────────────────────
+
+export async function stitchClips(
+  clips: { videoUrl: string; targetDuration: number; blob?: Blob }[],
+  overlays?: StitchOverlayOptions,
+  onProgress?: (p: StitchProgress) => void,
+): Promise<{ blobUrl: string; blob: Blob; duration: number }> {
+  if (clips.length === 0) throw new Error("No clips to stitch");
+
+  // Phase 1: Pre-validate all clips
+  const validatedClips = await preloadAndValidate(clips, onProgress);
+
+  // Pre-load overlay assets
+  let logoImg: HTMLImageElement | null = null;
+  const logoSize = overlays?.logo?.size ?? 64;
+  if (overlays?.logo?.enabled && overlays.logo.url) {
+    const blobLogoUrl = await fetchAsBlob(overlays.logo.url);
+    logoImg = await loadImage(blobLogoUrl);
+  }
+
+  let endCardLogoImg: HTMLImageElement | null = null;
+  if (overlays?.endCard?.enabled && overlays.endCard.logoUrl) {
+    const blobLogo = await fetchAsBlob(overlays.endCard.logoUrl);
+    endCardLogoImg = await loadImage(blobLogo);
+  }
+
+  // Determine target canvas dimensions:
+  // 1) explicit canvasWidth/Height override everything
+  // 2) explicit aspectRatio
+  // 3) fall back to first clip's native dimensions
+  const firstSrcW = validatedClips[0].video.videoWidth || 1280;
+  const firstSrcH = validatedClips[0].video.videoHeight || 720;
+  let W = firstSrcW;
+  let H = firstSrcH;
+  if (overlays?.canvasWidth && overlays?.canvasHeight) {
+    W = overlays.canvasWidth;
+    H = overlays.canvasHeight;
+  } else if (overlays?.aspectRatio && RATIO_DIMS[overlays.aspectRatio]) {
+    [W, H] = RATIO_DIMS[overlays.aspectRatio];
+  }
+  const fitMode: "cover" | "contain" = overlays?.fitMode ?? "cover";
+
+  const canvas = document.createElement("canvas");
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext("2d")!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = "high";
+
+  const canvasStream = canvas.captureStream(30);
+  const combinedStream = new MediaStream([...canvasStream.getVideoTracks()]);
+
+  // Audio setup — mix voice + music via AudioContext with ducking & limiter
+  let voiceElement: HTMLAudioElement | null = null;
+  let musicElement: HTMLAudioElement | null = null;
+  let audioCtx: AudioContext | null = null;
+  let musicGainNode: GainNode | null = null;
+  let voiceGainNode: GainNode | null = null;
+
+  const hasVoice = !!overlays?.audioUrl;
+  const hasMusic = !!overlays?.musicUrl;
+  const baseMusicVol = overlays?.musicVolume ?? 0.15;
+  const duckedMusicVol = Math.min(baseMusicVol * 0.33, 0.05); // duck to 33% or max 0.05
+
+  if (hasVoice || hasMusic) {
+    try {
+      audioCtx = new AudioContext();
+      const audioDest = audioCtx.createMediaStreamDestination();
+
+      // Master compressor/limiter to prevent clipping
+      const compressor = audioCtx.createDynamicsCompressor();
+      compressor.threshold.value = -3;
+      compressor.knee.value = 6;
+      compressor.ratio.value = 12;
+      compressor.attack.value = 0.003;
+      compressor.release.value = 0.15;
+      compressor.connect(audioDest);
+
+      // Voice track
+      if (hasVoice) {
+        const voiceBlobUrl = await fetchAsBlob(overlays!.audioUrl!);
+        voiceElement = document.createElement("audio");
+        voiceElement.preload = "auto";
+        voiceElement.src = voiceBlobUrl;
+        await new Promise<void>((res, rej) => {
+          voiceElement!.oncanplaythrough = () => res();
+          voiceElement!.onerror = () => rej(new Error("Voice audio load failed"));
+          setTimeout(() => res(), 5000);
+        });
+        const voiceSource = audioCtx.createMediaElementSource(voiceElement);
+        voiceGainNode = audioCtx.createGain();
+        voiceGainNode.gain.value = 1.4;
+        voiceSource.connect(voiceGainNode);
+        voiceGainNode.connect(compressor);
+      }
+
+      // Music track with ducking support
+      if (hasMusic) {
+        const musicBlobUrl = await fetchAsBlob(overlays!.musicUrl!);
+        musicElement = document.createElement("audio");
+        musicElement.preload = "auto";
+        musicElement.loop = true;
+        musicElement.src = musicBlobUrl;
+        await new Promise<void>((res, rej) => {
+          musicElement!.oncanplaythrough = () => res();
+          musicElement!.onerror = () => rej(new Error("Music audio load failed"));
+          setTimeout(() => res(), 5000);
+        });
+        const musicSource = audioCtx.createMediaElementSource(musicElement);
+        musicGainNode = audioCtx.createGain();
+        // Start at ducked volume if voice is present, else full
+        musicGainNode.gain.value = hasVoice ? duckedMusicVol : baseMusicVol;
+        musicSource.connect(musicGainNode);
+        musicGainNode.connect(compressor);
+      }
+
+      audioDest.stream.getAudioTracks().forEach(t => combinedStream.addTrack(t));
+    } catch (e) {
+      console.warn("[stitchClips] Audio mix failed, continuing without audio:", e);
+      voiceElement = null;
+      musicElement = null;
+      musicGainNode = null;
+    }
+  }
+
+  // Dynamic ducking: lower music when voice is playing, restore when silent
+    const updateMusicDucking = () => {
+    if (!musicGainNode || !audioCtx || !voiceElement) return;
+    const voicePlaying = !voiceElement.paused && !voiceElement.ended && voiceElement.currentTime > 0;
+    const targetVol = voicePlaying ? duckedMusicVol : baseMusicVol;
+    musicGainNode.gain.setTargetAtTime(targetVol, audioCtx.currentTime, 0.1);
+  };
+
+  // Professional fade-out helper
+  const fadeOutAudio = (durationSec = 0.5): Promise<void> => {
+    if (!audioCtx) return Promise.resolve();
+    const now = audioCtx.currentTime;
+    if (voiceGainNode) {
+      voiceGainNode.gain.setValueAtTime(voiceGainNode.gain.value, now);
+      voiceGainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+    }
+    if (musicGainNode) {
+      musicGainNode.gain.setValueAtTime(musicGainNode.gain.value, now);
+      musicGainNode.gain.linearRampToValueAtTime(0, now + durationSec);
+    }
+    return new Promise(res => setTimeout(res, durationSec * 1000));
+  };
+
+  const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+    ? "video/webm;codecs=vp9,opus"
+    : MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9"
+      : "video/webm";
+  const recorder = new MediaRecorder(combinedStream, { mimeType, videoBitsPerSecond: 5_000_000 });
+  const chunks: Blob[] = [];
+  recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+
+  const subtitleSegments = overlays?.subtitles?.enabled ? overlays.subtitles.segments : [];
+  let cumulativeTime = 0;
+
+  return new Promise((resolve, reject) => {
+    recorder.onerror = () => reject(new Error("MediaRecorder error during stitch"));
+
+    recorder.onstop = async () => {
+      if (voiceElement) voiceElement.pause();
+      if (musicElement) musicElement.pause();
+      if (audioCtx) audioCtx.close().catch(() => {});
+
+      // Phase 3: Post-stitch validation
+      onProgress?.({ stage: "validating", message: "Validating output..." });
+      const blob = new Blob(chunks, { type: mimeType });
+      const validation = await validateBlob(blob, cumulativeTime);
+
+      if (!validation.valid) {
+        reject(new Error(`Stitch validation failed: ${validation.error}`));
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
+      console.log(`[stitchClips] ✅ Output valid: ${(blob.size / 1024 / 1024).toFixed(1)}MB, ${validation.duration?.toFixed(1)}s`);
+      onProgress?.({ stage: "done", message: `Export complete — ${validation.duration?.toFixed(1)}s` });
+      resolve({ blobUrl, blob, duration: validation.duration! });
+    };
+
+    recorder.start(1000); // Request data every 1s for reliability
+
+    if (voiceElement) {
+      voiceElement.play().catch(() => console.warn("[stitchClips] Voice play failed"));
+    }
+    if (musicElement) {
+      musicElement.play().catch(() => console.warn("[stitchClips] Music play failed"));
+    }
+
+    // Phase 2: Render clips with crossfade transitions
+    let clipIndex = 0;
+    let clipStartCumulativeTime = 0;
+    const crossfadeDur = overlays?.crossfadeDuration ?? 0.5;
+    let clipPreStartedByCrossfade = false;
+
+    // Pre-seek next clip for crossfade readiness
+    const prepareNextClip = (nextIdx: number) => {
+      if (nextIdx < validatedClips.length) {
+        const nv = validatedClips[nextIdx].video;
+        nv.currentTime = 0;
+        nv.pause();
+      }
+    };
+
+    const playNextClip = () => {
+      if (clipIndex >= validatedClips.length) {
+        if (overlays?.endCard?.enabled) {
+          renderEndCard();
+        } else {
+          // Fade out all audio professionally, then stop recorder
+          fadeOutAudio(0.5).then(() => {
+            if (voiceElement) voiceElement.pause();
+            if (musicElement) musicElement.pause();
+            if (recorder.state === "recording") recorder.stop();
+          });
+        }
+        return;
+      }
+
+      const { video, targetDuration } = validatedClips[clipIndex];
+      const effectiveDuration = Math.min(targetDuration, video.duration || targetDuration);
+      const wasPreStarted = clipPreStartedByCrossfade;
+      clipPreStartedByCrossfade = false;
+
+      if (wasPreStarted) {
+        // Clip already playing from crossfade — adjust cumulative time for elapsed time
+        clipStartCumulativeTime = cumulativeTime - video.currentTime;
+      } else {
+        clipStartCumulativeTime = cumulativeTime;
+        video.currentTime = 0;
+      }
+
+      // Pre-load next clip for crossfade
+      prepareNextClip(clipIndex + 1);
+
+      onProgress?.({
+        stage: "rendering",
+        clipIndex,
+        clipTotal: validatedClips.length,
+        message: `Rendering clip ${clipIndex + 1}/${validatedClips.length}`,
+      });
+
+      let animFrame: number;
+      let hasDrawnFrame = false;
+      let clipDone = false;
+      let nextClipStarted = false;
+
+      const isLastClip = clipIndex >= validatedClips.length - 1;
+      // Per-clip outgoing transition (FROM this clip TO next clip).
+      const perClipTx = overlays?.perClipTransitions?.[clipIndex];
+      const txType = (perClipTx?.type ?? "Crossfade") as string;
+      const txDurRaw = perClipTx?.duration ?? crossfadeDur;
+      const txDur = txType === "None" ? 0 : Math.max(0, txDurRaw);
+      const fadeStart = effectiveDuration - txDur;
+
+      const safetyTimeout = setTimeout(() => {
+        if (!clipDone) {
+          console.warn(`[stitchClips] Clip ${clipIndex + 1} stuck — forcing advance`);
+          finishClip();
+        }
+      }, effectiveDuration * 2000 + 5000);
+
+      const finishClip = () => {
+        if (clipDone) return;
+        clipDone = true;
+        clearTimeout(safetyTimeout);
+        cancelAnimationFrame(animFrame);
+        video.pause();
+        cumulativeTime = clipStartCumulativeTime + effectiveDuration;
+        console.log(`[stitchClips] Clip ${clipIndex + 1}/${validatedClips.length} done, cumTime=${cumulativeTime.toFixed(2)}s`);
+        clipIndex++;
+        playNextClip();
+      };
+
+      const drawFrame = () => {
+        if (clipDone) return;
+
+        if (hasDrawnFrame && (video.ended || video.currentTime >= effectiveDuration)) {
+          finishClip();
+          return;
+        }
+
+        // Update music ducking
+        updateMusicDucking();
+
+        // Drift correction: keep voice & music in sync with video elapsed time
+        const currentAbsTimeForSync = clipStartCumulativeTime + video.currentTime;
+        if (voiceElement && !voiceElement.paused && !voiceElement.ended) {
+          if (Math.abs(voiceElement.currentTime - currentAbsTimeForSync) > 0.3) {
+            voiceElement.currentTime = currentAbsTimeForSync;
+          }
+        }
+        if (musicElement && !musicElement.paused && !musicElement.ended) {
+          if (Math.abs(musicElement.currentTime - currentAbsTimeForSync) > 0.3) {
+            musicElement.currentTime = currentAbsTimeForSync;
+          }
+        }
+
+        if (!video.paused && !video.ended) {
+          const t = video.currentTime;
+          const inTransition = !isLastClip && txDur > 0 && t >= fadeStart && clipIndex + 1 < validatedClips.length;
+
+          const drawFit = (v: HTMLVideoElement) => {
+            if (fitMode === "contain") {
+              ctx.fillStyle = "#000";
+              ctx.fillRect(0, 0, W, H);
+              const f = fitContain(v.videoWidth, v.videoHeight, W, H);
+              ctx.drawImage(v, 0, 0, v.videoWidth, v.videoHeight, f.dx, f.dy, f.dw, f.dh);
+            } else {
+              const f = fitCover(v.videoWidth, v.videoHeight, W, H);
+              ctx.drawImage(v, f.sx, f.sy, f.sw, f.sh, 0, 0, W, H);
+            }
+          };
+
+          if (inTransition) {
+            const progress = Math.min((t - fadeStart) / txDur, 1);
+
+            // Start next clip video if not already
+            if (!nextClipStarted) {
+              nextClipStarted = true;
+              clipPreStartedByCrossfade = true;
+              const nv = validatedClips[clipIndex + 1].video;
+              nv.currentTime = 0;
+              nv.play().catch(() => {});
+            }
+
+            const nextVideo = validatedClips[clipIndex + 1].video;
+            ctx.globalAlpha = 1.0;
+            ctx.filter = "none";
+
+            switch (txType) {
+              case "Cross Blur": {
+                ctx.filter = `blur(${20 * progress}px)`;
+                ctx.globalAlpha = 1 - progress;
+                drawFit(video);
+                ctx.filter = `blur(${20 * (1 - progress)}px)`;
+                ctx.globalAlpha = progress;
+                drawFit(nextVideo);
+                ctx.filter = "none";
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Fade Black":
+              case "Fade White": {
+                // First half: outgoing → solid color. Second half: solid color → incoming.
+                const half = progress < 0.5 ? progress * 2 : (progress - 0.5) * 2;
+                if (progress < 0.5) {
+                  ctx.globalAlpha = 1.0;
+                  drawFit(video);
+                  ctx.globalAlpha = half;
+                  ctx.fillStyle = txType === "Fade Black" ? "#000" : "#fff";
+                  ctx.fillRect(0, 0, W, H);
+                } else {
+                  ctx.globalAlpha = 1.0;
+                  drawFit(nextVideo);
+                  ctx.globalAlpha = 1 - half;
+                  ctx.fillStyle = txType === "Fade Black" ? "#000" : "#fff";
+                  ctx.fillRect(0, 0, W, H);
+                }
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Wipe Down": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, W, H * progress);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Wipe Up": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, H * (1 - progress), W, H * progress);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Wipe Right": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(0, 0, W * progress, H);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Wipe Left": {
+                drawFit(video);
+                ctx.save();
+                ctx.beginPath();
+                ctx.rect(W * (1 - progress), 0, W * progress, H);
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Slide Up": {
+                drawFit(video);
+                ctx.save();
+                ctx.translate(0, H * (1 - progress));
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Slide Down": {
+                drawFit(video);
+                ctx.save();
+                ctx.translate(0, -H * (1 - progress));
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Zoom In": {
+                // Outgoing zooms out → reveals incoming behind
+                drawFit(nextVideo);
+                ctx.save();
+                ctx.globalAlpha = 1 - progress;
+                const scale = 1 + progress * 1.2;
+                ctx.translate(W / 2, H / 2);
+                ctx.scale(scale, scale);
+                ctx.translate(-W / 2, -H / 2);
+                drawFit(video);
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Zoom Out": {
+                drawFit(nextVideo);
+                ctx.save();
+                ctx.globalAlpha = 1 - progress;
+                const scale = 1 - progress * 0.6;
+                ctx.translate(W / 2, H / 2);
+                ctx.scale(scale, scale);
+                ctx.translate(-W / 2, -H / 2);
+                drawFit(video);
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Burn": {
+                ctx.save();
+                ctx.globalAlpha = 1.0;
+                drawFit(nextVideo);
+                ctx.globalAlpha = 1 - progress;
+                ctx.filter = `brightness(${1 + progress * 2}) contrast(${1 + progress}) sepia(${progress})`;
+                drawFit(video);
+                ctx.filter = "none";
+                ctx.restore();
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+              case "Tiles":
+              case "Horizontal Banding": {
+                // Tile/band wipe: reveal next clip in N horizontal bands.
+                drawFit(video);
+                const bands = 8;
+                const bandH = H / bands;
+                ctx.save();
+                ctx.beginPath();
+                for (let i = 0; i < bands; i++) {
+                  const localProgress = Math.max(0, Math.min(1, (progress - i / (bands * 2)) * 2));
+                  ctx.rect(0, i * bandH, W * localProgress, bandH);
+                }
+                ctx.clip();
+                drawFit(nextVideo);
+                ctx.restore();
+                break;
+              }
+              case "Crossfade":
+              default: {
+                ctx.globalAlpha = 1 - progress;
+                drawFit(video);
+                ctx.globalAlpha = progress;
+                drawFit(nextVideo);
+                ctx.globalAlpha = 1.0;
+                break;
+              }
+            }
+          } else {
+            ctx.globalAlpha = 1.0;
+            ctx.filter = "none";
+            drawFit(video);
+          }
+
+          hasDrawnFrame = true;
+
+          if (subtitleSegments.length > 0) {
+            const currentAbsTime = clipStartCumulativeTime + video.currentTime;
+            const activeSub = subtitleSegments.find(s => currentAbsTime >= s.startTime && currentAbsTime < s.endTime);
+            if (activeSub) drawSubtitle(ctx, W, H, activeSub.text);
+          }
+
+          if (logoImg) drawLogo(ctx, W, H, logoImg, logoSize);
+        }
+
+        animFrame = requestAnimationFrame(drawFrame);
+      };
+
+      video.ontimeupdate = () => {
+        if (video.currentTime >= effectiveDuration && hasDrawnFrame) finishClip();
+      };
+
+      const startDrawing = () => {
+        console.log(`[stitchClips] Clip ${clipIndex + 1}/${validatedClips.length} playing, dur=${effectiveDuration.toFixed(2)}s, crossfade=${crossfadeDur}s`);
+        drawFrame();
+      };
+
+      if (wasPreStarted) {
+        // Already playing from crossfade — just attach draw loop directly
+        startDrawing();
+      } else {
+        video.addEventListener("playing", startDrawing, { once: true });
+        video.play().catch((err) => {
+          video.removeEventListener("playing", startDrawing);
+          console.error(`[stitchClips] Clip ${clipIndex + 1} play failed:`, err);
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, W, H);
+          ctx.fillStyle = "#ff4444";
+          ctx.font = "24px sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText(`Scene ${clipIndex + 1} — playback failed`, W / 2, H / 2);
+          ctx.textAlign = "start";
+          hasDrawnFrame = true;
+          setTimeout(() => finishClip(), 1000);
+        });
+      }
+    };
+
+    const renderEndCard = () => {
+      onProgress?.({ stage: "endcard", message: "Rendering end card..." });
+      const endOpts = overlays!.endCard!;
+      const endCardDuration = 4;
+      const fps = 30;
+      let frame = 0;
+      const totalFrames = endCardDuration * fps;
+      const fadeInFrames = Math.round(0.5 * fps);
+
+      // Stop voice immediately, fade music over 2s during end card
+      if (voiceElement) voiceElement.pause();
+      if (musicGainNode && audioCtx) {
+        const now = audioCtx.currentTime;
+        musicGainNode.gain.setValueAtTime(musicGainNode.gain.value, now);
+        musicGainNode.gain.linearRampToValueAtTime(0, now + 2);
+      }
+
+      const drawEndFrame = () => {
+        if (frame >= totalFrames) {
+          if (musicElement) musicElement.pause();
+          setTimeout(() => { if (recorder.state === "recording") recorder.stop(); }, 100);
+          return;
+        }
+        if (frame < fadeInFrames) {
+          ctx.fillStyle = endOpts.bgColor || "#1e293b";
+          ctx.fillRect(0, 0, W, H);
+          ctx.globalAlpha = frame / fadeInFrames;
+        }
+        drawEndCard(ctx, W, H, endOpts, endCardLogoImg);
+        ctx.globalAlpha = 1.0;
+        frame++;
+        requestAnimationFrame(drawEndFrame);
+      };
+      drawEndFrame();
+    };
+
+    playNextClip();
+  });
+}

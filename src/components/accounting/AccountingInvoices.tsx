@@ -1,0 +1,500 @@
+import { useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { ConfirmActionDialog } from "./ConfirmActionDialog";
+import { InvoiceEditor } from "./InvoiceEditor";
+import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
+import { FileText, Send, Ban, Search, Eye, ArrowUpDown, Download, Plus, Link2, Package, Trash2 } from "lucide-react";
+import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
+import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
+import type { useQuickBooksData, QBInvoice } from "@/hooks/useQuickBooksData";
+import { isPast, format } from "date-fns";
+
+type SortField = "DocNumber" | "Customer" | "TxnDate" | "DueDate" | "TotalAmt" | "Balance" | "Status";
+type SortDir = "asc" | "desc";
+
+function getStatusRank(inv: { Balance: number; DueDate: string }) {
+  if (inv.Balance === 0) return 0; // Paid
+  if (new Date(inv.DueDate) < new Date()) return 2; // Overdue
+  return 1; // Open
+}
+
+function SortableHead({ label, field, current, dir, onSort, className }: {
+  label: string; field: SortField; current: SortField; dir: SortDir;
+  onSort: (f: SortField) => void; className?: string;
+}) {
+  return (
+    <TableHead className={className}>
+      <button className="flex items-center gap-1 hover:text-foreground transition-colors" onClick={() => onSort(field)}>
+        {label}
+        <ArrowUpDown className={`w-3 h-3 ${current === field ? "text-foreground" : "text-muted-foreground/50"}`} />
+      </button>
+    </TableHead>
+  );
+}
+
+interface Props {
+  data: ReturnType<typeof useQuickBooksData>;
+  initialSearch?: string;
+}
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+
+type StatusFilter = "all" | "open" | "overdue" | "paid";
+
+export function AccountingInvoices({ data, initialSearch }: Props) {
+  const { invoices, sendInvoice, voidInvoice, updateInvoice, customers, items, payments, qbAction, loadAll } = data;
+  const { companyId } = useCompanyId();
+  const { invoices: localInvoices, isLoading: localLoading, generateNumber, remove } = useSalesInvoices();
+  const [search, setSearch] = useState(initialSearch || "");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sendTarget, setSendTarget] = useState<{ id: string; name: string; doc: string } | null>(null);
+  const [voidTarget, setVoidTarget] = useState<{ id: string; doc: string; syncToken: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<SalesInvoice | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [previewInvoice, setPreviewInvoice] = useState<QBInvoice | null>(null);
+  const [sortField, setSortField] = useState<SortField>("DocNumber");
+  const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [editorInvoiceId, setEditorInvoiceId] = useState<string | null>(null);
+  const [packingSlipInvoice, setPackingSlipInvoice] = useState<QBInvoice | null>(null);
+  const [erpPackingSlip, setErpPackingSlip] = useState<SalesInvoice | null>(null);
+
+  const getPackingSlipData = (inv: QBInvoice) => ({
+    invoiceNumber: inv.DocNumber,
+    invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
+    customerName: inv.CustomerRef?.name || "Unknown",
+    deliveryNumber: "",
+    deliveryDate: "",
+    scope: "",
+    items: [{
+      quantity: inv.TotalAmt > 0 ? 1 : 0,
+      size: "—",
+      type: "Rebar Fabrication & Supply",
+    }],
+  });
+
+  const toggleSort = (field: SortField) => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir("asc"); }
+  };
+
+  const filtered = invoices.filter((inv) => {
+    const matchesSearch =
+      (inv.DocNumber || "").toLowerCase().includes(search.toLowerCase()) ||
+      (inv.CustomerRef?.name || "").toLowerCase().includes(search.toLowerCase());
+    if (!matchesSearch) return false;
+    if (statusFilter === "paid") return inv.Balance === 0;
+    if (statusFilter === "overdue") return inv.Balance > 0 && new Date(inv.DueDate) < new Date();
+    if (statusFilter === "open") return inv.Balance > 0 && new Date(inv.DueDate) >= new Date();
+    return true;
+  }).sort((a, b) => {
+    const m = sortDir === "asc" ? 1 : -1;
+    switch (sortField) {
+      case "DocNumber": return (a.DocNumber || "").localeCompare(b.DocNumber || "", undefined, { numeric: true }) * m;
+      case "Customer": return (a.CustomerRef?.name || "").localeCompare(b.CustomerRef?.name || "") * m;
+      case "TxnDate": return (new Date(a.TxnDate || 0).getTime() - new Date(b.TxnDate || 0).getTime()) * m;
+      case "DueDate": return (new Date(a.DueDate || 0).getTime() - new Date(b.DueDate || 0).getTime()) * m;
+      case "TotalAmt": return (a.TotalAmt - b.TotalAmt) * m;
+      case "Balance": return (a.Balance - b.Balance) * m;
+      case "Status": return (getStatusRank(a) - getStatusRank(b)) * m;
+      default: return 0;
+    }
+  });
+
+  const handleSend = async () => {
+    if (!sendTarget) return;
+    setActionLoading(true);
+    try {
+      await sendInvoice(sendTarget.id);
+    } finally {
+      setActionLoading(false);
+      setSendTarget(null);
+    }
+  };
+
+  const handleVoid = async () => {
+    if (!voidTarget) return;
+    setActionLoading(true);
+    try {
+      await voidInvoice(voidTarget.id, voidTarget.syncToken);
+    } catch (err: any) {
+      toast({ title: "Void failed", description: err?.message || "An unexpected error occurred", variant: "destructive" });
+    } finally {
+      setActionLoading(false);
+      setVoidTarget(null);
+    }
+  };
+
+  const getStatus = (inv: { Balance: number; DueDate: string }) => {
+    if (inv.Balance === 0) return { label: "Paid", color: "bg-success/10 text-success" };
+    if (new Date(inv.DueDate) < new Date()) return { label: "Overdue", color: "bg-destructive/10 text-destructive" };
+    return { label: "Open", color: "bg-primary/10 text-primary" };
+  };
+
+  const exportCsv = () => {
+    import("@e965/xlsx").then(({ utils, writeFile }) => {
+      const rows = filtered.map(inv => ({
+        "Invoice #": inv.DocNumber || "",
+        Customer: inv.CustomerRef?.name || "",
+        Date: inv.TxnDate || "",
+        "Due Date": inv.DueDate || "",
+        Total: inv.TotalAmt,
+        Balance: inv.Balance,
+        Status: inv.Balance === 0 ? "Paid" : new Date(inv.DueDate) < new Date() ? "Overdue" : "Open",
+      }));
+      const ws = utils.json_to_sheet(rows);
+      const wb = utils.book_new();
+      utils.book_append_sheet(wb, ws, "Invoices");
+      writeFile(wb, `invoices_${new Date().toISOString().slice(0, 10)}.csv`, { bookType: "csv" });
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 min-w-[200px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Input
+            placeholder="Search invoices by number or customer..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 h-12 text-base"
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          {(["all", "open", "overdue", "paid"] as StatusFilter[]).map(f => (
+            <Button
+              key={f}
+              variant={statusFilter === f ? "default" : "outline"}
+              size="sm"
+              className="h-9 text-xs capitalize"
+              onClick={() => setStatusFilter(f)}
+            >
+              {f}
+            </Button>
+          ))}
+        </div>
+        <Button variant="outline" size="sm" className="h-12 gap-2" onClick={exportCsv}>
+          <Download className="w-4 h-4" /> Export CSV
+        </Button>
+        <Button size="sm" className="h-12 gap-2" onClick={async () => {
+          if (!companyId) return;
+          const num = await generateNumber();
+          const { data: newInv, error } = await supabase
+            .from("sales_invoices")
+            .insert({ invoice_number: num, company_id: companyId, status: "draft", issued_date: new Date().toISOString().slice(0, 10) })
+            .select("id").single();
+          if (error) { toast({ title: error.message, variant: "destructive" }); return; }
+          setEditorInvoiceId(newInv.id);
+        }}>
+          <Plus className="w-4 h-4" /> Create Invoice
+        </Button>
+      </div>
+
+      <DocumentUploadZone
+        targetType="invoice"
+        onImport={(result) => {
+          toast({ title: "Invoice imported", description: `${result.documentType} with ${result.fields.length} fields extracted.` });
+        }}
+      />
+
+      <div className="grid grid-cols-3 gap-3">
+        <Card className="bg-success/5">
+          <CardContent className="p-4 text-center">
+            <p className="text-sm text-muted-foreground">Paid</p>
+            <p className="text-2xl font-bold text-success">{invoices.filter(i => i.Balance === 0).length}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-primary/5">
+          <CardContent className="p-4 text-center">
+            <p className="text-sm text-muted-foreground">Open</p>
+            <p className="text-2xl font-bold text-primary">{invoices.filter(i => i.Balance > 0 && new Date(i.DueDate) >= new Date()).length}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-destructive/5">
+          <CardContent className="p-4 text-center">
+            <p className="text-sm text-muted-foreground">Overdue</p>
+            <p className="text-2xl font-bold text-destructive">{invoices.filter(i => i.Balance > 0 && new Date(i.DueDate) < new Date()).length}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            Invoices ({filtered.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {filtered.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground text-lg">
+              {search ? "No invoices match your search" : "No invoices found — sync from QuickBooks first"}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableHead label="Invoice #" field="DocNumber" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Customer" field="Customer" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Date" field="TxnDate" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Due" field="DueDate" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <SortableHead label="Total" field="TotalAmt" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base text-right" />
+                  <SortableHead label="Balance" field="Balance" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base text-right" />
+                  <SortableHead label="Status" field="Status" current={sortField} dir={sortDir} onSort={toggleSort} className="text-base" />
+                  <TableHead className="text-base text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filtered.map((inv) => {
+                  const status = getStatus(inv);
+                  return (
+                    <TableRow key={inv.Id} className="text-base cursor-pointer" onClick={() => setPreviewInvoice(inv)}>
+                      <TableCell className="font-mono font-semibold">#{inv.DocNumber}</TableCell>
+                      <TableCell className="font-medium">{inv.CustomerRef?.name || "—"}</TableCell>
+                      <TableCell>{inv.TxnDate ? new Date(inv.TxnDate).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell>{inv.DueDate ? new Date(inv.DueDate).toLocaleDateString() : "—"}</TableCell>
+                      <TableCell className="text-right font-semibold">{fmt(inv.TotalAmt)}</TableCell>
+                      <TableCell className="text-right font-semibold">{fmt(inv.Balance)}</TableCell>
+                      <TableCell>
+                        <Badge className={`${status.color} border-0 text-sm`}>{status.label}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button size="sm" variant="ghost" className="h-9 gap-1" onClick={() => setPreviewInvoice(inv)}>
+                            <Eye className="w-4 h-4" /> View
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0"
+                            title="Print Packing Slip"
+                            onClick={() => setPackingSlipInvoice(inv)}
+                          >
+                            <Package className="w-4 h-4" />
+                          </Button>
+                          {inv.Balance > 0 && (
+                            <>
+                              <Button
+                                size="sm" variant="ghost" className="h-9 w-9 p-0"
+                                title="Copy payment link"
+                                onClick={async () => {
+                                  try {
+                                    const { data } = await supabase.functions.invoke("stripe-payment", {
+                                      body: { action: "create-payment-link", amount: inv.Balance, currency: "cad", invoiceNumber: inv.DocNumber, customerName: inv.CustomerRef?.name, qbInvoiceId: inv.Id },
+                                    });
+                                    if (data?.paymentLink?.stripe_url) {
+                                      await navigator.clipboard.writeText(data.paymentLink.stripe_url);
+                                      toast({ title: "Copied!", description: "Stripe payment link copied" });
+                                    }
+                                  } catch { toast({ title: "Error generating link", variant: "destructive" }); }
+                                }}
+                              >
+                                <Link2 className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                size="sm" variant="ghost" className="h-9 gap-1"
+                                onClick={() => setSendTarget({ id: inv.Id, name: inv.CustomerRef?.name, doc: inv.DocNumber })}
+                              >
+                                <Send className="w-4 h-4" /> Email
+                              </Button>
+                              <Button
+                                size="sm" variant="ghost" className="h-9 gap-1 text-destructive hover:text-destructive"
+                                onClick={() => setVoidTarget({ id: inv.Id, doc: inv.DocNumber, syncToken: inv.SyncToken || "0" })}
+                              >
+                                <Ban className="w-4 h-4" /> Void
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Local / ERP Invoices */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="w-5 h-5" />
+            ERP Invoices ({localInvoices.length})
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          {localLoading ? (
+            <div className="p-8 text-center text-muted-foreground">Loading...</div>
+          ) : localInvoices.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">No ERP invoices yet</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="text-base">Invoice #</TableHead>
+                  <TableHead className="text-base">Customer</TableHead>
+                  <TableHead className="text-base">Issued</TableHead>
+                  <TableHead className="text-base">Due</TableHead>
+                   <TableHead className="text-base text-right">Amount</TableHead>
+                  <TableHead className="text-base">Status</TableHead>
+                  <TableHead className="text-base text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {localInvoices.map((inv) => {
+                  const ds = inv.status === "sent" && inv.due_date && isPast(new Date(inv.due_date)) ? "overdue" : inv.status;
+                  const statusStyles: Record<string, string> = {
+                    draft: "bg-muted text-muted-foreground",
+                    sent: "bg-primary/10 text-primary",
+                    paid: "bg-success/10 text-success",
+                    overdue: "bg-destructive/10 text-destructive",
+                    cancelled: "bg-muted text-muted-foreground line-through",
+                  };
+                  return (
+                    <TableRow key={inv.id} className="text-base cursor-pointer" onClick={() => setEditorInvoiceId(inv.id)}>
+                      <TableCell className="font-mono font-semibold">{inv.invoice_number}</TableCell>
+                      <TableCell className="font-medium">
+                        {inv.customer_name || inv.customer_company || "—"}
+                        {inv.quotation_id && (
+                          <Badge variant="outline" className="ml-2 text-[10px] bg-primary/5 text-primary border-primary/20">
+                            Linked Quote
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell>{inv.issued_date ? format(new Date(inv.issued_date), "MMM d, yyyy") : "—"}</TableCell>
+                      <TableCell>{inv.due_date ? format(new Date(inv.due_date), "MMM d, yyyy") : "—"}</TableCell>
+                      <TableCell className="text-right font-semibold">{inv.amount ? fmt(inv.amount) : "—"}</TableCell>
+                      <TableCell>
+                        <Badge className={`${statusStyles[ds] || ""} border-0 text-sm`}>{ds}</Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0"
+                            title="Print Packing Slip"
+                            onClick={() => setErpPackingSlip(inv)}
+                          >
+                            <Package className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost" className="h-9 w-9 p-0 text-destructive hover:text-destructive"
+                            title="Delete Invoice"
+                            onClick={() => setDeleteTarget(inv)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
+      <ConfirmActionDialog
+        open={!!sendTarget}
+        onOpenChange={() => setSendTarget(null)}
+        title="Send Invoice by Email?"
+        description={`This will email Invoice #${sendTarget?.doc} to ${sendTarget?.name}.`}
+        details={[`Invoice: #${sendTarget?.doc}`, `Customer: ${sendTarget?.name}`]}
+        confirmLabel="Yes, Send Email"
+        onConfirm={handleSend}
+        loading={actionLoading}
+      />
+
+      <ConfirmActionDialog
+        open={!!voidTarget}
+        onOpenChange={() => setVoidTarget(null)}
+        title="Void This Invoice?"
+        description={`This will VOID Invoice #${voidTarget?.doc}. This cannot be undone!`}
+        variant="destructive"
+        confirmLabel="Yes, Void Invoice"
+        onConfirm={handleVoid}
+        loading={actionLoading}
+      />
+
+      <ConfirmActionDialog
+        open={!!deleteTarget}
+        onOpenChange={() => setDeleteTarget(null)}
+        title="Delete This Invoice?"
+        description={`This will permanently delete Invoice ${deleteTarget?.invoice_number}.`}
+        variant="destructive"
+        confirmLabel="Yes, Delete"
+        onConfirm={async () => {
+          if (!deleteTarget) return;
+          setActionLoading(true);
+          try { await remove.mutateAsync(deleteTarget.id); } finally {
+            setActionLoading(false);
+            setDeleteTarget(null);
+          }
+        }}
+        loading={actionLoading}
+      />
+
+      {previewInvoice && (
+        <InvoiceEditor
+          invoice={previewInvoice}
+          customers={customers}
+          items={items}
+          payments={payments}
+          onUpdate={updateInvoice}
+          onClose={() => setPreviewInvoice(null)}
+          onSyncPayments={async () => {
+            // supabase already statically imported at top of file
+            await supabase.functions.invoke("qb-sync-engine", {
+              body: { action: "sync-entity", entity_type: "Payment" },
+            });
+            await loadAll();
+          }}
+        />
+      )}
+
+      {editorInvoiceId && (
+        <DraftInvoiceEditor
+          invoiceId={editorInvoiceId}
+          onClose={() => setEditorInvoiceId(null)}
+        />
+      )}
+
+      {packingSlipInvoice && (
+        <PackingSlipTemplate
+          data={getPackingSlipData(packingSlipInvoice)}
+          onClose={() => setPackingSlipInvoice(null)}
+        />
+      )}
+
+      {erpPackingSlip && (
+        <PackingSlipTemplate
+          data={{
+            invoiceNumber: erpPackingSlip.invoice_number,
+            invoiceDate: erpPackingSlip.issued_date ? format(new Date(erpPackingSlip.issued_date), "MMM d, yyyy") : new Date().toLocaleDateString(),
+            customerName: erpPackingSlip.customer_name || erpPackingSlip.customer_company || "—",
+            deliveryNumber: "",
+            deliveryDate: "",
+            scope: erpPackingSlip.notes || "",
+            items: [{
+              quantity: 1,
+              size: "—",
+              type: "As per invoice",
+            }],
+          }}
+          onClose={() => setErpPackingSlip(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+AccountingInvoices.displayName = "AccountingInvoices";

@@ -1,0 +1,1 @@
+ALTER TABLE public.seo_tasks ADD COLUMN IF NOT EXISTS can_autofix boolean DEFAULT false;

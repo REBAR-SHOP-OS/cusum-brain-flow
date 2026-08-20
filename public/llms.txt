@@ -1,0 +1,21 @@
+# REBAR SHOP OS
+
+> AI-powered rebar fabrication and shop-management platform for reinforcing-steel contractors in Ontario, Canada. Covers estimating, shop-floor tracking, deliveries, CRM, and accounting.
+
+REBAR SHOP OS is the operating system used by Rebar.shop to run rebar fabrication: AI estimating against CSA G30.18 / RSIC, live shop-floor production, delivery routing, sales pipeline, and QuickBooks-integrated accounting.
+
+## Pages
+
+- [Home](/): Product overview of REBAR SHOP OS.
+- [Knowledge Base](/knowledge-base): Public help articles and FAQs about rebar fabrication and the platform.
+- [Customer Portal](/portal): Customer self-serve portal entry point.
+- [Vendor Portal](/vendor-portal): Vendor self-serve portal entry point.
+- [Install](/install): Install REBAR SHOP OS as a PWA on your device.
+- [Sign in](/login): Sign in for existing users.
+- [Sign up](/signup): Request access.
+
+## Optional
+
+- [Privacy Policy](/privacy): How we handle data.
+- [Terms of Service](/terms): Terms of use.
+- [Data Deletion](/data-deletion): How to request data deletion.

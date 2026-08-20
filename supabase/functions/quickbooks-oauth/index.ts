@@ -1,0 +1,3055 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchWithTimeout, isTransientError, backoffWithJitter, logQBCall } from "../_shared/qbHttp.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+
+const QUICKBOOKS_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
+const QUICKBOOKS_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
+// Use sandbox until QB app is approved for production
+const QUICKBOOKS_API_BASE = Deno.env.get("QUICKBOOKS_ENVIRONMENT") === "production"
+  ? "https://quickbooks.api.intuit.com"
+  : "https://sandbox-quickbooks.api.intuit.com";
+
+// ─── Audit Trail Helper ───────────────────────────────────────────
+
+async function logAuditEvent(
+  supabase: ReturnType<typeof createClient>,
+  companyId: string,
+  userId: string,
+  eventType: string,
+  entityType: string,
+  entityId: string,
+  metadata: Record<string, unknown> = {},
+) {
+  try {
+    await supabase.from("activity_events").insert({
+      company_id: companyId,
+      actor_id: userId,
+      actor_type: "user",
+      event_type: eventType,
+      entity_type: entityType,
+      entity_id: entityId,
+      source: "quickbooks",
+      description: `${eventType}: ${entityType} ${entityId}`,
+      metadata,
+      dedupe_key: `qb:${eventType}:${entityId}:${Date.now()}`,
+    });
+  } catch (e) {
+    console.warn(`[QB-AUDIT] Failed to log ${eventType}:`, e);
+  }
+}
+
+// ─── Per-Company QB Config Helper ─────────────────────────────────
+
+async function getCompanyQBConfig(supabase: ReturnType<typeof createClient>, companyId: string) {
+  try {
+    const { data } = await supabase
+      .from("qb_company_config")
+      .select("*")
+      .eq("company_id", companyId)
+      .maybeSingle();
+    return data || { default_tax_code: null, default_sales_term: "Net 30" };
+  } catch {
+    return { default_tax_code: null, default_sales_term: "Net 30" };
+  }
+}
+
+function isUsableSalesTaxCodeName(name?: string): boolean {
+  const normalized = (name || "").trim().toLowerCase();
+  if (!normalized) return true;
+  return ![
+    "adjustment",
+    "exempt",
+    "non",
+    "zero",
+    "free",
+    "out of scope",
+  ].some((token) => normalized.includes(token));
+}
+
+function extractSalesTaxCodeRef(entity: Record<string, unknown> | null | undefined): string | null {
+  const salesTaxCodeRef = entity?.SalesTaxCodeRef as Record<string, unknown> | undefined;
+  const value = salesTaxCodeRef?.value;
+  const name = typeof salesTaxCodeRef?.name === "string" ? salesTaxCodeRef.name : undefined;
+  if (!value || !isUsableSalesTaxCodeName(name)) return null;
+  return String(value);
+}
+
+async function resolveTaxCodeFromItems(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+): Promise<string | null> {
+  try {
+    const result = await qbQuery(config as QBConfigWithContext, "Item", 250) as { QueryResponse?: Record<string, unknown> };
+    const items = result.QueryResponse?.Item as Record<string, unknown>[] | undefined;
+    if (!items?.length) return null;
+
+    for (const item of items) {
+      const salesTaxCode = extractSalesTaxCodeRef(item);
+      if (salesTaxCode) {
+        console.log(`[QB-Tax] Resolved tax code from item ${String(item.Name || item.FullyQualifiedName || item.Id || "unknown")}: ${salesTaxCode}`);
+        return salesTaxCode;
+      }
+    }
+  } catch (err) {
+    console.warn("[QB-Tax] Failed to resolve tax code from items:", err);
+  }
+
+  return null;
+}
+
+async function fetchQBItem(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  itemId: string,
+): Promise<Record<string, unknown> | null> {
+  try {
+    const result = await qbFetch(config, `item/${itemId}`) as Record<string, unknown>;
+    return (result.Item as Record<string, unknown> | undefined) || result;
+  } catch {
+    return null;
+  }
+}
+
+async function findQBItemByText(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  text?: string,
+): Promise<Record<string, unknown> | null> {
+  const normalizedText = text?.trim();
+  if (!normalizedText) return null;
+
+  const escaped = normalizedText.replace(/'/g, "''");
+  const queries = [
+    `select * from Item where Name = '${escaped}' MAXRESULTS 1`,
+    `select * from Item where Description = '${escaped}' MAXRESULTS 1`,
+  ];
+
+  for (const query of queries) {
+    try {
+      const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
+      const items = (result.QueryResponse as Record<string, unknown> | undefined)?.Item as Record<string, unknown>[] | undefined;
+      if (items?.length) return items[0];
+    } catch {
+      // Continue to the next lookup path.
+    }
+  }
+
+  return null;
+}
+
+async function resolveInvoiceLineContext(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  item: { description?: string; serviceId?: string },
+): Promise<{ itemRef: { value: string; name?: string }; taxCodeRef: string | null }> {
+  let qbItem = item.serviceId ? await fetchQBItem(config, item.serviceId) : null;
+
+  if (!qbItem && item.description) {
+    qbItem = await findQBItemByText(config, item.description);
+  }
+
+  if (!qbItem) {
+    qbItem = await fetchQBItem(config, item.serviceId || "1");
+  }
+
+  const itemId = String((qbItem?.Id as string | number | undefined) || item.serviceId || "1");
+  const itemName = typeof qbItem?.Name === "string"
+    ? qbItem.Name
+    : (!item.serviceId && itemId === "1" ? "Services" : undefined);
+
+  return {
+    itemRef: itemName ? { value: itemId, name: itemName } : { value: itemId },
+    taxCodeRef: extractSalesTaxCodeRef(qbItem),
+  };
+}
+
+// ─── Term Resolution Helper ───────────────────────────────────────
+
+async function resolveTermId(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  termName: string,
+): Promise<string | null> {
+  try {
+    const query = `select Id, Name from Term where Name = '${termName.replace(/'/g, "''")}'`;
+    const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
+    const terms = (result?.QueryResponse as Record<string, unknown>)?.Term as Record<string, unknown>[] | undefined;
+    if (terms && terms.length > 0) return String(terms[0].Id);
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── Tax Code Resolution Helper ──────────────────────────────────
+
+async function resolveTaxCodeId(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  taxCodeName: string,
+): Promise<string | null> {
+  try {
+    // Try exact name match first
+    const query = `select Id, Name from TaxCode where Name = '${taxCodeName.replace(/'/g, "''")}'`;
+    const result = await qbFetch(config, `query?query=${encodeURIComponent(query)}`) as Record<string, unknown>;
+    const codes = (result?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
+    if (codes && codes.length > 0) return String(codes[0].Id);
+
+    const itemTaxCode = await resolveTaxCodeFromItems(config);
+    if (itemTaxCode) return itemTaxCode;
+
+    // Fallback: find any active usable tax code (handles Canadian QBO where "TAX" doesn't exist)
+    console.log(`[QB-Tax] Exact match for "${taxCodeName}" not found, querying all active tax codes`);
+    const fallbackQuery = `select Id, Name from TaxCode where Active = true MAXRESULTS 20`;
+    const fallbackResult = await qbFetch(config, `query?query=${encodeURIComponent(fallbackQuery)}`) as Record<string, unknown>;
+    const allCodes = (fallbackResult?.QueryResponse as Record<string, unknown>)?.TaxCode as Record<string, unknown>[] | undefined;
+    if (allCodes && allCodes.length > 0) {
+      const taxable = allCodes.find(c => {
+        const name = String(c.Name || "").toLowerCase();
+        return isUsableSalesTaxCodeName(name);
+      });
+      if (taxable) {
+        console.log(`[QB-Tax] Resolved fallback tax code: ${taxable.Name} (ID: ${taxable.Id})`);
+        return String(taxable.Id);
+      }
+      // If all seem exempt, just return the first one
+      console.log(`[QB-Tax] Using first available tax code: ${allCodes[0].Name} (ID: ${allCodes[0].Id})`);
+      return String(allCodes[0].Id);
+    }
+    return null;
+  } catch (err) {
+    console.error(`[QB-Tax] Error resolving tax code:`, err);
+    return null;
+  }
+}
+
+// ─── Helpers ───────────────────────────────────────────────────────
+
+// verifyAuth removed — handled by handleRequest
+
+async function getUserCompanyId(supabase: ReturnType<typeof createClient>, userId: string): Promise<string> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!profile?.company_id) throw new Error("User has no company assigned");
+  return profile.company_id;
+}
+
+// Company-wide QB connection: find ANY connected QB row for the user's company
+async function getUserQBConnection(supabase: ReturnType<typeof createClient>, userId: string) {
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  // First try to find a connection that has company_id in its config
+  const { data: connections } = await supabase
+    .from("integration_connections")
+    .select("*")
+    .eq("integration_id", "quickbooks")
+    .eq("status", "connected");
+
+  if (!connections || connections.length === 0) return null;
+
+  // Find connection belonging to any user in the same company
+  for (const conn of connections) {
+    const config = conn.config as Record<string, unknown> | null;
+    // Check if connection has company_id stored in config
+    if (config?.company_id === companyId) return conn;
+  }
+
+  // Fallback: check if the connection owner belongs to the same company
+  for (const conn of connections) {
+    const { data: ownerProfile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", conn.user_id)
+      .maybeSingle();
+    if (ownerProfile?.company_id === companyId) return conn;
+  }
+
+  return null;
+}
+
+type QBConfig = { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string };
+type QBConfigWithContext = QBConfig & { _refreshContext: { supabase: ReturnType<typeof createClient>; connectionId: string } };
+
+async function getQBConfig(supabase: ReturnType<typeof createClient>, userId: string): Promise<QBConfigWithContext> {
+  const connection = await getUserQBConnection(supabase, userId);
+  if (!connection) throw new Error("QuickBooks not connected");
+  const config = connection.config as QBConfig;
+  return { ...config, _refreshContext: { supabase, connectionId: connection.id } };
+}
+
+// Shared token refresh to avoid concurrent refreshes
+let _refreshPromise: Promise<string> | null = null;
+
+async function refreshQBToken(
+  supabase: ReturnType<typeof createClient>,
+  connectionId: string,
+  config: { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string },
+): Promise<string> {
+  const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID")!;
+  const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET")!;
+
+  const refreshResponse = await fetch(QUICKBOOKS_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      "Accept": "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: config.refresh_token,
+    }),
+  });
+
+  const newTokens = await refreshResponse.json();
+  if (!refreshResponse.ok) {
+    console.error("QB token refresh failed:", JSON.stringify(newTokens));
+    throw new Error("QuickBooks token refresh failed — please reconnect");
+  }
+
+  const newAccessToken = newTokens.access_token;
+  // Persist refreshed tokens
+  await supabase
+    .from("integration_connections")
+    .update({
+      config: {
+        ...config,
+        access_token: newAccessToken,
+        refresh_token: newTokens.refresh_token,
+        expires_at: Date.now() + (newTokens.expires_in * 1000),
+      },
+      last_sync_at: new Date().toISOString(),
+    })
+    .eq("id", connectionId);
+
+  // Update in-memory config so subsequent calls in the same request use the new token
+  config.access_token = newAccessToken;
+  if (newTokens.refresh_token) config.refresh_token = newTokens.refresh_token;
+  config.expires_at = Date.now() + (newTokens.expires_in * 1000);
+
+  return newAccessToken;
+}
+
+async function qbFetch(
+  config: { realm_id: string; access_token: string; refresh_token?: string; expires_at?: number; company_id?: string; _refreshContext?: { supabase: ReturnType<typeof createClient>; connectionId: string } },
+  path: string,
+  options?: RequestInit,
+  _retries = 0,
+  _refreshContextOverride?: { supabase: ReturnType<typeof createClient>; connectionId: string },
+): Promise<unknown> {
+  const _refreshContext = _refreshContextOverride || (config as QBConfigWithContext)._refreshContext;
+  const MAX_RETRIES = 4;
+
+  // Proactive token refresh: if token expires within 5 minutes, refresh before making the call
+  if (config.expires_at && config.refresh_token && _refreshContext && config.expires_at < Date.now() + 300_000) {
+    console.log(`[QB] Proactive token refresh — expires in ${Math.round((config.expires_at - Date.now()) / 1000)}s`);
+    try {
+      if (!_refreshPromise) {
+        _refreshPromise = refreshQBToken(
+          _refreshContext.supabase,
+          _refreshContext.connectionId,
+          config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string },
+        );
+      }
+      await _refreshPromise;
+      _refreshPromise = null;
+    } catch (err) {
+      _refreshPromise = null;
+      console.warn("[QB] Proactive refresh failed, proceeding with current token:", err);
+    }
+  }
+
+  // Auto-append minorversion=69 for full InvoiceLink + ProjectRef support
+  const separator = path.includes("?") ? "&" : "?";
+  const versionedPath = path.includes("minorversion") ? path : `${path}${separator}minorversion=69`;
+  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${versionedPath}`;
+  const t0 = Date.now();
+  let res: Response;
+  try {
+    res = await fetchWithTimeout(url, {
+      ...options,
+      headers: {
+        "Authorization": `Bearer ${config.access_token}`,
+        "Accept": "application/json",
+        ...(options?.body ? { "Content-Type": "application/json" } : {}),
+        ...options?.headers,
+      },
+    }, 15_000);
+  } catch (err) {
+    const duration = Date.now() - t0;
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: 0, retry_count: _retries, error_message: String(err) });
+    // Retry on timeout
+    if (_retries < MAX_RETRIES && String(err).includes("timed out")) {
+      const delay = backoffWithJitter(_retries);
+      console.warn(`[QB] Timeout on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+      return qbFetch(config, path, options, _retries + 1, _refreshContext);
+    }
+    throw err;
+  }
+
+  const duration = Date.now() - t0;
+
+  // Retry on transient errors (429, 502, 503, 504) with jitter
+  if (isTransientError(res.status) && _retries < MAX_RETRIES) {
+    const delay = backoffWithJitter(_retries);
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries });
+    console.warn(`[QB] ${res.status} on [${path}], retry ${_retries + 1}/${MAX_RETRIES} in ${delay}ms`);
+    await res.text(); // consume body
+    await new Promise((r) => setTimeout(r, delay));
+    return qbFetch(config, path, options, _retries + 1, _refreshContext);
+  }
+
+  // Auto-refresh on 401 (expired token) — only retry once
+  if (res.status === 401 && _retries === 0 && _refreshContext && config.refresh_token) {
+    console.warn(`QB 401 on [${path}], refreshing token...`);
+    await res.text();
+    try {
+      if (!_refreshPromise) {
+        _refreshPromise = refreshQBToken(
+          _refreshContext.supabase,
+          _refreshContext.connectionId,
+          config as { realm_id: string; access_token: string; refresh_token: string; expires_at: number; company_id?: string },
+        );
+      }
+      await _refreshPromise;
+      _refreshPromise = null;
+      return qbFetch(config, path, options, 1, _refreshContext);
+    } catch (refreshErr) {
+      _refreshPromise = null;
+      console.error("QB token refresh failed during fetch:", refreshErr);
+      throw refreshErr;
+    }
+  }
+
+  // Never retry non-429 4xx errors
+  if (!res.ok) {
+    const errorText = await res.text();
+    logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries, error_message: errorText.slice(0, 500) });
+    throw new Error(`QuickBooks API error (${res.status}): ${path} — ${errorText.slice(0, 500)}`);
+  }
+
+  logQBCall({ realm_id: config.realm_id, company_id: config.company_id, endpoint: path, duration_ms: duration, status_code: res.status, retry_count: _retries });
+  return res.json();
+}
+
+async function qbQuery(config: QBConfigWithContext | { realm_id: string; access_token: string }, entity: string, maxResults = 50000, whereClause?: string) {
+  const allResults: unknown[] = [];
+  let startPosition = 1;
+  const pageSize = Math.min(maxResults, 1000);
+  const where = whereClause ? ` WHERE ${whereClause}` : "";
+  const refreshCtx = (config as QBConfigWithContext)._refreshContext;
+
+  while (true) {
+    const data = await qbFetch(
+      config,
+      `query?query=SELECT * FROM ${entity}${where} STARTPOSITION ${startPosition} MAXRESULTS ${pageSize}`,
+      undefined,
+      0,
+      refreshCtx,
+    ) as Record<string, unknown>;
+    const response = data.QueryResponse as Record<string, unknown> | undefined;
+    const entities = (response?.[entity] as unknown[]) || [];
+    allResults.push(...entities);
+
+    if (entities.length < pageSize || allResults.length >= maxResults) break;
+    startPosition += pageSize;
+  }
+
+  return { QueryResponse: { [entity]: allResults } };
+}
+
+function jsonRes(data: unknown, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * Wraps a QB report handler with graceful degradation.
+ * On QB API errors (e.g. 5020 Permission Denied, 5xx), returns a 200 with
+ * fallback signal so the client/Vizzy can use snapshot data instead of crashing.
+ */
+async function withReportFallback(
+  reportName: string,
+  handler: () => Promise<Response>,
+): Promise<Response> {
+  try {
+    return await handler();
+  } catch (err) {
+    const msg = String(err);
+    const isPermission = msg.includes("5020") || msg.includes("Permission Denied");
+    const isTransient = msg.includes("timed out") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("429");
+    console.error(`[QB-Report-Fallback] ${reportName} failed: ${msg}`);
+    return jsonRes({
+      error: isPermission ? "PERMISSION_DENIED" : isTransient ? "SERVICE_UNAVAILABLE" : "QB_API_ERROR",
+      fallback: true,
+      report: reportName,
+      message: isPermission
+        ? "QuickBooks token lacks report permissions. Please reconnect QuickBooks with full accounting access."
+        : `QuickBooks report temporarily unavailable. Use snapshot data as fallback.`,
+      detail: msg.slice(0, 500),
+    }, 200);
+  }
+}
+
+async function updateLastSync(supabase: ReturnType<typeof createClient>, userId: string) {
+  // Update the company-wide connection's last_sync_at
+  const connection = await getUserQBConnection(supabase, userId);
+  if (connection) {
+    return supabase
+      .from("integration_connections")
+      .update({ last_sync_at: new Date().toISOString() })
+      .eq("id", connection.id);
+  }
+}
+
+// ─── Main Handler ──────────────────────────────────────────────────
+
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient: supabase, body, req: rawReq } = ctx;
+
+    // Support x-qb-user-id header for cross-function calls (e.g. admin-chat, vizzy)
+    const qbUserIdOverride = rawReq.headers.get("x-qb-user-id");
+    const effectiveUserId = qbUserIdOverride || userId;
+    if (qbUserIdOverride) {
+      body._qbUserId = qbUserIdOverride;
+    }
+
+    const clientId = Deno.env.get("QUICKBOOKS_CLIENT_ID");
+    const clientSecret = Deno.env.get("QUICKBOOKS_CLIENT_SECRET");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+
+    if (!clientId || !clientSecret) {
+      throw new Error("QuickBooks credentials not configured");
+    }
+
+    const url = new URL(rawReq.url);
+    const pathParts = url.pathname.split("/");
+    const pathAction = pathParts[pathParts.length - 1];
+
+    // ─── OAuth Callback (no auth header) ─────────────────────────
+    if (pathAction === "callback") {
+      return handleCallback(url, supabase, supabaseUrl, clientId, clientSecret);
+    }
+
+    // ─── All other actions require authentication ────────────────
+    // Allow service-role calls with x-qb-user-id to pass through
+    if (!userId && !qbUserIdOverride) {
+      return jsonRes({ error: "Unauthorized" }, 401);
+    }
+
+    const { action } = body;
+
+    // ─── Route to action handler ─────────────────────────────────
+    switch (action) {
+      case "get-auth-url":
+        return handleGetAuthUrl(supabaseUrl, clientId, userId, body);
+      case "check-status":
+        return handleCheckStatus(supabase, effectiveUserId, clientId, clientSecret);
+      case "disconnect":
+        return handleDisconnect(supabase, effectiveUserId);
+
+      // ── Read / Sync ────────────────────────────────────────────
+      case "sync-customers":
+        return handleSyncCustomers(supabase, effectiveUserId);
+      case "sync-invoices":
+        return handleSyncInvoices(supabase, effectiveUserId);
+      case "sync-vendors":
+        return handleSyncVendors(supabase, effectiveUserId);
+      case "get-company-info":
+        return handleGetCompanyInfo(supabase, effectiveUserId);
+      case "dashboard-summary":
+        return handleDashboardSummary(supabase, effectiveUserId);
+      case "list-accounts":
+        return handleListAccounts(supabase, effectiveUserId);
+      case "list-bank-accounts":
+        return handleListBankAccounts(supabase, effectiveUserId);
+      case "list-items":
+        return handleListItems(supabase, effectiveUserId);
+      case "list-invoices":
+        return handleListInvoices(supabase, effectiveUserId);
+      case "list-estimates":
+        return handleListEstimates(supabase, effectiveUserId);
+      case "list-bills":
+        return handleListBills(supabase, effectiveUserId);
+      case "list-payments":
+        return handleListPayments(supabase, effectiveUserId);
+      case "list-purchase-orders":
+        return handleListPurchaseOrders(supabase, effectiveUserId);
+      case "list-credit-memos":
+        return handleListCreditMemos(supabase, effectiveUserId);
+      case "list-vendors":
+        return handleListVendors(supabase, effectiveUserId);
+      case "get-profit-loss":
+        return handleGetProfitLoss(supabase, effectiveUserId, body);
+      case "get-balance-sheet":
+        return handleGetBalanceSheet(supabase, effectiveUserId, body);
+
+      // ── Write / Create ─────────────────────────────────────────
+      case "create-estimate":
+        return handleCreateEstimate(supabase, effectiveUserId, body);
+      case "create-invoice":
+        return handleCreateInvoice(supabase, effectiveUserId, body);
+      case "get-invoice-link":
+        return handleGetInvoiceLink(supabase, effectiveUserId, body);
+      case "create-payment":
+        return handleCreatePayment(supabase, effectiveUserId, body);
+      case "receive-payment":
+        return handleReceivePayment(supabase, effectiveUserId, body);
+      case "create-bill":
+        return handleCreateBill(supabase, effectiveUserId, body);
+      case "create-credit-memo":
+        return handleCreateCreditMemo(supabase, effectiveUserId, body);
+      case "create-purchase-order":
+        return handleCreatePurchaseOrder(supabase, effectiveUserId, body);
+      case "create-vendor":
+        return handleCreateVendor(supabase, effectiveUserId, body);
+      case "create-account":
+        return handleCreateAccount(supabase, effectiveUserId, body);
+      case "delete-transaction":
+        return handleDeleteTransaction(supabase, effectiveUserId, body);
+      case "void-transaction":
+        return handleVoidTransaction(supabase, effectiveUserId, body);
+      case "create-item":
+        return handleCreateItem(supabase, effectiveUserId, body);
+      case "convert-estimate-to-invoice":
+        return handleConvertEstimateToInvoice(supabase, effectiveUserId, body);
+      case "send-invoice":
+        return handleSendInvoice(supabase, effectiveUserId, body);
+      case "void-invoice":
+        return handleVoidInvoice(supabase, effectiveUserId, body);
+      case "update-invoice":
+        return handleUpdateInvoice(supabase, effectiveUserId, body);
+      case "read-invoice":
+        return handleReadInvoice(supabase, effectiveUserId, body);
+      case "get-invoice-pdf":
+        return handleGetInvoicePdf(supabase, effectiveUserId, body);
+      case "update-estimate":
+        return handleUpdateEstimate(supabase, effectiveUserId, body);
+
+      // ── Payroll ────────────────────────────────────────────────
+      case "list-employees":
+        return handleListEmployees(supabase, effectiveUserId);
+      case "get-employee":
+        return handleGetEmployee(supabase, effectiveUserId, body);
+      case "update-employee":
+        return handleUpdateEmployee(supabase, effectiveUserId, body);
+      case "list-time-activities":
+        return handleListTimeActivities(supabase, effectiveUserId);
+      case "create-payroll-correction":
+        return handleCreatePayrollCorrection(supabase, effectiveUserId, body);
+
+      // ── Reports ────────────────────────────────────────────────
+      case "account-quick-report":
+        return handleAccountQuickReport(supabase, effectiveUserId, body);
+
+      // ── Phase 1: New Transaction Types ─────────────────────────
+      case "list-sales-receipts":
+        return handleListSalesReceipts(supabase, effectiveUserId);
+      case "create-sales-receipt":
+        return handleCreateSalesReceipt(supabase, effectiveUserId, body);
+      case "list-refund-receipts":
+        return handleListRefundReceipts(supabase, effectiveUserId);
+      case "create-refund-receipt":
+        return handleCreateRefundReceipt(supabase, effectiveUserId, body);
+      case "list-deposits":
+        return handleListDeposits(supabase, effectiveUserId);
+      case "create-deposit":
+        return handleCreateDeposit(supabase, effectiveUserId, body);
+      case "create-transfer":
+        return handleCreateTransfer(supabase, effectiveUserId, body);
+      case "list-journal-entries":
+        return handleListJournalEntries(supabase, effectiveUserId);
+      case "create-journal-entry":
+        return handleCreateJournalEntry(supabase, effectiveUserId, body);
+
+      // ── Phase 1: New Reports ───────────────────────────────────
+      case "get-aged-receivables":
+        return handleGetAgedReceivables(supabase, effectiveUserId, body);
+      case "get-aged-payables":
+        return handleGetAgedPayables(supabase, effectiveUserId, body);
+      case "get-general-ledger":
+        return handleGetGeneralLedger(supabase, effectiveUserId, body);
+      case "get-trial-balance":
+        return handleGetTrialBalance(supabase, effectiveUserId, body);
+      case "get-transaction-list":
+        return handleGetTransactionList(supabase, effectiveUserId, body);
+
+      // ── Phase 2: Extended Reports ──────────────────────────────
+      case "get-customer-balance":
+        return handleGetCustomerBalance(supabase, effectiveUserId, body);
+      case "get-customer-balance-detail":
+        return handleGetCustomerBalanceDetail(supabase, effectiveUserId, body);
+      case "get-vendor-balance":
+        return handleGetVendorBalance(supabase, effectiveUserId, body);
+      case "get-ar-aging-summary":
+        return handleGetARAgingSummary(supabase, effectiveUserId, body);
+      case "get-ap-aging-summary":
+        return handleGetAPAgingSummary(supabase, effectiveUserId, body);
+      case "get-customer-income":
+        return handleGetCustomerIncome(supabase, effectiveUserId, body);
+
+      // ── Phase 17: New Actions ─────────────────────────────────
+      case "get-cash-flow":
+        return handleGetCashFlow(supabase, effectiveUserId, body);
+      case "get-tax-summary":
+        return handleGetTaxSummary(supabase, effectiveUserId, body);
+      case "create-bill-payment":
+        return handleCreateBillPayment(supabase, effectiveUserId, body);
+      case "list-bill-payments":
+        return handleListBillPayments(supabase, effectiveUserId);
+      case "create-customer":
+        return handleCreateCustomer(supabase, effectiveUserId, body);
+      case "update-customer":
+        return handleUpdateCustomer(supabase, effectiveUserId, body);
+      case "update-vendor":
+        return handleUpdateVendor(supabase, effectiveUserId, body);
+      case "list-classes":
+        return handleListClasses(supabase, effectiveUserId);
+      case "list-departments":
+        return handleListDepartments(supabase, effectiveUserId);
+      case "create-class":
+        return handleCreateClass(supabase, effectiveUserId, body);
+      case "create-purchase":
+        return handleCreatePurchase(supabase, effectiveUserId, body);
+      case "upload-attachment":
+        return handleUploadAttachment(supabase, effectiveUserId, body);
+      case "list-attachments":
+        return handleListAttachments(supabase, effectiveUserId, body);
+
+      // ── Sync Engine Delegation ─────────────────────────────────
+      case "full-sync":
+      case "incremental-sync":
+      case "reconcile": {
+        const companyId = await getUserCompanyId(supabase, effectiveUserId);
+        const syncAction = action === "full-sync" ? "backfill" : action === "incremental-sync" ? "incremental" : "reconcile";
+        const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+        const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+        const syncRes = await fetch(`${supabaseUrl}/functions/v1/qb-sync-engine`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${svcKey}` },
+          body: JSON.stringify({ action: syncAction, company_id: companyId }),
+        });
+        const syncData = await syncRes.json();
+        return jsonRes(syncData, syncRes.status);
+      }
+
+      // ── Generic QB Query ───────────────────────────────────────
+      case "query": {
+        const queryStr = body.query as string;
+        if (!queryStr) return jsonRes({ error: "Missing 'query' parameter" }, 400);
+        const config = await getQBConfig(supabase, effectiveUserId);
+        const data = await qbFetch(config, `query?query=${encodeURIComponent(queryStr)}`, undefined, 0, config._refreshContext);
+        return jsonRes(data);
+      }
+
+      default:
+        return jsonRes({ error: `Unknown action: ${action}` }, 400);
+    }
+  }, { functionName: "quickbooks-oauth", authMode: "optional", requireCompany: false, wrapResult: false })
+);
+
+// ─── OAuth Callback ────────────────────────────────────────────────
+
+async function handleCallback(
+  url: URL,
+  supabase: ReturnType<typeof createClient>,
+  supabaseUrl: string,
+  clientId: string,
+  clientSecret: string
+) {
+  const code = url.searchParams.get("code");
+  const realmId = url.searchParams.get("realmId");
+  const state = url.searchParams.get("state");
+  const error = url.searchParams.get("error");
+
+  if (error) {
+    console.error("OAuth error:", error);
+    return new Response(
+      `<html><body><script>window.opener?.postMessage({type:'oauth-error',error:'${error}'},'*');window.close();</script></body></html>`,
+      { headers: { "Content-Type": "text/html" } }
+    );
+  }
+
+  if (!code || !realmId) throw new Error("Missing code or realmId in callback");
+
+  let userId = "";
+  let returnUrl = "";
+  if (state) {
+    const parts = state.split("|");
+    userId = parts[0] || "";
+    returnUrl = parts.slice(1).join("|") || "";
+  }
+
+  if (!userId) throw new Error("Missing user context in OAuth callback");
+
+  // Get user's company_id for company-wide storage
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  const tokenResponse = await fetch(QUICKBOOKS_TOKEN_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+      "Accept": "application/json",
+    },
+    body: new URLSearchParams({
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: `${supabaseUrl}/functions/v1/quickbooks-oauth/callback`,
+    }),
+  });
+
+  const tokens = await tokenResponse.json();
+  if (!tokenResponse.ok) {
+    console.error("Token exchange failed:", tokens);
+    throw new Error(tokens.error_description || "Token exchange failed");
+  }
+
+  // Delete any existing QB connections for users in the same company (cleanup duplicates)
+  const { data: allQBConnections } = await supabase
+    .from("integration_connections")
+    .select("id, user_id")
+    .eq("integration_id", "quickbooks");
+
+  if (allQBConnections) {
+    for (const conn of allQBConnections) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", conn.user_id)
+        .maybeSingle();
+      if (profile?.company_id === companyId) {
+        await supabase.from("integration_connections").delete().eq("id", conn.id);
+      }
+    }
+  }
+
+  // Store the new company-wide connection under the connecting user
+  const { error: dbError } = await supabase
+    .from("integration_connections")
+    .upsert({
+      user_id: userId,
+      integration_id: "quickbooks",
+      status: "connected",
+      config: {
+        realm_id: realmId,
+        access_token: tokens.access_token,
+        refresh_token: tokens.refresh_token,
+        expires_at: Date.now() + (tokens.expires_in * 1000),
+        refresh_token_expires_at: Date.now() + (tokens.x_refresh_token_expires_in * 1000),
+        company_id: companyId,
+      },
+      last_sync_at: new Date().toISOString(),
+      error_message: null,
+    }, { onConflict: "user_id,integration_id" });
+
+  if (dbError) {
+    console.error("Failed to store tokens:", dbError);
+    throw new Error("Failed to store tokens");
+  }
+
+  const redirectTarget = returnUrl || `${url.origin}/integrations`;
+  return new Response(null, {
+    status: 302,
+    headers: { Location: redirectTarget.replace("preview--", "") },
+  });
+}
+
+// ─── Auth URL ──────────────────────────────────────────────────────
+
+function handleGetAuthUrl(supabaseUrl: string, clientId: string, userId: string, body: Record<string, unknown>) {
+  const redirectUri = `${supabaseUrl}/functions/v1/quickbooks-oauth/callback`;
+  // Payroll scope requires separate Intuit approval for production apps;
+  // only include it when explicitly requested to avoid invalid_scope errors.
+  const includePayroll = body.includePayroll === true;
+  const scope = includePayroll
+    ? "com.intuit.quickbooks.accounting com.intuit.quickbooks.payroll"
+    : "com.intuit.quickbooks.accounting";
+  const state = `${userId}|${body.returnUrl || ""}`;
+
+  const authUrl = new URL(QUICKBOOKS_AUTH_URL);
+  authUrl.searchParams.set("client_id", clientId);
+  authUrl.searchParams.set("redirect_uri", redirectUri);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("scope", scope);
+  authUrl.searchParams.set("state", state);
+
+  return jsonRes({ authUrl: authUrl.toString() });
+}
+
+// ─── Check Status ──────────────────────────────────────────────────
+
+async function handleCheckStatus(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  clientId: string,
+  clientSecret: string
+) {
+  const connection = await getUserQBConnection(supabase, userId);
+
+  if (!connection) {
+    return jsonRes({ status: "available" });
+  }
+
+  const config = connection.config as {
+    realm_id: string; access_token: string;
+    refresh_token: string; expires_at: number;
+    company_id?: string;
+  };
+
+  if (config.expires_at < Date.now()) {
+    try {
+      const refreshResponse = await fetch(QUICKBOOKS_TOKEN_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Authorization": `Basic ${btoa(`${clientId}:${clientSecret}`)}`,
+          "Accept": "application/json",
+        },
+        body: new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: config.refresh_token,
+        }),
+      });
+
+      const newTokens = await refreshResponse.json();
+
+      if (refreshResponse.ok) {
+        await supabase
+          .from("integration_connections")
+          .update({
+            config: {
+              ...config,
+              access_token: newTokens.access_token,
+              refresh_token: newTokens.refresh_token,
+              expires_at: Date.now() + (newTokens.expires_in * 1000),
+            },
+            last_sync_at: new Date().toISOString(),
+          })
+          .eq("id", connection.id);
+      } else {
+        throw new Error("Token refresh failed");
+      }
+    } catch (err) {
+      console.error("Token refresh failed:", err);
+      // Check if this is a transient failure — don't immediately mark as error
+      // QB refresh tokens last 100 days; only mark error if truly unrecoverable
+      const config2 = connection.config as Record<string, unknown>;
+      const refreshTokenExpiresAt = config2.refresh_token_expires_at as number | undefined;
+      const isRefreshTokenExpired = refreshTokenExpiresAt && refreshTokenExpiresAt < Date.now();
+
+      if (isRefreshTokenExpired) {
+        await supabase
+          .from("integration_connections")
+          .update({ status: "error", error_message: "Refresh token expired, please reconnect" })
+          .eq("id", connection.id);
+        return jsonRes({ status: "error", error: "Token expired, please reconnect" });
+      }
+
+      // Transient failure — keep connected status, return retry hint
+      console.warn("[QB] Transient refresh failure, keeping connected status");
+      return jsonRes({ status: "connected", warning: "token_refresh_retry", realmId: config.realm_id });
+    }
+  }
+
+  // Quick report-access probe
+  let reportAccess = "unknown";
+  try {
+    const today = new Date().toISOString().split("T")[0];
+    await qbFetch(config, `reports/ProfitAndLoss?start_date=${today}&end_date=${today}`, undefined, 0, config._refreshContext);
+    reportAccess = "granted";
+  } catch (err) {
+    if (String(err).includes("5020") || String(err).includes("Permission Denied")) {
+      reportAccess = "denied";
+    } else {
+      reportAccess = "error";
+    }
+  }
+
+  return jsonRes({ status: "connected", realmId: config.realm_id, reportAccess });
+}
+
+// ─── Disconnect ────────────────────────────────────────────────────
+
+async function handleDisconnect(supabase: ReturnType<typeof createClient>, userId: string) {
+  // Delete the company-wide QB connection
+  const connection = await getUserQBConnection(supabase, userId);
+  if (connection) {
+    await supabase.from("integration_connections").delete().eq("id", connection.id);
+  }
+
+  return jsonRes({ success: true });
+}
+
+// ─── Get Company Info ──────────────────────────────────────────────
+
+async function handleGetCompanyInfo(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbFetch(config, `companyinfo/${config.realm_id}`, undefined, 0, config._refreshContext) as Record<string, unknown>;
+  return jsonRes(data.CompanyInfo);
+}
+
+const PAGE = 1000;
+
+// ─── Sync Customers ───────────────────────────────────────────────
+
+async function handleSyncCustomers(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  const qbData = await qbQuery(config, "Customer");
+  const customers = qbData.QueryResponse?.Customer || [];
+
+  let synced = 0;
+  const errors: string[] = [];
+  // Batch upsert customers in chunks of 50 to avoid timeouts
+  const BATCH_SIZE = 50;
+  for (let i = 0; i < customers.length; i += BATCH_SIZE) {
+    const batch = customers.slice(i, i + BATCH_SIZE);
+    const records = batch.map((customer: Record<string, unknown>) => {
+      const emailAddr = customer.PrimaryEmailAddr as { Address?: string } | undefined;
+      const phoneNum = customer.PrimaryPhone as { FreeFormNumber?: string } | undefined;
+      const billAddr = customer.BillAddr as Record<string, string> | undefined;
+      return {
+        quickbooks_id: customer.Id as string,
+        name: (customer.DisplayName as string) || "Unknown",
+        company_name: (customer.CompanyName as string) || null,
+        company_id: companyId,
+        email: emailAddr?.Address || null,
+        phone: phoneNum?.FreeFormNumber || null,
+        notes: (customer.Notes as string) || null,
+        credit_limit: (customer.CreditLimit as number) || null,
+        payment_terms: (customer.SalesTermRef as Record<string, unknown>)?.name as string || null,
+        status: customer.Active ? "active" : "inactive",
+        address: billAddr?.Line1 || null,
+        city: billAddr?.City || null,
+        province: billAddr?.CountrySubDivisionCode || null,
+        postal_code: billAddr?.PostalCode || null,
+      };
+    });
+
+    const { error, count } = await supabase
+      .from("customers")
+      .upsert(records, { onConflict: "quickbooks_id", count: "exact" });
+
+    if (!error) synced += (count || batch.length);
+    else errors.push(`Batch ${Math.floor(i / BATCH_SIZE)}: ${error.message}`);
+  }
+
+  if (errors.length > 0) console.error("Customer sync errors:", errors.slice(0, 5));
+
+  // ── Name-matching phase: link unlinked local customers to QB by name ──
+  const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, " ");
+
+  // Build lookup map from QB DisplayName/CompanyName → QB Id
+  const nameToQbId = new Map<string, string>();
+  // Also keep a list of QB names sorted longest-first for prefix matching
+  const qbNames: string[] = [];
+  for (const c of customers) {
+    const qbId = c.Id as string;
+    if (c.DisplayName) {
+      const n = normalize(c.DisplayName as string);
+      nameToQbId.set(n, qbId);
+      qbNames.push(n);
+    }
+    if (c.CompanyName) {
+      const n = normalize(c.CompanyName as string);
+      nameToQbId.set(n, qbId);
+      qbNames.push(n);
+    }
+  }
+  // Sort longest first so we match the most specific prefix
+  qbNames.sort((a, b) => b.length - a.length);
+
+  // Build set of QB IDs already linked to prevent duplicate assignments
+  const linkedQbIds = new Set<string>();
+  let linkedPage = 0;
+  while (true) {
+    const { data: linked } = await supabase
+      .from("customers")
+      .select("quickbooks_id")
+      .not("quickbooks_id", "is", null)
+      .eq("company_id", companyId)
+      .range(linkedPage * PAGE, (linkedPage + 1) * PAGE - 1);
+    const lr = linked || [];
+    for (const r of lr) if (r.quickbooks_id) linkedQbIds.add(r.quickbooks_id);
+    if (lr.length < PAGE) break;
+    linkedPage++;
+  }
+
+  // Also track names of linked customers for duplicate detection
+  const linkedNames = new Set<string>();
+  let lnPage = 0;
+  while (true) {
+    const { data: ln } = await supabase
+      .from("customers")
+      .select("name")
+      .not("quickbooks_id", "is", null)
+      .eq("company_id", companyId)
+      .range(lnPage * PAGE, (lnPage + 1) * PAGE - 1);
+    const lr = ln || [];
+    for (const r of lr) if (r.name) linkedNames.add(normalize(r.name));
+    if (lr.length < PAGE) break;
+    lnPage++;
+  }
+
+  // Fetch all local customers without a quickbooks_id
+  let matched = 0;
+  let duplicatesSkipped = 0;
+  let page = 0;
+  while (true) {
+    const { data: unlinked } = await supabase
+      .from("customers")
+      .select("id, name")
+      .is("quickbooks_id", null)
+      .eq("company_id", companyId)
+      .range(page * PAGE, (page + 1) * PAGE - 1);
+    const rows = unlinked || [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const key = normalize(row.name || "");
+      if (!key) continue;
+
+      // Check if this is a duplicate of an already-linked customer
+      if (linkedNames.has(key)) {
+        duplicatesSkipped++;
+        continue;
+      }
+
+      // 1. Exact match
+      let qbId = nameToQbId.get(key);
+
+      // 2. Prefix match: check if any QB name is a prefix of the local name
+      if (!qbId) {
+        for (const qbName of qbNames) {
+          if (key.startsWith(qbName) && key.length > qbName.length) {
+            qbId = nameToQbId.get(qbName);
+            break;
+          }
+        }
+      }
+
+      // 3. Guard: skip if this QB ID is already linked to another local customer
+      if (qbId && linkedQbIds.has(qbId)) {
+        duplicatesSkipped++;
+        continue;
+      }
+
+      if (qbId) {
+        const { error: linkErr } = await supabase
+          .from("customers")
+          .update({ quickbooks_id: qbId })
+          .eq("id", row.id);
+        if (!linkErr) {
+          matched++;
+          linkedQbIds.add(qbId); // prevent further duplicates in this run
+        }
+      }
+    }
+    if (rows.length < PAGE) break;
+    page++;
+  }
+
+  if (matched > 0 || duplicatesSkipped > 0) {
+    console.log(`Auto-match: ${matched} linked, ${duplicatesSkipped} duplicates/already-linked skipped`);
+  }
+  await updateLastSync(supabase, userId);
+
+  return jsonRes({ success: true, synced, matched, duplicatesSkipped, total: customers.length, errors: errors.length });
+}
+
+// ─── Sync Invoices ─────────────────────────────────────────────────
+
+async function handleSyncInvoices(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  const qbData = await qbQuery(config, "Invoice");
+  const invoices = qbData.QueryResponse?.Invoice || [];
+
+  // Pre-load ALL customer QB-id → local-id mapping (paginate past 1000-row limit)
+  const customerMap = new Map<string, string>();
+  let customerPage = 0;
+  while (true) {
+    const { data: batch } = await supabase
+      .from("customers")
+      .select("id, quickbooks_id")
+      .not("quickbooks_id", "is", null)
+      .range(customerPage * PAGE, (customerPage + 1) * PAGE - 1);
+    const rows = batch || [];
+    for (const c of rows) {
+      if (c.quickbooks_id) customerMap.set(c.quickbooks_id, c.id);
+    }
+    if (rows.length < PAGE) break;
+    customerPage++;
+  }
+
+  let synced = 0;
+  const errors: string[] = [];
+  const BATCH_SIZE = 50;
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < invoices.length; i += BATCH_SIZE) {
+    const batch = invoices.slice(i, i + BATCH_SIZE);
+    const records = batch.map((invoice: Record<string, unknown>) => {
+      const custRef = invoice.CustomerRef as { value?: string; name?: string } | undefined;
+      const customerId = custRef?.value ? (customerMap.get(custRef.value) || null) : null;
+      return {
+        quickbooks_id: invoice.Id as string,
+        entity_type: "Invoice",
+        balance: (invoice.Balance as number) || 0,
+        customer_id: customerId,
+        company_id: companyId,
+        data: invoice, // Store full QB object to preserve InvoiceLink and all fields
+        last_synced_at: now,
+      };
+    });
+
+    const { error, count } = await supabase
+      .from("accounting_mirror")
+      .upsert(records, { onConflict: "quickbooks_id", count: "exact" });
+
+    if (!error) synced += (count || batch.length);
+    else errors.push(`Batch ${Math.floor(i / BATCH_SIZE)}: ${error.message}`);
+  }
+
+  if (errors.length > 0) console.error("Invoice sync errors:", errors.slice(0, 5));
+  await updateLastSync(supabase, userId);
+  return jsonRes({ success: true, synced, total: invoices.length, errors: errors.length });
+}
+
+// ─── Sync Vendors ──────────────────────────────────────────────────
+
+async function handleSyncVendors(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  const qbData = await qbQuery(config, "Vendor");
+  const vendors = qbData.QueryResponse?.Vendor || [];
+
+  let synced = 0;
+  for (const vendor of vendors) {
+    const { error } = await supabase
+      .from("accounting_mirror")
+      .upsert({
+        quickbooks_id: `vendor_${vendor.Id}`,
+        entity_type: "Vendor",
+        balance: vendor.Balance || 0,
+        company_id: companyId,
+        data: {
+          DisplayName: vendor.DisplayName,
+          CompanyName: vendor.CompanyName,
+          PrimaryPhone: vendor.PrimaryPhone?.FreeFormNumber,
+          PrimaryEmailAddr: vendor.PrimaryEmailAddr?.Address,
+          Active: vendor.Active,
+          Balance: vendor.Balance,
+          AcctNum: vendor.AcctNum,
+          TaxIdentifier: vendor.TaxIdentifier,
+        },
+        last_synced_at: new Date().toISOString(),
+      }, { onConflict: "quickbooks_id" });
+
+    if (!error) synced++;
+    else console.error(`Vendor sync error (${vendor.Id}):`, error.message);
+  }
+
+  await updateLastSync(supabase, userId);
+  return jsonRes({ success: true, synced, total: vendors.length });
+}
+
+// ─── Dashboard Summary (single call for dashboard cards) ─────────
+
+async function handleDashboardSummary(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  
+  // Fetch all dashboard-critical data in parallel with a single config lookup
+  const [invoicesRes, billsRes, paymentsRes, bankRes] = await Promise.all([
+    qbQuery(config, "Invoice"),
+    qbQuery(config, "Bill"),
+    qbQuery(config, "Payment"),
+    qbQuery(config, "Account", 500, "AccountType = 'Bank'"),
+  ]);
+
+  return jsonRes({
+    invoices: invoicesRes.QueryResponse?.Invoice || [],
+    bills: billsRes.QueryResponse?.Bill || [],
+    payments: paymentsRes.QueryResponse?.Payment || [],
+    accounts: bankRes.QueryResponse?.Account || [],
+  });
+}
+
+// ─── List Entities (direct from QB API) ───────────────────────────
+
+async function handleListAccounts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Account");
+  return jsonRes({ accounts: data.QueryResponse?.Account || [] });
+}
+
+async function handleListBankAccounts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Account", 500, "AccountType = 'Bank'");
+  return jsonRes({ accounts: data.QueryResponse?.Account || [] });
+}
+
+async function handleListItems(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Item");
+  return jsonRes({ items: data.QueryResponse?.Item || [] });
+}
+
+async function handleListInvoices(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Invoice");
+  return jsonRes({ invoices: data.QueryResponse?.Invoice || [] });
+}
+
+async function handleListEstimates(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Estimate");
+  return jsonRes({ estimates: data.QueryResponse?.Estimate || [] });
+}
+
+async function handleListBills(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Bill");
+  return jsonRes({ bills: data.QueryResponse?.Bill || [] });
+}
+
+async function handleListPayments(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Payment");
+  return jsonRes({ payments: data.QueryResponse?.Payment || [] });
+}
+
+async function handleListPurchaseOrders(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "PurchaseOrder");
+  return jsonRes({ purchaseOrders: data.QueryResponse?.PurchaseOrder || [] });
+}
+
+async function handleListCreditMemos(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "CreditMemo");
+  return jsonRes({ creditMemos: data.QueryResponse?.CreditMemo || [] });
+}
+
+async function handleListVendors(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Vendor");
+  return jsonRes({ vendors: data.QueryResponse?.Vendor || [] });
+}
+
+// ─── Reports ──────────────────────────────────────────────────────
+
+async function handleGetProfitLoss(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || "2024-01-01";
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/ProfitAndLoss?start_date=${startDate}&end_date=${endDate}`);
+  return jsonRes(data);
+}
+
+async function handleGetBalanceSheet(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/BalanceSheet?end_date=${asOfDate}`);
+  return jsonRes(data);
+}
+
+// ─── Create Estimate ──────────────────────────────────────────────
+
+async function handleCreateEstimate(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { customerId, customerName, lineItems, expirationDate, memo, taxCodeRef, classRef, departmentRef } = body as {
+    customerId: string; customerName: string;
+    lineItems: { description: string; amount: number; quantity?: number }[];
+    expirationDate?: string; memo?: string; taxCodeRef?: string;
+    classRef?: string; departmentRef?: string;
+  };
+
+  if (!customerId || !lineItems || (lineItems as unknown[]).length === 0) {
+    throw new Error("Customer ID and line items are required");
+  }
+
+  // Idempotency: check if estimate already exists for this customer + same line items hash
+  const dedupeKey = `est:${companyId}:${customerId}:${lineItems.map(l => `${l.amount}x${l.quantity || 1}`).join(",")}`;
+  const { data: existingTxn } = await supabase
+    .from("qb_transactions")
+    .select("qb_id, data")
+    .eq("company_id", companyId)
+    .eq("entity_type", "Estimate")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingTxn) {
+    return jsonRes({ success: true, alreadyExisted: true, estimate: existingTxn.data, docNumber: (existingTxn.data as any)?.DocNumber });
+  }
+
+  const qbConfig = await getCompanyQBConfig(supabase, companyId);
+  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || undefined;
+  if (effectiveTaxCode && isNaN(Number(effectiveTaxCode))) {
+    const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
+    effectiveTaxCode = resolvedTaxId || undefined;
+  }
+  if (!effectiveTaxCode) {
+    effectiveTaxCode = await resolveTaxCodeId(config, "TAX") || undefined;
+  }
+  // Canadian QB requires GST/HST on every line — hard-fail if we still have no tax code
+  if (!effectiveTaxCode || isNaN(Number(effectiveTaxCode))) {
+    console.error(`[QB-Estimate] FATAL: No valid numeric tax code resolved. effectiveTaxCode=${effectiveTaxCode}`);
+    throw new Error("Cannot create estimate: no GST/HST tax code could be resolved from QuickBooks. Please ensure at least one active tax code exists in your QuickBooks company.");
+  }
+  const taxCodeIsNumeric = true; // guaranteed numeric at this point
+
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lineItems.map(item => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      SalesItemLineDetail: {
+        Qty: item.quantity || 1,
+        UnitPrice: item.amount,
+        ...(taxCodeIsNumeric && { TaxCodeRef: { value: effectiveTaxCode } }),
+      },
+    })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
+    ...(expirationDate && { ExpirationDate: expirationDate }),
+    ...(memo && { CustomerMemo: { value: memo } }),
+    ...(classRef && { ClassRef: { value: classRef } }),
+    ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
+    ...(taxCodeIsNumeric && { TxnTaxDetail: { TxnTaxCodeRef: { value: effectiveTaxCode } } }),
+  };
+
+  const data = await qbFetch(config, "estimate", { method: "POST", body: JSON.stringify(payload) });
+
+  // Store dedupe key
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: data.Estimate?.Id,
+      entity_type: "Estimate",
+      data: data.Estimate,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_created", "Estimate", data.Estimate?.Id || "", {
+    docNumber: data.Estimate?.DocNumber, customerId, totalAmount: data.Estimate?.TotalAmt,
+  });
+
+  return jsonRes({ success: true, estimate: data.Estimate, docNumber: data.Estimate?.DocNumber });
+}
+
+// ─── Create Invoice ───────────────────────────────────────────────
+
+async function handleCreateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  // Support x-qb-user-id override for public acceptance flows (service-role callers)
+  const effectiveUserId = (body._qbUserId as string) || userId;
+  const config = await getQBConfig(supabase, effectiveUserId);
+  const companyId = await getUserCompanyId(supabase, effectiveUserId);
+  const { orderId, dueDate, memo, taxCodeRef, salesTermRef, discountPercent, shippingAmount, classRef, departmentRef, dedupKey } = body as {
+    orderId?: string;
+    dueDate?: string; memo?: string; taxCodeRef?: string; salesTermRef?: string;
+    discountPercent?: number; shippingAmount?: number;
+    classRef?: string; departmentRef?: string;
+    dedupKey?: string;
+  };
+
+  // Accept both "lineItems" and "items" as parameter names
+  const lineItems = (body.lineItems || body.items) as { description: string; amount?: number; unitPrice?: number; quantity?: number; serviceId?: string }[] | undefined;
+  let customerId = body.customerId as string | undefined;
+  const customerName = body.customerName as string | undefined;
+  const customerEmail = body.customerEmail as string | undefined;
+
+  // ── Server-side idempotency guard: order-based ─────────────────
+  if (orderId) {
+    const { data: existingOrder } = await supabase
+      .from("orders")
+      .select("quickbooks_invoice_id")
+      .eq("id", orderId)
+      .maybeSingle();
+    if (existingOrder?.quickbooks_invoice_id) {
+      return jsonRes({
+        success: true,
+        alreadyExisted: true,
+        docNumber: existingOrder.quickbooks_invoice_id,
+        message: `Invoice #${existingOrder.quickbooks_invoice_id} already exists for this order`,
+      });
+    }
+  }
+
+  // ── Server-side idempotency guard: dedupKey-based (ad-hoc invoices) ──
+  if (dedupKey && !orderId) {
+    const { data: existingAudit } = await supabase
+      .from("activity_events")
+      .select("metadata")
+      .eq("company_id", companyId)
+      .eq("event_type", "qb_invoice_created")
+      .eq("source", "quickbooks")
+      .filter("metadata->>dedupKey", "eq", dedupKey)
+      .maybeSingle();
+    if (existingAudit) {
+      const meta = existingAudit.metadata as Record<string, unknown> | null;
+      return jsonRes({
+        success: true,
+        alreadyExisted: true,
+        docNumber: meta?.docNumber || "",
+        message: `Duplicate prevented — invoice already created for this session`,
+      });
+    }
+  }
+
+  // ── Resolve customer ID from name if not provided ──────────────
+  if (!customerId && customerName) {
+    // 1. Check local customers table for quickbooks_id
+    const { data: localCust } = await supabase
+      .from("customers")
+      .select("quickbooks_id, id")
+      .eq("company_id", companyId)
+      .or(`company_name.ilike.${customerName},name.ilike.${customerName}`)
+      .not("quickbooks_id", "is", null)
+      .limit(1)
+      .maybeSingle();
+    if (localCust?.quickbooks_id) {
+      customerId = localCust.quickbooks_id;
+    } else {
+      // 2. Search QuickBooks by display name
+      try {
+        const searchResult = await qbFetch(config, `query?query=select * from Customer where DisplayName = '${customerName.replace(/'/g, "''")}'`) as Record<string, any>;
+        const qbCustomers = searchResult?.QueryResponse?.Customer as any[] | undefined;
+        if (qbCustomers && qbCustomers.length > 0) {
+          customerId = String(qbCustomers[0].Id);
+        } else {
+          // 3. Create customer in QB (include email if available)
+          const newCustPayload: Record<string, unknown> = { DisplayName: customerName };
+          if (customerEmail) {
+            newCustPayload.PrimaryEmailAddr = { Address: customerEmail };
+          }
+          const newCust = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify(newCustPayload) }) as Record<string, any>;
+          customerId = String(newCust?.Customer?.Id || newCust?.Id || "");
+        }
+      } catch (e) {
+        console.warn("[create-invoice] QB customer lookup/create failed:", e);
+      }
+    }
+  }
+
+  if (!customerId || !lineItems || (lineItems as unknown[]).length === 0) {
+    throw new Error("Customer ID and line items are required");
+  }
+
+  const qbConfig = await getCompanyQBConfig(supabase, companyId);
+  let effectiveTaxCode = taxCodeRef || qbConfig.default_tax_code || undefined;
+  if (effectiveTaxCode && isNaN(Number(effectiveTaxCode))) {
+    const resolvedTaxId = await resolveTaxCodeId(config, effectiveTaxCode);
+    effectiveTaxCode = resolvedTaxId || undefined;
+  }
+  if (!effectiveTaxCode) {
+    effectiveTaxCode = await resolveTaxCodeId(config, "TAX") || undefined;
+  }
+  // Canadian QB requires GST/HST on every line — hard-fail if we still have no tax code
+  if (!effectiveTaxCode || isNaN(Number(effectiveTaxCode))) {
+    console.error(`[QB-Invoice] FATAL: No valid numeric tax code resolved. effectiveTaxCode=${effectiveTaxCode}`);
+    throw new Error("Cannot create invoice: no GST/HST tax code could be resolved from QuickBooks. Please ensure at least one active tax code exists in your QuickBooks company.");
+  }
+
+  // Normalize line items: accept either unitPrice or legacy amount
+  const normalizedLines = await Promise.all(lineItems.map(async (item) => {
+    const qty = item.quantity || 1;
+    const unitPrice = item.unitPrice ?? item.amount ?? 0;
+    const lineContext = await resolveInvoiceLineContext(config, item);
+    const lineTaxCode = lineContext.taxCodeRef || effectiveTaxCode!;
+    const lineDetail: Record<string, unknown> = {
+      Qty: qty,
+      UnitPrice: unitPrice,
+      ItemRef: lineContext.itemRef,
+      TaxCodeRef: { value: String(lineTaxCode) },
+    };
+
+    return {
+      resolvedTaxCode: String(lineTaxCode),
+      payload: {
+        DetailType: "SalesItemLineDetail",
+        Amount: unitPrice * qty,
+        Description: item.description,
+        SalesItemLineDetail: lineDetail,
+      } as Record<string, unknown>,
+    };
+  }));
+
+  const lines: Record<string, unknown>[] = normalizedLines.map((line) => line.payload);
+  const uniqueLineTaxCodes = Array.from(new Set(normalizedLines.map((line) => line.resolvedTaxCode).filter((value): value is string => Boolean(value))));
+  const transactionTaxCode = uniqueLineTaxCodes.length === 1
+    ? uniqueLineTaxCodes[0]
+    : (effectiveTaxCode && !isNaN(Number(effectiveTaxCode)) ? String(effectiveTaxCode) : null);
+
+  // Add discount line if provided
+  // Canadian QB requires a GST/HST rate on every transaction line.
+  // Use a taxable sales line instead of DiscountLineDetail so TaxCodeRef is always explicit.
+  if (discountPercent && discountPercent > 0) {
+    const subtotalBeforeDiscount = normalizedLines.reduce((sum, line) => sum + Number((line.payload.Amount as number) || 0), 0);
+    const discountAmount = Number(((subtotalBeforeDiscount * discountPercent) / 100).toFixed(2));
+    if (discountAmount > 0) {
+      lines.push({
+        DetailType: "SalesItemLineDetail",
+        Amount: -discountAmount,
+        Description: `Discount (${discountPercent}%)`,
+        SalesItemLineDetail: {
+          UnitPrice: -discountAmount,
+          Qty: 1,
+          ItemRef: { value: "1", name: "Services" },
+          TaxCodeRef: { value: String(transactionTaxCode || effectiveTaxCode) },
+        },
+      });
+    }
+  }
+
+  // Add shipping line if provided
+  if (shippingAmount && shippingAmount > 0) {
+    const shippingTaxCode = transactionTaxCode || uniqueLineTaxCodes[0] || null;
+    lines.push({
+      DetailType: "SalesItemLineDetail",
+      Amount: shippingAmount,
+      Description: "Shipping",
+      SalesItemLineDetail: {
+        UnitPrice: shippingAmount,
+        Qty: 1,
+        ItemRef: { value: "1", name: "Services" },
+        ...(shippingTaxCode && { TaxCodeRef: { value: shippingTaxCode } }),
+      },
+    });
+  }
+
+  let effectiveTerms: string | undefined = salesTermRef || (qbConfig as any).default_sales_term;
+  if (effectiveTerms && isNaN(Number(effectiveTerms))) {
+    const resolvedId = await resolveTermId(config, effectiveTerms);
+    // If we can't resolve the name to an ID, drop it entirely — QB rejects non-numeric values
+    effectiveTerms = resolvedId ?? undefined;
+  }
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lines,
+    // Online payment flags — required for QB to generate InvoiceLink
+    AllowOnlineCreditCardPayment: true,
+    AllowOnlineACHPayment: true,
+    // Canadian locale: tax-exclusive calculation
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
+    ...(customerEmail && { BillEmail: { Address: customerEmail }, EmailStatus: "NeedToSend" }),
+    ...(dueDate && { DueDate: dueDate }),
+    ...(memo && { CustomerMemo: { value: memo } }),
+    ...(effectiveTerms && { SalesTermRef: { value: effectiveTerms } }),
+    ...(classRef && { ClassRef: { value: classRef } }),
+    ...(departmentRef && { DepartmentRef: { value: departmentRef } }),
+    ...(transactionTaxCode && { TxnTaxDetail: { TxnTaxCodeRef: { value: transactionTaxCode } } }),
+  };
+
+  const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
+
+  let createdInvoice = data.Invoice;
+
+  // QB doesn't return InvoiceLink on POST — read it back to get the customer-facing payment URL
+  if (createdInvoice?.Id && !createdInvoice?.InvoiceLink) {
+    try {
+      const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}?include=invoiceLink`, {});
+      if (readBack?.Invoice?.InvoiceLink) {
+        createdInvoice = readBack.Invoice;
+      }
+    } catch (e) {
+      console.warn("[create-invoice] Read-back for InvoiceLink failed:", e);
+    }
+  }
+
+  // Mirror the created invoice to accounting_mirror so InvoiceLink is immediately available
+  if (createdInvoice?.Id) {
+    try {
+      // Build customer map for customer_id resolution
+      let mirrorCustomerId: string | null = null;
+      const custRefVal = createdInvoice.CustomerRef?.value;
+      if (custRefVal) {
+        const { data: custRow } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("quickbooks_id", custRefVal)
+          .maybeSingle();
+        mirrorCustomerId = custRow?.id || null;
+      }
+
+      await supabase.from("accounting_mirror").upsert({
+        quickbooks_id: String(createdInvoice.Id),
+        entity_type: "Invoice",
+        balance: createdInvoice.Balance || 0,
+        customer_id: mirrorCustomerId,
+        company_id: companyId,
+        data: createdInvoice, // Full object with InvoiceLink
+        last_synced_at: new Date().toISOString(),
+      }, { onConflict: "quickbooks_id" });
+    } catch (mirrorErr) {
+      console.warn("[create-invoice] Mirror upsert failed:", mirrorErr);
+    }
+  }
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_created", "Invoice", createdInvoice?.Id || "", {
+    docNumber: createdInvoice?.DocNumber, customerId, totalAmount: createdInvoice?.TotalAmt, orderId, dedupKey,
+  });
+
+  return jsonRes({
+    success: true,
+    invoice: createdInvoice,
+    docNumber: createdInvoice?.DocNumber,
+    totalAmount: createdInvoice?.TotalAmt,
+    invoiceLink: createdInvoice?.InvoiceLink || null,
+  });
+}
+
+// ─── Get Invoice Link (read-only) ─────────────────────────────────
+
+async function handleGetInvoiceLink(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const effectiveUserId = (body._qbUserId as string) || userId;
+  const config = await getQBConfig(supabase, effectiveUserId);
+  const qbInvoiceId = body.qbInvoiceId as string;
+
+  if (!qbInvoiceId) {
+    throw new Error("qbInvoiceId is required");
+  }
+
+  // Read the invoice with ?include=invoiceLink
+  const readBack = await qbFetch(config, `invoice/${qbInvoiceId}?include=invoiceLink`, {});
+  let invoice = readBack?.Invoice;
+
+  const customerEmail = body.customerEmail as string | undefined;
+
+  // Repair path: if invoice exists but missing payment flags or email, sparse-update to enable them
+  if (invoice && (!invoice.AllowOnlineCreditCardPayment || !invoice.AllowOnlineACHPayment || (!invoice.BillEmail?.Address && customerEmail))) {
+    try {
+      const updatePayload: Record<string, unknown> = {
+        Id: invoice.Id,
+        SyncToken: invoice.SyncToken,
+        sparse: true,
+        AllowOnlineCreditCardPayment: true,
+        AllowOnlineACHPayment: true,
+      };
+      if (customerEmail && !invoice.BillEmail?.Address) {
+        updatePayload.BillEmail = { Address: customerEmail };
+        updatePayload.EmailStatus = "NeedToSend";
+      }
+      console.log(`[get-invoice-link] Repairing invoice ${qbInvoiceId} — enabling online payment flags`);
+      await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(updatePayload) });
+      // Re-read after update to get fresh InvoiceLink
+      const reRead = await qbFetch(config, `invoice/${qbInvoiceId}?include=invoiceLink`, {});
+      if (reRead?.Invoice) {
+        invoice = reRead.Invoice;
+      }
+    } catch (e) {
+      console.warn("[get-invoice-link] Repair update failed:", e);
+    }
+  }
+
+  return jsonRes({
+    success: true,
+    invoice: invoice || null,
+    invoiceLink: invoice?.InvoiceLink || null,
+  });
+}
+
+// ─── Create Payment ───────────────────────────────────────────────
+
+async function handleCreatePayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { customerId, customerName, totalAmount, invoiceId, invoiceLines, paymentMethod, memo, txnDate } = body as {
+    customerId: string; customerName: string; totalAmount: number;
+    invoiceId?: string; invoiceLines?: { invoiceId: string; amount: number }[];
+    paymentMethod?: string; memo?: string; txnDate?: string;
+  };
+
+  if (!customerId || !totalAmount) throw new Error("Customer ID and total amount required");
+
+  // ── Idempotency guard: check for existing payment with same key fields ──
+  const linkedInvId = invoiceId || (invoiceLines && invoiceLines.length > 0 ? invoiceLines.map(l => l.invoiceId).sort().join(",") : "none");
+  const dedupeKey = `pmt:${companyId}:${customerId}:${linkedInvId}:${totalAmount}:${txnDate || "nodate"}`;
+  const { data: existingTxn } = await supabase
+    .from("qb_transactions")
+    .select("qb_id, data")
+    .eq("company_id", companyId)
+    .eq("entity_type", "Payment")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingTxn) {
+    return jsonRes({ success: true, alreadyExisted: true, payment: existingTxn.data });
+  }
+
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    TotalAmt: totalAmount,
+    ...(txnDate && { TxnDate: txnDate }),
+    ...(memo && { PrivateNote: memo }),
+    ...(paymentMethod && { PaymentMethodRef: { value: paymentMethod } }),
+  };
+
+  // Support multiple linked invoices (new path)
+  if (invoiceLines && invoiceLines.length > 0) {
+    payload.Line = invoiceLines.map((line) => ({
+      Amount: line.amount,
+      LinkedTxn: [{ TxnId: line.invoiceId, TxnType: "Invoice" }],
+    }));
+  } else if (invoiceId) {
+    // Legacy single-invoice fallback
+    payload.Line = [{
+      Amount: totalAmount,
+      LinkedTxn: [{ TxnId: invoiceId, TxnType: "Invoice" }],
+    }];
+  }
+
+  const data = await qbFetch(config, "payment", { method: "POST", body: JSON.stringify(payload) });
+
+  // Store dedupe key
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: data.Payment?.Id,
+      entity_type: "Payment",
+      data: data.Payment,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_payment_created", "Payment", data.Payment?.Id || "", {
+    customerId, totalAmount, invoiceId: linkedInvId, paymentMethod,
+  });
+
+  return jsonRes({ success: true, payment: data.Payment });
+}
+
+// ─── Receive Payment (AR — from Invoice) ──────────────────────────
+
+async function handleReceivePayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const {
+    qbInvoiceId, erpInvoiceId, invoiceNumber, customerName,
+    amount, paymentMethod, referenceNumber, paymentDate, memo,
+  } = body as {
+    qbInvoiceId?: string; erpInvoiceId?: string; invoiceNumber?: string; customerName?: string;
+    amount: number; paymentMethod?: string; referenceNumber?: string; paymentDate?: string; memo?: string;
+  };
+
+  if (!amount || amount <= 0) throw new Error("Valid payment amount required");
+
+  // Resolve QB invoice ID if not provided
+  let resolvedQBInvoiceId = qbInvoiceId;
+  let customerId = "";
+  let customerDisplayName = customerName || "";
+
+  if (!resolvedQBInvoiceId && invoiceNumber) {
+    // Look up from accounting_mirror
+    const { data: mirror } = await supabase
+      .from("accounting_mirror")
+      .select("quickbooks_id, data")
+      .eq("entity_type", "Invoice")
+      .eq("company_id", companyId)
+      .ilike("data->>DocNumber", invoiceNumber)
+      .maybeSingle();
+    if (mirror) {
+      resolvedQBInvoiceId = mirror.quickbooks_id;
+      const mirrorData = mirror.data as Record<string, unknown>;
+      const custRef = mirrorData?.CustomerRef as Record<string, unknown> | undefined;
+      if (custRef) {
+        customerId = String(custRef.value || "");
+        customerDisplayName = customerDisplayName || String(custRef.name || "");
+      }
+    }
+  }
+
+  // If we have a QB invoice ID, fetch it to get customer + balance
+  if (resolvedQBInvoiceId && !customerId) {
+    try {
+      const invData = await qbFetch(config, `invoice/${resolvedQBInvoiceId}?include=invoiceLink`, { method: "GET" }) as Record<string, unknown>;
+      const inv = invData.Invoice as Record<string, unknown>;
+      if (inv) {
+        const custRef = inv.CustomerRef as Record<string, unknown>;
+        customerId = String(custRef?.value || "");
+        customerDisplayName = customerDisplayName || String(custRef?.name || "");
+      }
+    } catch (e) {
+      console.warn("Failed to fetch QB invoice for payment:", e);
+    }
+  }
+
+  // If still no customer, try to find by name in QB
+  if (!customerId && customerDisplayName) {
+    const escapedName = customerDisplayName.replace(/'/g, "''");
+    const query = `SELECT Id, DisplayName FROM Customer WHERE DisplayName = '${escapedName}'`;
+    try {
+      const qData = await qbFetch(config, `query?query=${encodeURIComponent(query)}`, { method: "GET" }) as Record<string, unknown>;
+      const qr = qData.QueryResponse as Record<string, unknown> | undefined;
+      const custs = (qr?.Customer as Record<string, unknown>[]) || [];
+      if (custs.length > 0) {
+        customerId = String(custs[0].Id);
+      }
+    } catch {}
+  }
+
+  if (!customerId) throw new Error("Could not resolve QuickBooks customer for this invoice");
+
+  // Build payment payload
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerDisplayName },
+    TotalAmt: amount,
+    ...(paymentDate && { TxnDate: paymentDate }),
+    ...(memo && { PrivateNote: memo }),
+    ...(paymentMethod && { PaymentMethodRef: { value: paymentMethod } }),
+    ...(referenceNumber && { PaymentRefNum: referenceNumber }),
+  };
+
+  if (resolvedQBInvoiceId) {
+    payload.Line = [{
+      Amount: amount,
+      LinkedTxn: [{ TxnId: resolvedQBInvoiceId, TxnType: "Invoice" }],
+    }];
+  }
+
+  const data = await qbFetch(config, "payment", { method: "POST", body: JSON.stringify(payload) });
+
+  // Update ERP invoice status
+  if (erpInvoiceId) {
+    try {
+      await supabase.from("sales_invoices").update({
+        status: "paid",
+        paid_date: paymentDate || new Date().toISOString().slice(0, 10),
+        payment_method: paymentMethod || "other",
+      } as any).eq("id", erpInvoiceId);
+    } catch {}
+  }
+
+  // Store dedupe key
+  const dedupeKey = `rcv-pmt:${companyId}:${customerId}:${resolvedQBInvoiceId || "none"}:${amount}:${paymentDate || "nodate"}`;
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: (data as any).Payment?.Id,
+      entity_type: "Payment",
+      data: (data as any).Payment,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_payment_received", "Payment", (data as any).Payment?.Id || "", {
+    customerId, amount, invoiceId: resolvedQBInvoiceId, paymentMethod, erpInvoiceId,
+  });
+
+  return jsonRes({ success: true, payment: (data as any).Payment });
+}
+
+// ─── Create Bill ──────────────────────────────────────────────────
+
+async function handleCreateBill(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { vendorId, vendorName, lineItems, dueDate, memo } = body as {
+    vendorId: string; vendorName: string;
+    lineItems: { description: string; amount: number; accountId?: string }[];
+    dueDate?: string; memo?: string;
+  };
+
+  if (!vendorId || !lineItems || (lineItems as unknown[]).length === 0) {
+    throw new Error("Vendor ID and line items are required");
+  }
+
+  const payload = {
+    VendorRef: { value: vendorId, name: vendorName },
+    Line: lineItems.map(item => ({
+      DetailType: "AccountBasedExpenseLineDetail",
+      Amount: item.amount,
+      Description: item.description,
+      AccountBasedExpenseLineDetail: {
+        AccountRef: { value: item.accountId || "7" }, // default Expenses account
+      },
+    })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ...(dueDate && { DueDate: dueDate }),
+    ...(memo && { PrivateNote: memo }),
+  };
+
+  const data = await qbFetch(config, "bill", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, bill: data.Bill, docNumber: data.Bill?.DocNumber });
+}
+
+// ─── Create Credit Memo ───────────────────────────────────────────
+
+async function handleCreateCreditMemo(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { customerId, customerName, lineItems, memo } = body as {
+    customerId: string; customerName: string;
+    lineItems: { description: string; amount: number; quantity?: number }[];
+    memo?: string;
+  };
+
+  if (!customerId || !lineItems || (lineItems as unknown[]).length === 0) {
+    throw new Error("Customer ID and line items are required");
+  }
+
+  // ── Idempotency guard ──
+  const dedupeKey = `cm:${companyId}:${customerId}:${lineItems.map(l => `${l.amount}x${l.quantity || 1}`).join(",")}`;
+  const { data: existingTxn } = await supabase
+    .from("qb_transactions")
+    .select("qb_id, data")
+    .eq("company_id", companyId)
+    .eq("entity_type", "CreditMemo")
+    .eq("dedupe_key", dedupeKey)
+    .maybeSingle();
+  if (existingTxn) {
+    return jsonRes({ success: true, alreadyExisted: true, creditMemo: existingTxn.data, docNumber: (existingTxn.data as any)?.DocNumber });
+  }
+
+  const payload = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lineItems.map(item => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount },
+    })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
+    ...(memo && { CustomerMemo: { value: memo } }),
+  };
+
+  const data = await qbFetch(config, "creditmemo", { method: "POST", body: JSON.stringify(payload) });
+
+  // Store dedupe key
+  try {
+    await supabase.from("qb_transactions").upsert({
+      company_id: companyId,
+      qb_id: data.CreditMemo?.Id,
+      entity_type: "CreditMemo",
+      data: data.CreditMemo,
+      dedupe_key: dedupeKey,
+    }, { onConflict: "company_id,qb_id,entity_type" });
+  } catch {}
+
+  await logAuditEvent(supabase, companyId, userId, "qb_credit_memo_created", "CreditMemo", data.CreditMemo?.Id || "", {
+    docNumber: data.CreditMemo?.DocNumber, customerId, totalAmount: data.CreditMemo?.TotalAmt,
+  });
+
+  return jsonRes({ success: true, creditMemo: data.CreditMemo, docNumber: data.CreditMemo?.DocNumber });
+}
+
+// ─── Create Purchase Order ────────────────────────────────────────
+
+async function handleCreatePurchaseOrder(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { vendorId, vendorName, lineItems, memo, shipAddr } = body as {
+    vendorId: string; vendorName: string;
+    lineItems: { description: string; amount: number; quantity?: number; itemId?: string }[];
+    memo?: string; shipAddr?: string;
+  };
+
+  if (!vendorId || !lineItems || (lineItems as unknown[]).length === 0) {
+    throw new Error("Vendor ID and line items are required");
+  }
+
+  const payload = {
+    VendorRef: { value: vendorId, name: vendorName },
+    Line: lineItems.map(item => ({
+      DetailType: "ItemBasedExpenseLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      ItemBasedExpenseLineDetail: {
+        Qty: item.quantity || 1,
+        UnitPrice: item.amount,
+        ...(item.itemId && { ItemRef: { value: item.itemId } }),
+      },
+    })),
+    ...(memo && { Memo: memo }),
+    ...(shipAddr && { ShipAddr: { Line1: shipAddr } }),
+  };
+
+  const data = await qbFetch(config, "purchaseorder", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, purchaseOrder: data.PurchaseOrder, docNumber: data.PurchaseOrder?.DocNumber });
+}
+
+// ─── Create Vendor ────────────────────────────────────────────────
+
+async function handleCreateVendor(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const b = body as Record<string, string | undefined>;
+
+  if (!b.displayName) throw new Error("Display name is required");
+
+  const payload: Record<string, unknown> = {
+    DisplayName: b.displayName,
+    ...(b.companyName && { CompanyName: b.companyName }),
+    ...(b.title && { Title: b.title }),
+    ...(b.firstName && { GivenName: b.firstName }),
+    ...(b.middleName && { MiddleName: b.middleName }),
+    ...(b.lastName && { FamilyName: b.lastName }),
+    ...(b.suffix && { Suffix: b.suffix }),
+    ...(b.email && { PrimaryEmailAddr: { Address: b.email } }),
+    ...(b.phone && { PrimaryPhone: { FreeFormNumber: b.phone } }),
+    ...(b.mobile && { Mobile: { FreeFormNumber: b.mobile } }),
+    ...(b.fax && { Fax: { FreeFormNumber: b.fax } }),
+    ...(b.website && { WebAddr: { URI: b.website } }),
+    ...(b.printOnCheckName && { PrintOnCheckName: b.printOnCheckName }),
+    ...(b.notes && { Notes: b.notes }),
+  };
+
+  // Build address if any address field provided
+  const addrFields = { Line1: b.street1, Line2: b.street2, City: b.city, CountrySubDivisionCode: b.state, PostalCode: b.postalCode };
+  const hasAddr = Object.values(addrFields).some(Boolean);
+  if (hasAddr) {
+    const addr: Record<string, string> = {};
+    Object.entries(addrFields).forEach(([k, v]) => { if (v) addr[k] = v; });
+    payload.BillAddr = addr;
+  }
+
+  const data = await qbFetch(config, "vendor", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, vendor: data.Vendor });
+}
+
+// ─── Create Account ───────────────────────────────────────────────
+
+async function handleCreateAccount(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { name, accountType, accountSubType } = body as { name: string; accountType: string; accountSubType?: string };
+
+  if (!name || !accountType) throw new Error("Account name and type are required");
+
+  const payload: Record<string, unknown> = { Name: name, AccountType: accountType };
+  if (accountSubType) payload.AccountSubType = accountSubType;
+
+  const data = await qbFetch(config, "account", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, account: (data as any).Account });
+}
+
+// ─── Delete Transaction ───────────────────────────────────────────
+
+async function handleDeleteTransaction(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { entityType, entityId, syncToken } = body as { entityType: string; entityId: string; syncToken: string };
+
+  if (!entityType || !entityId) throw new Error("entityType and entityId are required");
+
+  const endpoint = entityType.toLowerCase();
+  const payload = { Id: entityId, SyncToken: syncToken || "0" };
+  const data = await qbFetch(config, `${endpoint}?operation=delete`, { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_transaction_deleted", entityType, entityId, { syncToken });
+
+  return jsonRes({ success: true, deleted: true, data });
+}
+
+// ─── Void Transaction ─────────────────────────────────────────────
+
+async function handleVoidTransaction(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { entityType, entityId, syncToken } = body as { entityType: string; entityId: string; syncToken: string };
+
+  if (!entityType || !entityId) throw new Error("entityType and entityId are required");
+
+  const endpoint = entityType.toLowerCase();
+  const payload = { Id: entityId, SyncToken: syncToken || "0", sparse: true };
+  const data = await qbFetch(config, `${endpoint}?operation=void`, { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_transaction_voided", entityType, entityId, { syncToken });
+
+  return jsonRes({ success: true, voided: true, data });
+}
+
+// ─── Create Item (Product/Service) ────────────────────────────────
+
+async function handleCreateItem(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { name, type, unitPrice, description, incomeAccountId, expenseAccountId } = body as {
+    name: string; type?: string; unitPrice?: number; description?: string;
+    incomeAccountId?: string; expenseAccountId?: string;
+  };
+
+  if (!name) throw new Error("Item name is required");
+
+  const payload: Record<string, unknown> = {
+    Name: name,
+    Type: type || "Service",
+    ...(unitPrice !== undefined && { UnitPrice: unitPrice }),
+    ...(description && { Description: description }),
+    ...(incomeAccountId && { IncomeAccountRef: { value: incomeAccountId } }),
+    ...(expenseAccountId && { ExpenseAccountRef: { value: expenseAccountId } }),
+  };
+
+  const data = await qbFetch(config, "item", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, item: data.Item });
+}
+
+// ─── Convert Estimate to Invoice ──────────────────────────────────
+
+async function handleConvertEstimateToInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { estimateId } = body as { estimateId: string };
+
+  if (!estimateId) throw new Error("Estimate ID is required");
+
+  const estimateData = await qbFetch(config, `estimate/${estimateId}`);
+  const estimate = estimateData.Estimate;
+
+  const invoicePayload: Record<string, unknown> = {
+    CustomerRef: estimate.CustomerRef,
+    Line: estimate.Line,
+    LinkedTxn: [{ TxnId: estimateId, TxnType: "Estimate" }],
+    AllowOnlineCreditCardPayment: true,
+    AllowOnlineACHPayment: true,
+    GlobalTaxCalculation: "TaxExcluded",
+    ApplyTaxAfterDiscount: false,
+  };
+  // Carry over BillEmail from estimate if available
+  if (estimate.BillEmail?.Address) {
+    invoicePayload.BillEmail = estimate.BillEmail;
+    invoicePayload.EmailStatus = "NeedToSend";
+  }
+
+  const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(invoicePayload) });
+
+  let createdInvoice = data.Invoice;
+
+  // Read back to capture InvoiceLink (not returned on POST)
+  if (createdInvoice?.Id && !createdInvoice?.InvoiceLink) {
+    try {
+      const readBack = await qbFetch(config, `invoice/${createdInvoice.Id}?include=invoiceLink`, {});
+      if (readBack?.Invoice?.InvoiceLink) {
+        createdInvoice = readBack.Invoice;
+      }
+    } catch (e) {
+      console.warn("[convert-estimate] Read-back for InvoiceLink failed:", e);
+    }
+  }
+
+  // Mirror the converted invoice for immediate availability
+  if (createdInvoice?.Id) {
+    try {
+      let mirrorCustomerId: string | null = null;
+      const custRefVal = createdInvoice.CustomerRef?.value;
+      if (custRefVal) {
+        const { data: custRow } = await supabase
+          .from("customers")
+          .select("id")
+          .eq("quickbooks_id", custRefVal)
+          .maybeSingle();
+        mirrorCustomerId = custRow?.id || null;
+      }
+      await supabase.from("accounting_mirror").upsert({
+        quickbooks_id: String(createdInvoice.Id),
+        entity_type: "Invoice",
+        balance: createdInvoice.Balance || 0,
+        customer_id: mirrorCustomerId,
+        company_id: companyId,
+        data: createdInvoice,
+        last_synced_at: new Date().toISOString(),
+      }, { onConflict: "quickbooks_id" });
+    } catch (mirrorErr) {
+      console.warn("[convert-estimate] Mirror upsert failed:", mirrorErr);
+    }
+  }
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_converted", "Estimate", estimateId, {
+    newInvoiceId: createdInvoice?.Id, newDocNumber: createdInvoice?.DocNumber,
+  });
+
+  return jsonRes({
+    success: true,
+    invoice: createdInvoice,
+    docNumber: createdInvoice?.DocNumber,
+    invoiceLink: createdInvoice?.InvoiceLink || null,
+  });
+}
+
+// ─── Send Invoice via Email ───────────────────────────────────────
+
+async function handleSendInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { invoiceId, email } = body as { invoiceId: string; email?: string };
+
+  if (!invoiceId) throw new Error("Invoice ID is required");
+
+  const emailParam = email ? `?sendTo=${encodeURIComponent(email)}` : "";
+  const data = await qbFetch(config, `invoice/${invoiceId}/send${emailParam}`, { method: "POST", body: "" });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_sent", "Invoice", invoiceId, {
+    email, docNumber: data.Invoice?.DocNumber,
+  });
+
+  return jsonRes({ success: true, invoice: data.Invoice });
+}
+
+// ─── Void Invoice ─────────────────────────────────────────────────
+
+async function handleVoidInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { invoiceId, syncToken } = body as { invoiceId: string; syncToken: string };
+
+  if (!invoiceId || !syncToken) throw new Error("Invoice ID and SyncToken are required");
+
+  const payload = { Id: invoiceId, SyncToken: syncToken, sparse: true };
+  const data = await qbFetch(config, "invoice?operation=void", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_voided", "Invoice", invoiceId, { syncToken });
+
+  return jsonRes({ success: true, invoice: data.Invoice });
+}
+
+// ─── Payroll: List Employees ──────────────────────────────────────
+
+async function handleListEmployees(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Employee");
+  return jsonRes({ employees: data.QueryResponse?.Employee || [] });
+}
+
+// ─── Payroll: Get Employee ────────────────────────────────────────
+
+async function handleGetEmployee(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { employeeId } = body as { employeeId: string };
+  if (!employeeId) throw new Error("Employee ID is required");
+
+  const data = await qbFetch(config, `employee/${employeeId}`);
+  return jsonRes({ employee: data.Employee });
+}
+
+// ─── Update Invoice (sparse) ──────────────────────────────────────
+
+async function handleUpdateInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { invoiceId, updates } = body as { invoiceId: string; updates: Record<string, unknown> };
+  if (!invoiceId) throw new Error("Invoice ID is required");
+
+  // Resolve SalesTermRef: frontend may send { name: "Net 30" } but QB needs { value: "3" }
+  if (updates.SalesTermRef) {
+    const termRef = updates.SalesTermRef as Record<string, unknown>;
+    const termName = termRef.name as string | undefined;
+    const termValue = termRef.value as string | undefined;
+    if (termName && (!termValue || isNaN(Number(termValue)))) {
+      const resolvedId = await resolveTermId(config, termName);
+      if (resolvedId) {
+        updates.SalesTermRef = { value: resolvedId, name: termName };
+      } else {
+        // Can't resolve — remove to avoid QB validation error
+        delete updates.SalesTermRef;
+      }
+    }
+  }
+
+  // Resolve ShipMethodRef similarly if needed
+  if (updates.ShipMethodRef) {
+    const shipRef = updates.ShipMethodRef as Record<string, unknown>;
+    if (shipRef.name && !shipRef.value) {
+      // QB ShipMethodRef also needs a value; query for it
+      try {
+        const q = `select Id, Name from ShipMethod where Name = '${(shipRef.name as string).replace(/'/g, "''")}'`;
+        const r = await qbFetch(config, `query?query=${encodeURIComponent(q)}`) as Record<string, unknown>;
+        const methods = (r?.QueryResponse as Record<string, unknown>)?.ShipMethod as Record<string, unknown>[] | undefined;
+        if (methods && methods.length > 0) {
+          updates.ShipMethodRef = { value: String(methods[0].Id), name: shipRef.name };
+        } else {
+          delete updates.ShipMethodRef;
+        }
+      } catch {
+        delete updates.ShipMethodRef;
+      }
+    }
+  }
+
+  // Fetch current invoice to get latest SyncToken
+  const current = await qbFetch(config, `invoice/${invoiceId}?include=invoiceLink`);
+  const invoice = current.Invoice;
+
+  const payload = {
+    ...invoice,
+    ...updates,
+    Id: invoiceId,
+    SyncToken: invoice.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "invoice", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_invoice_updated", "Invoice", invoiceId, {
+    docNumber: data.Invoice?.DocNumber, updatedFields: Object.keys(updates),
+  });
+
+  return jsonRes({ success: true, invoice: data.Invoice, docNumber: data.Invoice?.DocNumber });
+}
+
+// ─── Payroll: Update Employee ─────────────────────────────────────
+
+async function handleUpdateEmployee(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { employeeId, updates } = body as { employeeId: string; updates: Record<string, unknown> };
+  if (!employeeId) throw new Error("Employee ID is required");
+
+  // Fetch current employee to get SyncToken
+  const current = await qbFetch(config, `employee/${employeeId}`);
+  const employee = current.Employee;
+
+  const payload = {
+    ...employee,
+    ...updates,
+    Id: employeeId,
+    SyncToken: employee.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "employee", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, employee: data.Employee });
+}
+
+// ─── Payroll: List Time Activities ────────────────────────────────
+
+async function handleListTimeActivities(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "TimeActivity");
+  return jsonRes({ timeActivities: data.QueryResponse?.TimeActivity || [] });
+}
+
+// ─── Payroll: Create Payroll Correction (Journal Entry) ───────────
+
+async function handleCreatePayrollCorrection(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { employeeName, employeeId, lines, memo, txnDate } = body as {
+    employeeName: string;
+    employeeId: string;
+    lines: { accountId: string; accountName: string; amount: number; type: "debit" | "credit"; description?: string }[];
+    memo?: string;
+    txnDate?: string;
+  };
+
+  if (!employeeId || !lines || lines.length === 0) {
+    throw new Error("Employee ID and at least one journal line are required");
+  }
+
+  // Validate debits = credits
+  const totalDebits = lines.filter(l => l.type === "debit").reduce((s, l) => s + l.amount, 0);
+  const totalCredits = lines.filter(l => l.type === "credit").reduce((s, l) => s + l.amount, 0);
+  if (Math.abs(totalDebits - totalCredits) > 0.01) {
+    throw new Error(`Debits ($${totalDebits.toFixed(2)}) must equal Credits ($${totalCredits.toFixed(2)})`);
+  }
+
+  const payload = {
+    TxnDate: txnDate || new Date().toISOString().split("T")[0],
+    PrivateNote: memo || `Payroll correction for ${employeeName}`,
+    Line: lines.map(line => ({
+      DetailType: "JournalEntryLineDetail",
+      Amount: line.amount,
+      Description: line.description || `Payroll correction – ${employeeName}`,
+      JournalEntryLineDetail: {
+        PostingType: line.type === "debit" ? "Debit" : "Credit",
+        AccountRef: { value: line.accountId, name: line.accountName },
+        Entity: {
+          Type: "Employee",
+          EntityRef: { value: employeeId, name: employeeName },
+        },
+      },
+    })),
+  };
+
+  const data = await qbFetch(config, "journalentry", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, journalEntry: data.JournalEntry, docNumber: data.JournalEntry?.DocNumber });
+}
+
+// ─── Account QuickReport (Transaction Register) ────────────────────
+
+async function handleAccountQuickReport(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  body: Record<string, unknown>,
+) {
+  const config = await getQBConfig(supabase, userId);
+  const accountId = body.accountId as string;
+  if (!accountId) throw new Error("accountId is required");
+
+  const today = new Date();
+  const defaultStart = new Date(today);
+  defaultStart.setDate(defaultStart.getDate() - 90);
+
+  const startDate = (body.startDate as string) || defaultStart.toISOString().slice(0, 10);
+  const endDate = (body.endDate as string) || today.toISOString().slice(0, 10);
+
+  const report = await qbFetch(
+    config,
+    `reports/TransactionListByAccount?account=${accountId}&start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount,rbal_nat_amount`,
+  ) as Record<string, unknown>;
+
+  // Parse the QB report response
+  const transactions: { date: string; type: string; num: string; name: string; memo: string; account: string; amount: number; balance: number }[] = [];
+  let beginningBalance = 0;
+
+  const columns = (report.Columns as any)?.Column || [];
+  const colNames = columns.map((c: any) => c.ColTitle as string);
+
+  function parseRows(rows: any[]) {
+    for (const row of rows) {
+      if (row.Header?.ColData) {
+        const headerText = row.Header.ColData[0]?.value || "";
+        if (headerText === "Beginning Balance") {
+          const balCol = row.Header.ColData[colNames.length - 1];
+          beginningBalance = parseFloat(balCol?.value || "0");
+        }
+      }
+      if (row.Rows?.Row) {
+        parseRows(row.Rows.Row);
+      }
+      if (row.ColData) {
+        const vals = row.ColData.map((c: any) => c.value || "");
+        transactions.push({
+          date: vals[0] || "",
+          type: vals[1] || "",
+          num: vals[2] || "",
+          name: vals[3] || "",
+          memo: vals[4] || "",
+          account: vals[5] || "",
+          amount: parseFloat(vals[6] || "0"),
+          balance: parseFloat(vals[7] || "0"),
+        });
+      }
+    }
+  }
+
+  const reportRows = (report.Rows as any)?.Row || [];
+  parseRows(reportRows);
+
+  return jsonRes({ transactions, beginningBalance, startDate, endDate, accountId });
+}
+
+// ─── Sales Receipts ───────────────────────────────────────────────
+
+async function handleListSalesReceipts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "SalesReceipt");
+  return jsonRes({ salesReceipts: data.QueryResponse?.SalesReceipt || [] });
+}
+
+async function handleCreateSalesReceipt(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { customerId, customerName, lineItems, memo, depositToAccountId, paymentMethodId } = body as {
+    customerId: string; customerName: string;
+    lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
+    memo?: string; depositToAccountId?: string; paymentMethodId?: string;
+  };
+  if (!customerId || !lineItems || lineItems.length === 0) throw new Error("Customer ID and line items required");
+
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lineItems.map(item => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
+    })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ...(memo && { CustomerMemo: { value: memo } }),
+    ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
+    ...(paymentMethodId && { PaymentMethodRef: { value: paymentMethodId } }),
+  };
+
+  const data = await qbFetch(config, "salesreceipt", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, salesReceipt: (data as any).SalesReceipt, docNumber: (data as any).SalesReceipt?.DocNumber });
+}
+
+// ─── Refund Receipts ──────────────────────────────────────────────
+
+async function handleListRefundReceipts(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "RefundReceipt");
+  return jsonRes({ refundReceipts: data.QueryResponse?.RefundReceipt || [] });
+}
+
+async function handleCreateRefundReceipt(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { customerId, customerName, lineItems, memo, depositToAccountId } = body as {
+    customerId: string; customerName: string;
+    lineItems: { description: string; amount: number; quantity?: number; serviceId?: string }[];
+    memo?: string; depositToAccountId?: string;
+  };
+  if (!customerId || !lineItems || lineItems.length === 0) throw new Error("Customer ID and line items required");
+
+  const payload: Record<string, unknown> = {
+    CustomerRef: { value: customerId, name: customerName },
+    Line: lineItems.map(item => ({
+      DetailType: "SalesItemLineDetail",
+      Amount: item.amount * (item.quantity || 1),
+      Description: item.description,
+      SalesItemLineDetail: { Qty: item.quantity || 1, UnitPrice: item.amount, ...(item.serviceId && { ItemRef: { value: item.serviceId } }) },
+    })),
+    GlobalTaxCalculation: "TaxExcluded",
+    ...(memo && { CustomerMemo: { value: memo } }),
+    ...(depositToAccountId && { DepositToAccountRef: { value: depositToAccountId } }),
+  };
+
+  const data = await qbFetch(config, "refundreceipt", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, refundReceipt: (data as any).RefundReceipt, docNumber: (data as any).RefundReceipt?.DocNumber });
+}
+
+// ─── Deposits ─────────────────────────────────────────────────────
+
+async function handleListDeposits(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Deposit");
+  return jsonRes({ deposits: data.QueryResponse?.Deposit || [] });
+}
+
+async function handleCreateDeposit(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { depositToAccountId, lineItems, memo, txnDate } = body as {
+    depositToAccountId: string;
+    lineItems: { amount: number; accountId: string; description?: string; entityType?: string; entityId?: string }[];
+    memo?: string; txnDate?: string;
+  };
+  if (!depositToAccountId || !lineItems || lineItems.length === 0) throw new Error("Deposit account and line items required");
+
+  const payload: Record<string, unknown> = {
+    DepositToAccountRef: { value: depositToAccountId },
+    Line: lineItems.map(item => ({
+      Amount: item.amount,
+      DetailType: "DepositLineDetail",
+      DepositLineDetail: {
+        AccountRef: { value: item.accountId },
+        ...(item.description && { memo: item.description }),
+        ...(item.entityType && item.entityId && { Entity: { Type: item.entityType, EntityRef: { value: item.entityId } } }),
+      },
+    })),
+    ...(memo && { PrivateNote: memo }),
+    ...(txnDate && { TxnDate: txnDate }),
+  };
+
+  const data = await qbFetch(config, "deposit", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, deposit: (data as any).Deposit, docNumber: (data as any).Deposit?.DocNumber });
+}
+
+// ─── Bank Transfer ────────────────────────────────────────────────
+
+async function handleCreateTransfer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { fromAccountId, toAccountId, amount, memo, txnDate } = body as {
+    fromAccountId: string; toAccountId: string; amount: number; memo?: string; txnDate?: string;
+  };
+  if (!fromAccountId || !toAccountId || !amount) throw new Error("From/To accounts and amount required");
+
+  const payload: Record<string, unknown> = {
+    FromAccountRef: { value: fromAccountId },
+    ToAccountRef: { value: toAccountId },
+    Amount: amount,
+    ...(memo && { PrivateNote: memo }),
+    ...(txnDate && { TxnDate: txnDate }),
+  };
+
+  const data = await qbFetch(config, "transfer", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, transfer: (data as any).Transfer });
+}
+
+// ─── General Journal Entries ──────────────────────────────────────
+
+async function handleListJournalEntries(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "JournalEntry");
+  return jsonRes({ journalEntries: data.QueryResponse?.JournalEntry || [] });
+}
+
+async function handleCreateJournalEntry(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const { lines, memo, txnDate } = body as {
+    lines: { accountId: string; accountName: string; amount: number; type: "debit" | "credit"; description?: string }[];
+    memo?: string; txnDate?: string;
+  };
+  if (!lines || lines.length === 0) throw new Error("At least one journal line required");
+
+  const totalDebits = lines.filter(l => l.type === "debit").reduce((s, l) => s + l.amount, 0);
+  const totalCredits = lines.filter(l => l.type === "credit").reduce((s, l) => s + l.amount, 0);
+  if (Math.abs(totalDebits - totalCredits) > 0.01) {
+    throw new Error(`Debits ($${totalDebits.toFixed(2)}) must equal Credits ($${totalCredits.toFixed(2)})`);
+  }
+
+  const payload = {
+    TxnDate: txnDate || new Date().toISOString().split("T")[0],
+    PrivateNote: memo || "General journal entry",
+    Line: lines.map(line => ({
+      DetailType: "JournalEntryLineDetail",
+      Amount: line.amount,
+      Description: line.description || "",
+      JournalEntryLineDetail: {
+        PostingType: line.type === "debit" ? "Debit" : "Credit",
+        AccountRef: { value: line.accountId, name: line.accountName },
+      },
+    })),
+  };
+
+  const data = await qbFetch(config, "journalentry", { method: "POST", body: JSON.stringify(payload) });
+  return jsonRes({ success: true, journalEntry: (data as any).JournalEntry, docNumber: (data as any).JournalEntry?.DocNumber });
+}
+
+// ─── Aged Receivables Report ──────────────────────────────────────
+
+async function handleGetAgedReceivables(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/AgedReceivableDetail?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Aged Payables Report ─────────────────────────────────────────
+
+async function handleGetAgedPayables(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/AgedPayableDetail?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── General Ledger Report ────────────────────────────────────────
+
+async function handleGetGeneralLedger(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/GeneralLedger?start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount,rbal_nat_amount`);
+  return jsonRes({ report: data });
+}
+
+// ─── Trial Balance Report ─────────────────────────────────────────
+
+async function handleGetTrialBalance(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/TrialBalance?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Transaction List by Date ─────────────────────────────────────
+
+async function handleGetTransactionList(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+  const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/TransactionList?start_date=${startDate}&end_date=${endDate}&columns=tx_date,txn_type,doc_num,name,memo,account,subt_nat_amount`);
+  return jsonRes({ report: data });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 2: Extended Report Handlers
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── Customer Balance Report ──────────────────────────────────────
+
+async function handleGetCustomerBalance(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/CustomerBalanceSummary?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Customer Balance Detail Report ───────────────────────────────
+
+async function handleGetCustomerBalanceDetail(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/CustomerBalanceDetail?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── Vendor Balance Report ────────────────────────────────────────
+
+async function handleGetVendorBalance(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+  const data = await qbFetch(config, `reports/VendorBalanceSummary?report_date=${asOfDate}`);
+  return jsonRes({ report: data });
+}
+
+// ─── AR Aging Summary Report ──────────────────────────────────────
+
+async function handleGetARAgingSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  return withReportFallback("AgedReceivable", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/AgedReceivable?report_date=${asOfDate}`);
+    return jsonRes({ report: data });
+  });
+}
+
+// ─── AP Aging Summary Report ──────────────────────────────────────
+
+async function handleGetAPAgingSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  return withReportFallback("AgedPayable", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const asOfDate = (body.asOfDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/AgedPayable?report_date=${asOfDate}`);
+    return jsonRes({ report: data });
+  });
+}
+
+// ─── Customer Income Report ───────────────────────────────────────
+
+async function handleGetCustomerIncome(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  return withReportFallback("CustomerIncome", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/CustomerIncome?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Phase 17: New Action Handlers
+// ═══════════════════════════════════════════════════════════════════
+
+// ─── Cash Flow Report ─────────────────────────────────────────────
+
+async function handleGetCashFlow(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  return withReportFallback("CashFlow", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/CashFlow?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
+}
+
+// ─── Tax Summary Report ───────────────────────────────────────────
+
+async function handleGetTaxSummary(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  return withReportFallback("TaxSummary", async () => {
+    const config = await getQBConfig(supabase, userId);
+    const startDate = (body.startDate as string) || new Date(new Date().getFullYear(), 0, 1).toISOString().split("T")[0];
+    const endDate = (body.endDate as string) || new Date().toISOString().split("T")[0];
+    const data = await qbFetch(config, `reports/TaxSummary?start_date=${startDate}&end_date=${endDate}`);
+    return jsonRes({ report: data });
+  });
+}
+
+// ─── Bill Payments ────────────────────────────────────────────────
+
+async function handleCreateBillPayment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const payload = body.billPayment as Record<string, unknown>;
+  if (!payload) throw new Error("Missing billPayment payload");
+  const data = await qbFetch(config, "billpayment", { method: "POST", body: JSON.stringify(payload) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+async function handleListBillPayments(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "BillPayment");
+  return jsonRes(data);
+}
+
+// ─── Customer/Vendor Write-Back ───────────────────────────────────
+
+async function handleCreateCustomer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+
+  const displayName = body.displayName as string;
+  const email = (body.email as string) || undefined;
+  const phone = (body.phone as string) || undefined;
+  const address = body.address as string | undefined;
+  const localCustomerId = body.localCustomerId as string | undefined;
+
+  if (!displayName) throw new Error("Missing displayName for customer creation");
+
+  // Check if customer already exists in QB by display name
+  const existingQuery = `SELECT * FROM Customer WHERE DisplayName = '${displayName.replace(/'/g, "''")}'`;
+  const existingData = await qbFetch(config, `query?query=${encodeURIComponent(existingQuery)}`) as Record<string, unknown>;
+  const existingCustomers = ((existingData as any)?.QueryResponse?.Customer as any[]) || [];
+
+  let qbCustomer: Record<string, unknown>;
+
+  if (existingCustomers.length > 0) {
+    qbCustomer = existingCustomers[0];
+  } else {
+    // Create new QB customer
+    const payload: Record<string, unknown> = {
+      DisplayName: displayName,
+      PrimaryEmailAddr: email ? { Address: email } : undefined,
+      PrimaryPhone: phone ? { FreeFormNumber: phone } : undefined,
+    };
+    // Parse address if provided as single string
+    if (address) {
+      payload.BillAddr = { Line1: address };
+    }
+    // Remove undefined
+    Object.keys(payload).forEach(k => { if (payload[k] === undefined) delete payload[k]; });
+
+    const result = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify(payload) }) as Record<string, unknown>;
+    qbCustomer = (result as any).Customer || result;
+  }
+
+  const qbId = String(qbCustomer.Id);
+
+  // Link local customer record to QB
+  if (localCustomerId && qbId) {
+    await supabase
+      .from("customers")
+      .update({ quickbooks_id: qbId })
+      .eq("id", localCustomerId)
+      .eq("company_id", companyId);
+  }
+
+  await updateLastSync(supabase, userId);
+  return jsonRes({ success: true, qbCustomerId: qbId, displayName: qbCustomer.DisplayName });
+}
+
+async function handleUpdateCustomer(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const customer = body.customer as Record<string, unknown>;
+  if (!customer?.Id || !customer?.SyncToken) throw new Error("Missing customer Id/SyncToken for sparse update");
+  customer.sparse = true;
+  const data = await qbFetch(config, "customer", { method: "POST", body: JSON.stringify(customer) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+async function handleUpdateVendor(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const vendor = body.vendor as Record<string, unknown>;
+  if (!vendor?.Id || !vendor?.SyncToken) throw new Error("Missing vendor Id/SyncToken for sparse update");
+  vendor.sparse = true;
+  const data = await qbFetch(config, "vendor", { method: "POST", body: JSON.stringify(vendor) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+// ─── Classes & Departments ────────────────────────────────────────
+
+async function handleListClasses(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Class");
+  return jsonRes(data);
+}
+
+async function handleListDepartments(supabase: ReturnType<typeof createClient>, userId: string) {
+  const config = await getQBConfig(supabase, userId);
+  const data = await qbQuery(config, "Department");
+  return jsonRes(data);
+}
+
+async function handleCreateClass(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const cls = body.class as Record<string, unknown>;
+  if (!cls?.Name) throw new Error("Missing class Name");
+  const data = await qbFetch(config, "class", { method: "POST", body: JSON.stringify(cls) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+// ─── Purchase (Expense) Creation ──────────────────────────────────
+
+async function handleCreatePurchase(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const purchase = body.purchase as Record<string, unknown>;
+  if (!purchase) throw new Error("Missing purchase payload");
+  const data = await qbFetch(config, "purchase", { method: "POST", body: JSON.stringify(purchase) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+// ─── Attachments API ──────────────────────────────────────────────
+
+async function handleUploadAttachment(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const attachable = body.attachable as Record<string, unknown>;
+  if (!attachable) throw new Error("Missing attachable payload");
+  // Create attachable metadata (link file to entity)
+  const data = await qbFetch(config, "attachable", { method: "POST", body: JSON.stringify(attachable) });
+  await updateLastSync(supabase, userId);
+  return jsonRes(data);
+}
+
+async function handleListAttachments(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const entityType = body.entityType as string;
+  const entityId = body.entityId as string;
+  let whereClause: string | undefined;
+  if (entityType && entityId) {
+    whereClause = `AttachableRef.EntityRef.Type = '${entityType}' AND AttachableRef.EntityRef.value = '${entityId}'`;
+  }
+  const data = await qbQuery(config, "Attachable", 1000, whereClause);
+  return jsonRes(data);
+}
+
+// ─── Read Invoice (single, with InvoiceLink) ──────────────────────
+
+async function handleReadInvoice(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const invoiceId = body.invoiceId as string;
+  if (!invoiceId) throw new Error("invoiceId is required");
+
+  const data = await qbFetch(config, `invoice/${invoiceId}?include=invoiceLink`, {});
+  return jsonRes({ success: true, invoice: data?.Invoice || data });
+}
+
+// ─── Get Invoice as PDF ───────────────────────────────────────────
+
+async function handleGetInvoicePdf(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const invoiceId = body.invoiceId as string;
+  if (!invoiceId) throw new Error("invoiceId is required");
+
+  // QB API returns PDF binary when Accept: application/pdf
+  const separator = "?";
+  const versionedPath = `invoice/${invoiceId}/pdf${separator}minorversion=69`;
+  const url = `${QUICKBOOKS_API_BASE}/v3/company/${config.realm_id}/${versionedPath}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${config.access_token}`,
+      Accept: "application/pdf",
+    },
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`QB PDF error (${res.status}): ${errText.slice(0, 300)}`);
+  }
+
+  const pdfBuffer = await res.arrayBuffer();
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+  return jsonRes({ success: true, pdf: base64, contentType: "application/pdf" });
+}
+
+// ─── Update Estimate (sparse) ─────────────────────────────────────
+
+async function handleUpdateEstimate(supabase: ReturnType<typeof createClient>, userId: string, body: Record<string, unknown>) {
+  const config = await getQBConfig(supabase, userId);
+  const companyId = await getUserCompanyId(supabase, userId);
+  const { estimateId, updates } = body as { estimateId: string; updates: Record<string, unknown> };
+  if (!estimateId) throw new Error("Estimate ID is required");
+
+  const current = await qbFetch(config, `estimate/${estimateId}`);
+  const estimate = current.Estimate;
+
+  const payload = {
+    ...estimate,
+    ...updates,
+    Id: estimateId,
+    SyncToken: estimate.SyncToken,
+    sparse: true,
+  };
+
+  const data = await qbFetch(config, "estimate", { method: "POST", body: JSON.stringify(payload) });
+
+  await logAuditEvent(supabase, companyId, userId, "qb_estimate_updated", "Estimate", estimateId, {
+    docNumber: data.Estimate?.DocNumber, updatedFields: Object.keys(updates),
+  });
+
+  return jsonRes({ success: true, estimate: data.Estimate, docNumber: data.Estimate?.DocNumber });
+}

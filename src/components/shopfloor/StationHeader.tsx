@@ -1,0 +1,200 @@
+import { ArrowLeft, Shield, ShieldOff, Eye, ChevronDown, Building, Layers, FolderOpen, Check } from "lucide-react";
+import { QRJobScanner } from "./QRJobScanner";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+import { useNavigate } from "react-router-dom";
+
+interface StationHeaderProps {
+  machineName: string;
+  machineModel?: string | null;
+  barSizeRange?: string;
+  projectName?: string | null;
+  markNumber?: string | null;
+  drawingRef?: string | null;
+  remainingCount?: number;
+  canWrite: boolean;
+  isSupervisor?: boolean;
+  onToggleSupervisor?: () => void;
+  onBack?: () => void;
+  backTo?: string;
+  /** Job workspace name shown in top-right chip */
+  workspaceName?: string | null;
+  /** Show "BEDS" suffix in title */
+  showBedsSuffix?: boolean;
+  /** Available projects for switching */
+  projects?: { id: string; name: string; count: number }[];
+  /** Currently selected project id */
+  selectedProjectId?: string | null;
+  /** Callback when user picks a different project */
+  onSelectProject?: (projectId: string | null) => void;
+}
+
+export function StationHeader({
+  machineName,
+  machineModel,
+  barSizeRange,
+  projectName,
+  markNumber,
+  drawingRef,
+  remainingCount,
+  canWrite,
+  isSupervisor = false,
+  onToggleSupervisor,
+  onBack,
+  backTo = "/shopfloor/station",
+  workspaceName,
+  showBedsSuffix = true,
+  projects,
+  selectedProjectId,
+  onSelectProject,
+}: StationHeaderProps) {
+  const navigate = useNavigate();
+
+  // Build title: "DTX400 10-15MM BEDS" or "BENDER B36 BEDS"
+  const machineLabel = machineModel || machineName;
+  const titleParts = [machineLabel.toUpperCase()];
+  if (barSizeRange) titleParts.push(barSizeRange);
+  if (showBedsSuffix) titleParts.push("BEDS");
+  const mainTitle = titleParts.join(" ");
+
+  const hasProjects = projects && projects.length > 0 && onSelectProject;
+
+  return (
+    <header className="flex items-start justify-between px-4 py-3 bg-card border-b border-border">
+      {/* Left: Back + Title */}
+      <div className="flex items-center gap-3 min-w-0">
+        <Button variant="ghost" size="icon" onClick={() => onBack ? onBack() : navigate(backTo)}>
+          <ArrowLeft className="w-5 h-5" />
+        </Button>
+
+        <h1 className="font-bold text-base sm:text-lg uppercase tracking-wide text-foreground whitespace-normal break-words">
+          {mainTitle}
+        </h1>
+      </div>
+
+      {/* Center: Mark/Drawing info (detail views only) */}
+      {(markNumber || drawingRef) && (
+        <div className="hidden sm:flex items-center gap-2">
+          {markNumber && (
+            <>
+              <span className="text-sm font-bold text-foreground">MARK {markNumber}</span>
+              {drawingRef && <span className="text-muted-foreground">|</span>}
+            </>
+          )}
+          {drawingRef && (
+            <span className="text-sm text-primary font-mono">DWG# {drawingRef}</span>
+          )}
+        </div>
+      )}
+
+      {/* Right: Actions */}
+      <div className="flex items-center gap-2">
+        {/* QR Scanner */}
+        <QRJobScanner machineId={undefined} />
+
+        {/* Pool back-link for bidirectional navigation */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5 text-xs rounded-full border-border"
+          onClick={() => navigate("/shopfloor/pool")}
+        >
+          <Layers className="w-3.5 h-3.5" />
+          <span className="hidden sm:inline">Pool</span>
+        </Button>
+        {remainingCount !== undefined && (
+          <Badge 
+            className={cn(
+              "font-mono text-sm font-bold px-3 py-1.5",
+              remainingCount <= 3 
+                ? "bg-green-500/20 text-green-400 border-green-500/40 animate-pulse" 
+                : remainingCount <= 10 
+                  ? "bg-amber-500/20 text-amber-400 border-amber-500/40"
+                  : "border-primary/40 text-primary"
+            )}
+            variant="outline"
+          >
+            {remainingCount} REMAINING
+          </Badge>
+        )}
+
+        {/* Supervisor toggle — styled as badge toggle */}
+        {canWrite && onToggleSupervisor ? (
+          <Button
+            variant={isSupervisor ? "destructive" : "outline"}
+            size="sm"
+            className={`gap-1.5 text-xs rounded-full ${
+              isSupervisor 
+                ? "bg-destructive hover:bg-destructive/90" 
+                : "border-border"
+            }`}
+            onClick={onToggleSupervisor}
+          >
+            {isSupervisor ? (
+              <>
+                <ShieldOff className="w-3.5 h-3.5" />
+                Exit Supervisor
+              </>
+            ) : (
+              <>
+                <Shield className="w-3.5 h-3.5" />
+                Supervisor
+              </>
+            )}
+          </Button>
+        ) : canWrite ? (
+          <Badge className="bg-warning/20 text-warning border-warning/30 gap-1">
+            <Shield className="w-3 h-3" />
+            SUPERVISOR
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="gap-1 text-muted-foreground">
+            <Eye className="w-3 h-3" />
+            VIEW ONLY
+          </Badge>
+        )}
+
+        {/* Workspace chip — dropdown when multiple projects, static otherwise */}
+        {workspaceName && hasProjects ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="inline-flex items-center gap-1.5 bg-foreground text-background font-bold text-xs px-3 py-1.5 rounded-full cursor-pointer hover:bg-foreground/90 transition-colors">
+                <Building className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">{workspaceName}</span>
+                <ChevronDown className="w-3 h-3" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              {projects!.map((proj) => (
+                <DropdownMenuItem
+                  key={proj.id}
+                  onClick={() => onSelectProject!(proj.id)}
+                  className="flex items-center gap-2"
+                >
+                  <FolderOpen className="w-4 h-4 text-primary shrink-0" />
+                  <span className="flex-1 truncate font-medium">{proj.name}</span>
+                  <span className="text-[10px] text-muted-foreground">{proj.count}</span>
+                  {proj.id === selectedProjectId && (
+                    <Check className="w-4 h-4 text-primary shrink-0" />
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : workspaceName ? (
+          <Badge className="bg-foreground text-background font-bold text-xs gap-1.5 px-3 py-1.5 rounded-full">
+            <Building className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{workspaceName}</span>
+          </Badge>
+        ) : null}
+      </div>
+    </header>
+  );
+}

@@ -1,0 +1,135 @@
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { useEffect } from "react";
+
+export interface CompletedBundle {
+  projectName: string;
+  customerName: string | null;
+  projectDisplayName: string | null;
+  planName: string;
+  barlistRevisionNo: number | null;
+  barlistStatus: string | null;
+  cutPlanStatus: string | null;
+  cutPlanId: string;
+  items: CompletedBundleItem[];
+  totalPieces: number;
+}
+
+export interface CompletedBundleItem {
+  id: string;
+  mark_number: string | null;
+  drawing_ref: string | null;
+  bar_code: string;
+  cut_length_mm: number;
+  total_pieces: number;
+  asa_shape_code: string | null;
+}
+
+export function useCompletedBundles(options?: { pickupOnly?: boolean }) {
+  const pickupOnly = options?.pickupOnly ?? false;
+  const { user } = useAuth();
+  const { companyId } = useCompanyId();
+  const queryClient = useQueryClient();
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["completed-bundles", companyId, pickupOnly],
+    enabled: !!user && !!companyId,
+    queryFn: async () => {
+      const { data: items, error: err } = await supabase
+        .from("cut_plan_items")
+        .select("*, cut_plans!inner(id, name, status, project_name, company_id, project_id, barlist_id, projects(name, customer_id, customers(name)), barlists(name, revision_no, status))")
+        .eq("phase", "complete")
+        .eq("cut_plans.company_id", companyId!);
+
+      if (err) throw err;
+      if (!items?.length) return [];
+
+      // Group by cutPlanId to prevent merge bugs when multiple plans share a project name
+      const byPlan = new Map<string, {
+        projectName: string;
+        customerName: string | null;
+        projectDisplayName: string | null;
+        planName: string;
+        barlistRevisionNo: number | null;
+        barlistStatus: string | null;
+        cutPlanStatus: string | null;
+        items: CompletedBundleItem[];
+      }>();
+      for (const item of items as Record<string, unknown>[]) {
+        const cutPlans = item.cut_plans as Record<string, unknown> | undefined;
+        const projects = cutPlans?.projects as Record<string, unknown> | undefined;
+        const customers = projects?.customers as Record<string, unknown> | undefined;
+        const barlists = cutPlans?.barlists as Record<string, unknown> | undefined;
+        const key = item.cut_plan_id as string;
+        if (!byPlan.has(key)) {
+          byPlan.set(key, {
+            projectName: (cutPlans?.project_name as string) || (cutPlans?.name as string) || "Unassigned",
+            customerName: (customers?.name as string) || null,
+            projectDisplayName: (projects?.name as string) || null,
+            planName: (cutPlans?.name as string) || "",
+            barlistRevisionNo: typeof barlists?.revision_no === "number" ? (barlists.revision_no as number) : null,
+            // Display status reflects this list's actual state (items are phase=complete and
+            // released to Loading), NOT raw barlists.status which can lag at 'in_production'.
+            barlistStatus: "ready_for_loading",
+            cutPlanStatus: "ready_for_loading",
+            items: [],
+          });
+        }
+        byPlan.get(key)!.items.push({
+          id: item.id as string,
+          mark_number: item.mark_number as string | null,
+          drawing_ref: item.drawing_ref as string | null,
+          bar_code: item.bar_code as string,
+          cut_length_mm: item.cut_length_mm as number,
+          total_pieces: item.total_pieces as number,
+          asa_shape_code: item.asa_shape_code as string | null,
+        });
+      }
+
+      const bundles: CompletedBundle[] = [];
+      for (const [cutPlanId, data] of byPlan) {
+        bundles.push({
+          projectName: data.projectName,
+          customerName: data.customerName,
+          projectDisplayName: data.projectDisplayName,
+          planName: data.planName,
+          barlistRevisionNo: data.barlistRevisionNo,
+          barlistStatus: data.barlistStatus,
+          cutPlanStatus: data.cutPlanStatus,
+          cutPlanId,
+          items: data.items,
+          totalPieces: data.items.reduce((sum, i) => sum + i.total_pieces, 0),
+        });
+      }
+      if (pickupOnly) {
+        const { data: deliveryPlans } = await supabase
+          .from("deliveries")
+          .select("cut_plan_id")
+          .eq("company_id", companyId!)
+          .not("cut_plan_id", "is", null);
+
+        const deliveryPlanIds = new Set(
+          (deliveryPlans ?? []).map((d) => d.cut_plan_id)
+        );
+        return bundles.filter((b) => !deliveryPlanIds.has(b.cutPlanId));
+      }
+
+      return bundles;
+    },
+  });
+
+  // Realtime
+  useEffect(() => {
+    if (!user) return;
+    const channel = supabase
+      .channel(`completed-bundles-live-${companyId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "cut_plan_items" },
+        () => queryClient.invalidateQueries({ queryKey: ["completed-bundles", companyId] }))
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [user, companyId, queryClient]);
+
+  return { bundles: data ?? [], isLoading, error };
+}

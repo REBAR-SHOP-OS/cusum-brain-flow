@@ -1,0 +1,1 @@
+UPDATE public.social_posts SET status='failed', publishing_lock_id=NULL, publishing_started_at=NULL, last_error='Recovered from stale publishing lock' WHERE status='publishing' AND id IN ('a61d5177-0753-436a-9a4b-23e451c06cd8','7f2e98dc-1997-4b1a-ad8c-5a822ab2030e','8aeef3b0-44bb-4f3e-8c9f-a9bc11e7f97d');

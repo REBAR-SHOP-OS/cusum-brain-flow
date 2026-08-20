@@ -1,0 +1,203 @@
+import logoCoin from "@/assets/logo-coin.png";
+
+export const DIM_LEFT = ["A", "B", "C", "D", "E", "F"] as const;
+export const DIM_RIGHT = ["G", "H", "J", "K", "O", "R"] as const;
+export const DIM_COLS = [...DIM_LEFT, ...DIM_RIGHT] as const;
+
+export const MASS_KG_PER_M: Record<string, number> = {
+  "10M": 0.785, "15M": 1.570, "20M": 2.355, "25M": 3.925,
+  "30M": 5.495, "35M": 7.850, "45M": 11.775, "55M": 19.625,
+};
+export function getWeight(size: string | null, lengthVal: number | null, qty: number | null, unit?: string): string {
+  if (!size || !lengthVal) return "";
+  const mass = MASS_KG_PER_M[size.toUpperCase()] || 0;
+  if (!mass) return "";
+  // Convert to mm first based on source unit
+  let mm = lengthVal;
+  if (unit === "in" || unit === "imperial") mm = lengthVal * 25.4;
+  else if (unit === "ft") mm = lengthVal * 304.8;
+  return ((mm / 1000) * mass * (qty || 1)).toFixed(2);
+}
+
+function formatMmToFtIn(mm: number): string {
+  const totalInches = mm / 25.4;
+  const feet = Math.floor(totalInches / 12);
+  const rawInches = totalInches % 12;
+  const eighths = Math.round(rawInches * 8);
+  const wholeInches = Math.floor(eighths / 8);
+  const remainderEighths = eighths % 8;
+  const fractionMap: Record<number, string> = {
+    0: "", 1: "⅛", 2: "¼", 3: "⅜", 4: "½", 5: "⅝", 6: "¾", 7: "⅞",
+  };
+  const frac = fractionMap[remainderEighths] || "";
+  if (feet === 0) {
+    // Sub-inch values: drop the leading "0" so 0¼" renders as ¼"
+    if (wholeInches === 0 && frac) return `${frac}"`;
+    return `${wholeInches}${frac}"`;
+  }
+  if (wholeInches === 0 && !frac) return `${feet}'-0"`;
+  return `${feet}'-${wholeInches}${frac}"`;
+}
+
+function formatVal(val: number | null, unitSystem: string): string {
+  if (val == null || val === 0) return "—";
+  if (unitSystem === "imperial") {
+    // Imperial rows store the raw source value (inches) in `total_length_mm`.
+    // Show as-is with inch mark — no ft-in conversion.
+    return `${val}"`;
+  }
+  return String(Math.round(val));
+}
+
+function formatDim(val: number | null | undefined, unitSystem: string): string {
+  if (val == null || val === 0) return "";
+  // Imperial dim columns also store raw inches — show as-is.
+  return unitSystem === "imperial" ? `${val}"` : String(Math.round(val));
+}
+
+interface RebarTagCardProps {
+  mark: string;
+  size: string;
+  grade: string;
+  qty: number | null;
+  length: number | null;
+  weight: string;
+  shapeType: string;
+  dwg: string;
+  item: number;
+  customer: string;
+  reference: string;
+  address: string;
+  dims: Record<string, number | null>;
+  shapeImageUrl?: string | null;
+  unitSystem?: string;
+  bndl?: string;
+  job?: string;
+  sourceLength?: string;
+  sourceDims?: Record<string, string>;
+}
+
+export function RebarTagCard({
+  mark, size, grade, qty, length, weight, shapeType,
+  dwg, item, customer, reference, address, dims, shapeImageUrl,
+  unitSystem = "metric", sourceLength, sourceDims,
+}: RebarTagCardProps) {
+  const us = unitSystem;
+  const now = new Date();
+  const ts = `${now.toLocaleDateString()} ${now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+
+  return (
+    <div
+      className="rebar-tag border-2 border-black bg-white text-black overflow-hidden font-sans flex flex-col print:break-inside-avoid print:page-break-inside-avoid print:break-after-page"
+      style={{ width: "4in", height: "6in", boxSizing: "border-box", fontVariantNumeric: "tabular-nums" }}
+      
+    >
+      {/* Timestamp */}
+      <div className="flex justify-between items-center px-2 py-0.5 border-b border-black text-[9px] font-bold shrink-0">
+        <span>{ts}</span>
+        <span>REBAR SHOP OS</span>
+      </div>
+
+      {/* Mark / Size / Grade */}
+      <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
+        {[["Mark", mark], ["Size", size], ["Grade", grade]].map(([label, val], i) => (
+          <div key={label} className={`text-center py-2 px-2 ${i < 2 ? "border-r-2 border-black" : ""}`}>
+            <div className="text-[9px] font-bold tracking-widest uppercase">{label}</div>
+            <div className="text-[22px] font-black leading-tight">{val || "—"}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Qty / Length */}
+      <div className="grid grid-cols-3 border-b-2 border-black shrink-0">
+        <div className="text-center py-2 px-2 border-r-2 border-black">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Qty</div>
+          <div className="text-[22px] font-black leading-tight">{qty ?? "—"}</div>
+        </div>
+        <div className="text-center py-2 px-2 border-r-2 border-black">
+          <div className="text-[9px] font-bold tracking-widest uppercase">
+            Length
+          </div>
+          <div className="text-[22px] font-black leading-tight">{sourceLength || formatVal(length, us)}</div>
+        </div>
+        <div className="text-center py-2 px-2">
+          <div className="text-[9px] font-bold tracking-widest uppercase">Dwg</div>
+          <div className="text-[22px] font-black leading-tight">{dwg || "—"}</div>
+        </div>
+      </div>
+
+      {/* Logo + Dims */}
+      <div className="grid shrink-0 border-b-2 border-black" style={{ gridTemplateColumns: "1fr 1.4fr" }}>
+        {/* Brand logo */}
+        <div className="border-r-2 border-black p-2 flex flex-col items-center justify-center">
+          <img src={logoCoin} alt="Brand logo" className="w-16 h-16 object-contain" />
+        </div>
+        {/* Dims grid — parallel columns */}
+        <div className="p-1.5" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "repeat(6, auto)", gap: "0 0.75rem" }}>
+          {DIM_LEFT.map((d, i) => (
+            <div key={d} className="text-xs flex gap-1" style={{ gridRow: i + 1, gridColumn: 1 }}>
+              <span className="font-bold w-3.5">{d}:</span>
+              <span className="font-black">{sourceDims?.[d] || formatDim(dims[d], us)}</span>
+            </div>
+          ))}
+          {DIM_RIGHT.map((d, i) => (
+            <div key={d} className="text-xs flex gap-1" style={{ gridRow: i + 1, gridColumn: 2 }}>
+              <span className="font-bold w-3.5">{d}:</span>
+              <span className="font-black">{sourceDims?.[d] || formatDim(dims[d], us)}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Shape image + Dwg/Item */}
+      <div className="min-h-0 border-b-2 border-black relative flex flex-col items-center justify-start px-2 pt-0.5 pb-1 bg-white" style={{ flex: "1 1 30%" }}>
+        {/* Big item number for visibility */}
+        <div className="absolute bottom-1 left-2 leading-none text-black pointer-events-none flex items-baseline gap-1">
+          <span className="text-[9px] font-bold tracking-widest uppercase">item:</span>
+          <span className="text-[22px] font-black">{item}</span>
+        </div>
+        <div className="flex-1 min-h-0 flex items-start justify-center w-full">
+          {shapeImageUrl ? (
+            <img
+              src={shapeImageUrl}
+              alt={`Shape ${shapeType}`}
+              className="max-w-full max-h-full object-contain"
+              style={{ imageRendering: "pixelated" }}
+            />
+          ) : shapeType ? (
+            <div className="text-center">
+              <div className="w-24 h-14 border-b-2 border-black/30 mx-auto" />
+              <span className="text-xl font-black">{shapeType}</span>
+            </div>
+          ) : (
+            <span className="text-[11px] text-black/30 italic">No shape</span>
+          )}
+        </div>
+      </div>
+
+      {/* Ref — full width */}
+      <div className="border-b border-black text-[10px] flex-1 px-2 py-0.5 min-h-[5.5rem] overflow-hidden">
+        <div className="flex gap-1">
+          <span className="font-bold">Ref:</span>
+          <span className="font-black uppercase">{reference || "—"}</span>
+        </div>
+        <div className="flex gap-1">
+          <span className="font-bold">Customer:</span>
+          <span className="font-black uppercase">{customer || "—"}</span>
+        </div>
+        {address && (
+          <div className="flex gap-1">
+            <span className="font-bold">Remark:</span>
+            <span className="font-black uppercase line-clamp-1">{address}</span>
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="flex justify-between items-center px-2 py-1.5 shrink-0">
+        <span className="text-sm font-black tracking-widest">R.S</span>
+        <span className="text-[9px] font-bold tracking-[3px] uppercase">REBAR.SHOP</span>
+      </div>
+    </div>
+  );
+}

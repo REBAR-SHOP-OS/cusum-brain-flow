@@ -1,0 +1,749 @@
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { FileText, Package, Calculator, ClipboardList, Eye, Loader2, ArrowRight, ChevronLeft, ChevronRight, Search, PenTool, Plus, Sparkles, ChevronDown, Trash2, ArrowLeft } from "lucide-react";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { useQueryClient } from "@tanstack/react-query";
+import type { useQuickBooksData } from "@/hooks/useQuickBooksData";
+import { InvoiceTemplate } from "./documents/InvoiceTemplate";
+import { PackingSlipTemplate } from "./documents/PackingSlipTemplate";
+import { QuotationTemplate } from "./documents/QuotationTemplate";
+import { EstimationTemplate } from "./documents/EstimationTemplate";
+import { useArchivedQuotations } from "@/hooks/useArchivedQuotations";
+import { ConvertQuoteDialog } from "@/components/orders/ConvertQuoteDialog";
+import { ESignatureDialog } from "@/components/accounting/ESignatureDialog";
+import { DocumentUploadZone } from "@/components/accounting/DocumentUploadZone";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
+import { GenerateQuotationDialog } from "./GenerateQuotationDialog";
+import { DraftQuotationEditor } from "./documents/DraftQuotationEditor";
+import { DraftInvoiceEditor } from "./documents/DraftInvoiceEditor";
+import { useSalesInvoices, SalesInvoice } from "@/hooks/useSalesInvoices";
+
+interface Props {
+  data: ReturnType<typeof useQuickBooksData>;
+  initialDocType?: DocType;
+}
+
+type DocType = "invoice" | "packing-slip" | "quotation" | "estimation";
+
+const fmt = (n: number) =>
+  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
+
+const STATUS_BADGE_COLORS: Record<string, string> = {
+  "Draft Quotation": "bg-blue-500/10 text-blue-600 border-blue-200",
+  "Quotation Sent": "bg-violet-500/10 text-violet-600 border-violet-200",
+  "Sales Order": "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+  "Cancelled": "bg-zinc-500/10 text-zinc-500 border-zinc-200",
+};
+
+const QUOTATION_STATUSES = [
+  { value: "all", label: "All Statuses" },
+  // Odoo statuses
+  { value: "Draft Quotation", label: "Draft Quotation (Odoo)" },
+  { value: "Quotation Sent", label: "Quotation Sent (Odoo)" },
+  { value: "Sales Order", label: "Sales Order (Odoo)" },
+  { value: "Cancelled", label: "Cancelled" },
+  // Internal statuses
+  { value: "draft", label: "Draft" },
+  { value: "sent", label: "Sent" },
+  { value: "accepted", label: "Accepted" },
+  { value: "declined", label: "Declined" },
+];
+
+const INTERNAL_STATUS_BADGE_COLORS: Record<string, string> = {
+  draft: "bg-muted text-muted-foreground",
+  sent: "bg-blue-500/10 text-blue-600 border-blue-200",
+  accepted: "bg-emerald-500/10 text-emerald-600 border-emerald-200",
+  declined: "bg-red-500/10 text-red-600 border-red-200",
+  cancelled: "bg-zinc-500/10 text-zinc-500 border-zinc-200",
+};
+
+const CONVERTIBLE_STATUSES = ["approved", "accepted", "sent", "signed"];
+
+export function AccountingDocuments({ data, initialDocType }: Props) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [activeDoc, setActiveDoc] = useState<DocType>(initialDocType || "quotation");
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+  
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const [draftEditorId, setDraftEditorId] = useState<string | null>(null);
+  const [invoiceEditorId, setInvoiceEditorId] = useState<string | null>(null);
+  const { companyId } = useCompanyId();
+  const { invoices: localInvoices, isLoading: localInvoicesLoading } = useSalesInvoices();
+  const [searchParams] = useSearchParams();
+  const leadIdParam = searchParams.get("lead_id");
+  const editQuoteId = searchParams.get("edit");
+
+  useEffect(() => {
+    if (editQuoteId) {
+      setDraftEditorId(editQuoteId);
+    }
+  }, [editQuoteId]);
+
+  const handleCreateDraft = async () => {
+    setCreatingDraft(true);
+    try {
+      const suffix = Math.random().toString(36).substring(2, 7).toUpperCase();
+      const quoteNumber = `QE-DRAFT-${suffix}`;
+      const { data: newQuote, error } = await supabase
+        .from("quotes")
+        .insert({
+          quote_number: quoteNumber,
+          status: "draft",
+          source: "manual",
+          total_amount: 0,
+          company_id: companyId,
+          lead_id: leadIdParam || null,
+        } as any)
+        .select("id, quote_number")
+        .single();
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+      toast({ title: "Draft created", description: `${newQuote.quote_number} is ready for editing.` });
+      setDraftEditorId(newQuote.id);
+    } catch (err: any) {
+      toast({ title: "Error creating draft", description: err.message, variant: "destructive" });
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
+
+  useEffect(() => {
+    if (initialDocType) {
+      setActiveDoc(initialDocType);
+    }
+  }, [initialDocType]);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<DocType | null>(null);
+  const [convertQuote, setConvertQuote] = useState<{ id: string; quote_number: string; total_amount: number | null; customer_name: string } | null>(null);
+  const [signQuote, setSignQuote] = useState<{ id: string; quote_number: string } | null>(null);
+  const [viewQuote, setViewQuote] = useState<typeof quotations[number] | null>(null);
+
+  // Quotation pagination & filter state
+  const [qPage, setQPage] = useState(1);
+  const [qSearch, setQSearch] = useState("");
+  const [qSearchInput, setQSearchInput] = useState("");
+  const [qStatus, setQStatus] = useState("all");
+
+  const { quotations, isLoading: quotationsLoading, totalCount, totalPages } = useArchivedQuotations({
+    page: qPage,
+    pageSize: 50,
+    search: qSearch,
+    status: qStatus,
+  });
+
+  // Reset page when filters change
+  const handleSearchSubmit = () => {
+    setQSearch(qSearchInput);
+    setQPage(1);
+  };
+
+  const handleStatusChange = (value: string) => {
+    setQStatus(value);
+    setQPage(1);
+  };
+
+  const openPreview = (type: DocType, id: string) => {
+    setPreviewType(type);
+    setPreviewId(id);
+  };
+
+  const closePreview = () => {
+    setPreviewType(null);
+    setPreviewId(null);
+  };
+
+  // Build invoice template data from QB invoice
+  const getInvoiceData = (inv: typeof data.invoices[0]) => ({
+    invoiceNumber: inv.DocNumber,
+    invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
+    dueDate: new Date(inv.DueDate).toLocaleDateString(),
+    customerName: inv.CustomerRef?.name || "Unknown",
+    items: [{
+      description: "Rebar Fabrication & Supply",
+      quantity: 1,
+      unitPrice: inv.TotalAmt,
+      taxes: "HST ON-sale",
+      amount: inv.TotalAmt,
+    }],
+    untaxedAmount: inv.TotalAmt,
+    taxRate: 0.13,
+    taxAmount: inv.TotalAmt * 0.13,
+    total: inv.TotalAmt * 1.13,
+    paidAmount: inv.TotalAmt - inv.Balance,
+    amountDue: inv.Balance,
+    paymentCommunication: inv.DocNumber,
+    source: "",
+    inclusions: [],
+  });
+
+  const getPackingSlipData = (inv: typeof data.invoices[0]) => ({
+    invoiceNumber: inv.DocNumber,
+    invoiceDate: new Date(inv.TxnDate).toLocaleDateString(),
+    customerName: inv.CustomerRef?.name || "Unknown",
+    deliveryNumber: "",
+    deliveryDate: "",
+    scope: "",
+    items: [{
+      quantity: inv.TotalAmt > 0 ? 1 : 0,
+      size: "—",
+      type: "Rebar Fabrication & Supply",
+    }],
+  });
+
+  const getQuotationData = (est: typeof data.estimates[0]) => {
+    const rawLines = (est as any).Line as Array<Record<string, any>> | undefined;
+    const items = (rawLines || [])
+      .filter((l) => l.DetailType === "SalesItemLineDetail")
+      .map((l) => {
+        const detail = l.SalesItemLineDetail || {};
+        const qty = Number(detail.Qty || 1);
+        const unitPrice = Number(detail.UnitPrice || l.Amount || 0);
+        return {
+          description: (l.Description as string) || detail?.ItemRef?.name || "Line item",
+          quantity: qty,
+          unitPrice,
+          amount: Number(l.Amount || qty * unitPrice),
+        };
+      });
+
+    // Fallback: if no parsed line items, show a single summary row
+    const finalItems = items.length > 0 ? items : [{
+      description: "Rebar Fabrication & Supply",
+      quantity: 1,
+      unitPrice: est.TotalAmt,
+      amount: est.TotalAmt,
+    }];
+
+    const untaxed = finalItems.reduce((s, i) => s + i.amount, 0);
+
+    return {
+      quoteNumber: est.DocNumber,
+      quoteDate: new Date(est.TxnDate).toLocaleDateString(),
+      expirationDate: new Date(est.ExpirationDate).toLocaleDateString(),
+      customerName: est.CustomerRef?.name || "Unknown",
+      items: finalItems,
+      untaxedAmount: untaxed,
+      taxRate: 0.13,
+      taxAmount: untaxed * 0.13,
+      total: untaxed * 1.13,
+      inclusions: [],
+      exclusions: [],
+      terms: [
+        "Payment due within 30 days of invoice date.",
+        "Prices valid for the duration specified above.",
+        "All amounts in CAD.",
+        "HST 13% applied where applicable.",
+      ],
+    };
+  };
+
+  const getEstimationData = (est: typeof data.estimates[0]) => ({
+    estimateNumber: est.DocNumber,
+    estimateDate: new Date(est.TxnDate).toLocaleDateString(),
+    validUntil: new Date(est.ExpirationDate).toLocaleDateString(),
+    customerName: est.CustomerRef?.name || "Unknown",
+    projectName: `Project ${est.DocNumber}`,
+    sections: [{
+      title: "Rebar Supply & Fabrication",
+      items: [{
+        description: "Heavy/Light Bend Fabricated Rebar",
+        quantity: 1,
+        unit: "Lot",
+        unitPrice: est.TotalAmt,
+        amount: est.TotalAmt,
+      }],
+    }],
+    subtotal: est.TotalAmt,
+    taxRate: 0.13,
+    taxAmount: est.TotalAmt * 0.13,
+    total: est.TotalAmt * 1.13,
+    notes: ["Subject to final measurements on site."],
+    assumptions: ["Standard access for delivery truck at site."],
+  });
+
+  // Merge local ERP invoices with QB invoices for count
+  const localOnlyInvoices = localInvoices.filter(
+    (li) => !data.invoices.some((qi) => qi.DocNumber === li.invoice_number)
+  );
+  const totalInvoiceCount = data.invoices.length + localOnlyInvoices.length;
+
+  const docTabs: { id: DocType; label: string; icon: typeof Package; count: number }[] = [
+    { id: "quotation", label: "Quotations", icon: ClipboardList, count: totalCount || quotations.length },
+    { id: "invoice", label: "Invoices", icon: FileText, count: totalInvoiceCount },
+    { id: "packing-slip", label: "Packing Slips", icon: Package, count: data.invoices.length },
+    { id: "estimation", label: "Estimations", icon: Calculator, count: data.estimates.length },
+  ];
+
+
+  return (
+    <div className="space-y-4">
+      {leadIdParam && (
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-1 text-muted-foreground hover:text-foreground"
+          onClick={() => navigate(`/sales/pipeline?lead=${leadIdParam}`)}
+        >
+          <ArrowLeft className="w-4 h-4" /> Back to Lead
+        </Button>
+      )}
+      {/* Doc type tabs */}
+      <div className="flex gap-2 flex-wrap items-center">
+        {docTabs.map((tab) => (
+          <Button
+            key={tab.id}
+            variant={activeDoc === tab.id ? "default" : "outline"}
+            size="sm"
+            className="gap-2"
+            onClick={() => setActiveDoc(tab.id)}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+            <Badge variant="secondary" className="ml-1 text-xs">{tab.count}</Badge>
+          </Button>
+        ))}
+        <div className="ml-auto flex gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
+                <Plus className="w-4 h-4" /> Add Quotation <ChevronDown className="w-3 h-3 ml-1" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-popover">
+              <DropdownMenuItem onClick={handleCreateDraft} disabled={creatingDraft}>
+                {creatingDraft ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <PenTool className="w-4 h-4 mr-2" />} Manual
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowGenerateDialog(true)}>
+                <Sparkles className="w-4 h-4 mr-2" /> AI Auto (from Estimation)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* Quotation filters & search */}
+      {activeDoc === "quotation" && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[200px] max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search quote #, salesperson, or customer…"
+              value={qSearchInput}
+              onChange={(e) => setQSearchInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleSearchSubmit()}
+              className="pl-9 h-9"
+            />
+          </div>
+          <Select value={qStatus} onValueChange={handleStatusChange}>
+            <SelectTrigger className="w-[180px] h-9">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {QUOTATION_STATUSES.map((s) => (
+                <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <span className="text-xs text-muted-foreground">
+            {totalCount.toLocaleString()} quotations
+            {quotationsLoading && <Loader2 className="inline w-3 h-3 ml-1 animate-spin" />}
+          </span>
+        </div>
+      )}
+
+      {/* Quotation upload zone */}
+      {activeDoc === "quotation" && (
+        <div data-upload-zone="quotation">
+          <DocumentUploadZone
+            targetType="estimate"
+            onImport={(result) => {
+              const quoteNum = result.fields.find(f => f.field === "quote_number")?.value;
+              toast({ title: "Quotation imported", description: quoteNum ? `Quote ${quoteNum} imported successfully.` : `${result.documentType} with ${result.fields.length} fields extracted.` });
+              queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+            }}
+          />
+        </div>
+      )}
+
+      {/* Document list */}
+      <ScrollArea className="h-[calc(100vh-320px)]">
+        <div className="space-y-2">
+          {(activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.map((inv) => (
+            <Card key={`${activeDoc}-${inv.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
+              <CardContent className={`flex items-center justify-between ${activeDoc === "packing-slip" ? "p-3" : "p-4"}`}>
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
+                    {activeDoc === "invoice" ? <FileText className="w-4 h-4 text-primary" /> : <Package className="w-4 h-4 text-primary" />}
+                  </div>
+                  {activeDoc === "packing-slip" ? (
+                    <p className="text-sm font-medium truncate">
+                      #{inv.DocNumber} — {inv.CustomerRef?.name} · {new Date(inv.TxnDate).toLocaleDateString()} · {fmt(inv.TotalAmt)}
+                    </p>
+                  ) : (
+                    <div>
+                      <p className="font-semibold">#{inv.DocNumber} — {inv.CustomerRef?.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(inv.TxnDate).toLocaleDateString()} · {fmt(inv.TotalAmt)}
+                        {inv.Balance > 0 && <span className="text-destructive ml-2">Due: {fmt(inv.Balance)}</span>}
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 shrink-0"
+                  onClick={() => openPreview(activeDoc, inv.Id)}
+                >
+                  <Eye className="w-3.5 h-3.5" /> View
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {/* Local ERP invoices (not yet synced to QB) */}
+          {activeDoc === "invoice" && localOnlyInvoices.map((inv) => (
+            <Card
+              key={`local-inv-${inv.id}`}
+              className="hover:ring-2 hover:ring-primary/20 transition-all cursor-pointer"
+              onClick={() => setInvoiceEditorId(inv.id)}
+            >
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="p-1.5 rounded-lg bg-primary/10 shrink-0">
+                    <FileText className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">#{inv.invoice_number} — {inv.customer_name || inv.customer_company || "Unknown"}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {inv.issued_date ? new Date(inv.issued_date).toLocaleDateString() : new Date(inv.created_at).toLocaleDateString()}
+                      {inv.amount ? ` · ${fmt(inv.amount)}` : ""}
+                      {inv.status === "paid" && <Badge variant="outline" className="ml-2 text-xs bg-emerald-500/10 text-emerald-600 border-emerald-200">Paid</Badge>}
+                      {inv.status === "draft" && <Badge variant="outline" className="ml-2 text-xs bg-muted text-muted-foreground">Draft</Badge>}
+                      {inv.status === "sent" && <Badge variant="outline" className="ml-2 text-xs bg-blue-500/10 text-blue-600 border-blue-200">Sent</Badge>}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 shrink-0"
+                  onClick={(e) => { e.stopPropagation(); setInvoiceEditorId(inv.id); }}
+                >
+                  <Eye className="w-3.5 h-3.5" /> View
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {activeDoc === "quotation" && quotations.length > 0 && quotations.map((q) => {
+            const meta = q.metadata as Record<string, unknown> | null;
+            const customer = (meta?.odoo_customer as string)
+              || (meta?.customer_name as string)
+              || q.salesperson
+              || "Unknown";
+            const lineItems = (meta?.line_items as Array<Record<string, unknown>>) || [];
+            const metaTotal = lineItems.reduce((s: number, li: any) => s + (Number(li.amount) || 0), 0);
+            const displayTotal = Number(q.total_amount) || metaTotal;
+            const canConvert = q.odoo_status === "Sales Order" || CONVERTIBLE_STATUSES.includes(q.status || "");
+            const displayStatus = q.status === "accepted" ? "Accepted" : (q.odoo_status || q.status);
+            const badgeColor = STATUS_BADGE_COLORS[q.odoo_status || ""] || INTERNAL_STATUS_BADGE_COLORS[q.status || ""] || "";
+            return (
+              <Card
+                key={q.id}
+                className="hover:ring-2 hover:ring-primary/20 transition-all cursor-pointer"
+                onClick={() => {
+                  if (q.source === "manual" || q.source === "ai_estimation") {
+                    setDraftEditorId(q.id);
+                  } else {
+                    setViewQuote(q);
+                  }
+                }}
+              >
+                <CardContent className="p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <div className="p-2 rounded-lg bg-primary/10">
+                      <ClipboardList className="w-5 h-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-semibold">{q.quote_number} — {customer}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {new Date(q.created_at).toLocaleDateString()} · {fmt(displayTotal)}
+                        {q.salesperson && <span className="ml-2 text-muted-foreground">· {q.salesperson}</span>}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {!q.signature_data && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs"
+                        onClick={(e) => { e.stopPropagation(); setSignQuote({ id: q.id, quote_number: q.quote_number }); }}
+                      >
+                        <PenTool className="w-3.5 h-3.5" /> Sign
+                      </Button>
+                    )}
+                    {q.signature_data && (
+                      <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-600 border-emerald-200">
+                        ✓ Signed
+                      </Badge>
+                    )}
+                    {canConvert && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 text-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setConvertQuote({
+                            id: q.id,
+                            quote_number: q.quote_number,
+                            total_amount: q.total_amount,
+                            customer_name: customer,
+                          });
+                        }}
+                      >
+                        <ArrowRight className="w-3.5 h-3.5" /> Convert to Order
+                      </Button>
+                    )}
+                    <Badge variant="outline" className={`text-xs ${badgeColor}`}>
+                      {displayStatus}
+                    </Badge>
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={(e) => { e.stopPropagation(); setViewQuote(q); }}>
+                      <Eye className="w-3.5 h-3.5" /> View
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="gap-1 text-xs text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (!window.confirm(`Are you sure you want to delete ${q.quote_number}? This cannot be undone.`)) return;
+                        const { error } = await supabase.from("quotes").delete().eq("id", q.id);
+                        if (error) { toast({ title: "Error", description: error.message, variant: "destructive" }); return; }
+                        toast({ title: "Deleted", description: `${q.quote_number} removed` });
+                        queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+                      }}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+
+          {activeDoc === "quotation" && quotations.length === 0 && !quotationsLoading && data.estimates.map((est) => (
+            <Card key={`quotation-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <ClipboardList className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">#{est.DocNumber} — {est.CustomerRef?.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(est.TxnDate).toLocaleDateString()} · {fmt(est.TotalAmt)}
+                      <Badge variant="outline" className="ml-2 text-xs">{est.TxnStatus}</Badge>
+                    </p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openPreview("quotation", est.Id)}>
+                  <Eye className="w-3.5 h-3.5" /> View
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {activeDoc === "estimation" && data.estimates.map((est) => (
+            <Card key={`estimation-${est.Id}`} className="hover:ring-2 hover:ring-primary/20 transition-all">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className="p-2 rounded-lg bg-primary/10">
+                    <Calculator className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-semibold">#{est.DocNumber} — {est.CustomerRef?.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {new Date(est.TxnDate).toLocaleDateString()} · {fmt(est.TotalAmt)}
+                      <Badge variant="outline" className="ml-2 text-xs">{est.TxnStatus}</Badge>
+                    </p>
+                  </div>
+                </div>
+                <Button size="sm" variant="outline" className="gap-1.5" onClick={() => openPreview("estimation", est.Id)}>
+                  <Eye className="w-3.5 h-3.5" /> View
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          {((activeDoc === "invoice" || activeDoc === "packing-slip") && data.invoices.length === 0 && localOnlyInvoices.length === 0) && (
+            <p className="text-center text-muted-foreground py-12">No invoices found.</p>
+          )}
+          {activeDoc === "quotation" && quotations.length === 0 && !quotationsLoading && totalCount === 0 && data.estimates.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">No quotations found.</p>
+          )}
+          {activeDoc === "estimation" && data.estimates.length === 0 && (
+            <p className="text-center text-muted-foreground py-12">No estimates found. Sync from QuickBooks first.</p>
+          )}
+        </div>
+      </ScrollArea>
+
+      {/* Quotation pagination controls */}
+      {activeDoc === "quotation" && totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2 border-t">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={qPage <= 1}
+            onClick={() => setQPage((p) => Math.max(1, p - 1))}
+            className="gap-1"
+          >
+            <ChevronLeft className="w-4 h-4" /> Previous
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {qPage} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={qPage >= totalPages}
+            onClick={() => setQPage((p) => Math.min(totalPages, p + 1))}
+            className="gap-1"
+          >
+            Next <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      {/* Preview overlays */}
+      {previewType === "invoice" && previewId && (() => {
+        const inv = data.invoices.find(i => i.Id === previewId);
+        return inv ? <InvoiceTemplate data={getInvoiceData(inv)} onClose={closePreview} /> : null;
+      })()}
+
+      {previewType === "packing-slip" && previewId && (() => {
+        const inv = data.invoices.find(i => i.Id === previewId);
+        return inv ? <PackingSlipTemplate data={getPackingSlipData(inv)} onClose={closePreview} /> : null;
+      })()}
+
+      {previewType === "quotation" && previewId && (() => {
+        const est = data.estimates.find(e => e.Id === previewId);
+        return est ? <QuotationTemplate data={getQuotationData(est)} onClose={closePreview} /> : null;
+      })()}
+
+      {previewType === "estimation" && previewId && (() => {
+        const est = data.estimates.find(e => e.Id === previewId);
+        return est ? <EstimationTemplate data={getEstimationData(est)} onClose={closePreview} /> : null;
+      })()}
+
+      {/* Convert Quote Dialog */}
+      {convertQuote && (
+        <ConvertQuoteDialog
+          open={!!convertQuote}
+          onOpenChange={(open) => !open && setConvertQuote(null)}
+          quote={convertQuote}
+        />
+      )}
+
+      {/* eSignature Dialog */}
+      {signQuote && (
+        <ESignatureDialog
+          open={!!signQuote}
+          onOpenChange={(open) => !open && setSignQuote(null)}
+          quoteId={signQuote.id}
+          quoteNumber={signQuote.quote_number}
+          onSigned={() => { setSignQuote(null); }}
+        />
+      )}
+      {/* Quotation Document Overlay */}
+      {viewQuote && (() => {
+        const meta = viewQuote.metadata as Record<string, unknown> | null;
+        const lines = ((meta?.order_lines || meta?.line_items) as Array<Record<string, unknown>>) || [];
+        const parsedItems = lines.map((l) => {
+          const quantity = Number(l.product_uom_qty || l.quantity || 1);
+          const unitPrice = Number(l.price_unit || l.unit_price || 0);
+          return {
+            description: String(l.name || l.description || "Item"),
+            quantity,
+            unitPrice,
+            amount: quantity * unitPrice,
+          };
+        });
+        // Fallback: if no line items were synced, show a single summary row
+        const items = parsedItems.length > 0 ? parsedItems : [{
+          description: "Rebar Fabrication & Supply",
+          quantity: 1,
+          unitPrice: Number(viewQuote.total_amount || 0),
+          amount: Number(viewQuote.total_amount || 0),
+        }];
+        const untaxed = items.reduce((s, i) => s + i.amount, 0);
+        const customerAddress = (meta?.odoo_partner_address as string) || (meta?.customer_address as string) || undefined;
+        const projectName = (meta?.odoo_project as string) || (meta?.project_name as string) || viewQuote.quote_number;
+        return (
+          <QuotationTemplate
+            data={{
+              quoteNumber: viewQuote.quote_number,
+              quoteDate: new Date(viewQuote.created_at).toLocaleDateString(),
+              expirationDate: viewQuote.valid_until
+                ? new Date(viewQuote.valid_until).toLocaleDateString()
+                : "—",
+              customerName: (meta?.odoo_customer as string) || (meta?.customer_name as string) || viewQuote.salesperson || "Unknown",
+              customerAddress,
+              projectName,
+              items,
+              untaxedAmount: untaxed,
+              taxRate: 0.13,
+              taxAmount: untaxed * 0.13,
+              total: untaxed * 1.13,
+              quoteId: viewQuote.id,
+              terms: [
+                "Payment due within 30 days of invoice date.",
+                "Prices valid for the duration specified above.",
+                "All amounts in CAD.",
+                "HST 13% applied where applicable.",
+              ],
+            }}
+            onClose={() => setViewQuote(null)}
+          />
+        );
+      })()}
+      <GenerateQuotationDialog open={showGenerateDialog} onOpenChange={setShowGenerateDialog} />
+      {draftEditorId && (
+        <DraftQuotationEditor
+          quoteId={draftEditorId}
+          onClose={() => {
+            setDraftEditorId(null);
+            queryClient.invalidateQueries({ queryKey: ["archived-quotations"] });
+          }}
+        />
+      )}
+      {invoiceEditorId && (
+        <DraftInvoiceEditor
+          invoiceId={invoiceEditorId}
+          onClose={() => {
+            setInvoiceEditorId(null);
+            queryClient.invalidateQueries({ queryKey: ["sales_invoices"] });
+          }}
+        />
+      )}
+    </div>
+  );
+}

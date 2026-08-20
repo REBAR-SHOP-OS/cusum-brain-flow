@@ -1,0 +1,201 @@
+import { useState, useRef, useCallback, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+
+export interface WebPhoneState {
+  status: "idle" | "registering" | "ready" | "calling" | "in_call" | "error";
+  callerId: string;
+  callerIds: string[];
+  error: string | null;
+}
+
+export type InboundCallHandler = (session: any, fromNumber: string) => void;
+
+export interface WebPhoneActions {
+  initialize: (onInboundCall?: InboundCallHandler) => Promise<boolean>;
+  call: (phoneNumber: string, contactName?: string) => Promise<boolean>;
+  hangup: () => void;
+  dispose: () => void;
+  getCallSession: () => any | null;
+}
+
+export function useWebPhone(): [WebPhoneState, WebPhoneActions] {
+  const [state, setState] = useState<WebPhoneState>({
+    status: "idle",
+    callerId: "",
+    callerIds: [],
+    error: null,
+  });
+
+  const webPhoneRef = useRef<any>(null);
+  const callSessionRef = useRef<any>(null);
+
+  const onInboundCallRef = useRef<InboundCallHandler | null>(null);
+
+  const initialize = useCallback(async (onInboundCall?: InboundCallHandler): Promise<boolean> => {
+    if (onInboundCall) onInboundCallRef.current = onInboundCall;
+    try {
+      setState((s) => ({ ...s, status: "registering", error: null }));
+
+      // Get SIP info from edge function
+      const { data, error } = await supabase.functions.invoke("ringcentral-sip-provision");
+
+      // Any error from the provision endpoint (403 super-admin gate, RC not connected, etc.)
+      // is non-critical for users without telephony access — silently no-op.
+      if (error) {
+        console.log("[useWebPhone] provision unavailable, skipping WebPhone init");
+        setState((s) => ({ ...s, status: "idle", error: null }));
+        return false;
+      }
+
+      if (data?.error) {
+        if (data.error === "RingCentral not connected") {
+          setState((s) => ({ ...s, status: "idle", error: null }));
+          return false;
+        }
+        throw new Error(data.error);
+      }
+
+      const { sipInfo, callerIds } = data;
+      if (!sipInfo) throw new Error("No SIP info received");
+
+      // Dynamically import to avoid SSR issues
+      const { default: WebPhone } = await import("ringcentral-web-phone");
+
+      const webPhone = new WebPhone({ sipInfo });
+      await webPhone.start();
+
+      webPhoneRef.current = webPhone;
+
+      // Listen for inbound calls — auto-answer on ext 101 if handler is registered
+      webPhone.on("inboundCall", (session: any) => {
+        const fromNumber = session?.request?.from?.uri?.user || session?.remoteIdentity?.uri?.user || "Unknown";
+        console.log("Inbound WebRTC call from:", fromNumber);
+
+        if (onInboundCallRef.current) {
+          // Auto-answer the call
+          try {
+            session.answer();
+            callSessionRef.current = session;
+            setState((s) => ({ ...s, status: "in_call" }));
+
+            // Notify the handler
+            onInboundCallRef.current(session, fromNumber);
+
+            // Listen for call end
+            session.on("disposed", () => {
+              callSessionRef.current = null;
+              setState((s) => ({ ...s, status: "ready" }));
+            });
+          } catch (e) {
+            console.error("Auto-answer error:", e);
+          }
+        }
+      });
+
+      setState({
+        status: "ready",
+        callerId: callerIds?.[0] || "",
+        callerIds: callerIds || [],
+        error: null,
+      });
+
+      console.log("WebPhone registered successfully");
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "WebPhone init failed";
+      console.error("WebPhone init error:", err);
+      setState((s) => ({ ...s, status: "error", error: msg }));
+      return false;
+    }
+  }, []);
+
+  const call = useCallback(async (phoneNumber: string, contactName?: string): Promise<boolean> => {
+    const wp = webPhoneRef.current;
+    if (!wp) {
+      toast.error("WebPhone not initialized");
+      return false;
+    }
+
+    try {
+      setState((s) => ({ ...s, status: "calling" }));
+
+      // Detect internal extension dialing (ext:101 format)
+      const isExtension = phoneNumber.startsWith("ext:");
+      const extensionNumber = isExtension ? phoneNumber.slice(4) : null;
+
+      let callSession;
+      if (isExtension && extensionNumber) {
+        // Dial internal extension — pass extension number as callee with caller ID
+        console.log("Dialing internal extension:", extensionNumber);
+        const callerId = state.callerId ? state.callerId.replace("+", "") : undefined;
+        callSession = await wp.call(extensionNumber, callerId);
+      } else {
+        // Clean phone number - remove non-digits except leading +
+        const cleaned = phoneNumber.replace(/[^\d+]/g, "");
+        const callee = cleaned.startsWith("+") ? cleaned.slice(1) : cleaned;
+        callSession = await wp.call(callee, state.callerId.replace("+", ""));
+      }
+      callSessionRef.current = callSession;
+
+      // Listen for call events
+      callSession.on("disposed", () => {
+        callSessionRef.current = null;
+        setState((s) => ({ ...s, status: "ready" }));
+        toast.info(`Call with ${contactName || phoneNumber} ended`);
+      });
+
+      setState((s) => ({ ...s, status: "in_call" }));
+      toast.success(`Calling ${contactName || phoneNumber}...`);
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Call failed";
+      console.error("WebPhone call error:", err);
+      setState((s) => ({ ...s, status: "ready", error: msg }));
+      toast.error(`Call failed: ${msg}`);
+      return false;
+    }
+  }, [state.callerId]);
+
+  const hangup = useCallback(() => {
+    const session = callSessionRef.current;
+    if (session) {
+      try {
+        session.dispose();
+      } catch (e) {
+        console.warn("Hangup error:", e);
+      }
+      callSessionRef.current = null;
+      setState((s) => ({ ...s, status: "ready" }));
+    }
+  }, []);
+
+  const dispose = useCallback(() => {
+    hangup();
+    const wp = webPhoneRef.current;
+    if (wp) {
+      try {
+        wp.dispose();
+      } catch (e) {
+        console.warn("WebPhone dispose error:", e);
+      }
+      webPhoneRef.current = null;
+    }
+    setState({ status: "idle", callerId: "", callerIds: [], error: null });
+  }, [hangup]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      const wp = webPhoneRef.current;
+      if (wp) {
+        try { wp.dispose(); } catch {}
+        webPhoneRef.current = null;
+      }
+    };
+  }, []);
+
+  const getCallSession = useCallback(() => callSessionRef.current, []);
+
+  return [state, { initialize, call, hangup, dispose, getCallSession }];
+}

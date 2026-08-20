@@ -1,0 +1,1 @@
+ALTER TABLE public.social_posts ADD COLUMN IF NOT EXISTS image_prompt text;

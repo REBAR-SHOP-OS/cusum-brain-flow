@@ -1,0 +1,112 @@
+# Camera Intelligence Configuration
+# ----------------------------------
+
+erp:
+  supabase_url: "https://YOUR_PROJECT.supabase.co"
+  supabase_service_key: "YOUR_SERVICE_ROLE_KEY"
+  company_id: "YOUR_COMPANY_UUID"
+
+webhook:
+  url: "https://YOUR_PROJECT.supabase.co/functions/v1/camera-events"
+  api_key: "YOUR_CAMERA_API_KEY"
+
+cameras:
+  - id: "cam_loading_dock"
+    rtsp_url: "rtsp://admin:password@192.168.1.100:554/h264Preview_01_main"
+    location: "Loading Dock"
+  - id: "cam_cutter_area"
+    rtsp_url: "rtsp://admin:password@192.168.1.101:554/h264Preview_01_main"
+    location: "Cutter Area"
+  - id: "cam_dispatch_yard"
+    rtsp_url: "rtsp://admin:password@192.168.1.102:554/h264Preview_01_main"
+    location: "Dispatch Yard"
+
+zones:
+  - id: "loading_dock"
+    label: "Loading Dock"
+    polygon: [[100, 100], [500, 100], [500, 400], [100, 400]]
+    allowed_classes: ["person", "truck", "forklift"]
+    priority: 1
+    erp_entity: "loading_dock"
+  - id: "cutter_area"
+    label: "Cutter Area"
+    polygon: [[600, 100], [1000, 100], [1000, 500], [600, 500]]
+    allowed_classes: ["person"]
+    priority: 2
+    erp_entity: "cutter_area"
+  - id: "bender_area"
+    label: "Bender Area"
+    polygon: [[600, 520], [1000, 520], [1000, 900], [600, 900]]
+    allowed_classes: ["person"]
+    priority: 2
+    erp_entity: "bender_area"
+  - id: "dispatch_yard"
+    label: "Dispatch Yard"
+    polygon: [[50, 500], [550, 500], [550, 900], [50, 900]]
+    allowed_classes: ["person", "truck", "forklift"]
+    priority: 1
+    erp_entity: "dispatch_yard"
+  - id: "forklift_lane"
+    label: "Forklift Lane"
+    polygon: [[550, 100], [600, 100], [600, 900], [550, 900]]
+    allowed_classes: ["forklift", "person"]
+    priority: 3
+    erp_entity: "forklift_lane"
+  - id: "restricted_inventory"
+    label: "Restricted Inventory Zone"
+    polygon: [[1050, 100], [1280, 100], [1280, 500], [1050, 500]]
+    allowed_classes: []
+    priority: 1
+    erp_entity: "restricted_inventory"
+
+rules:
+  - id: "truck_at_loading"
+    class: "truck"
+    zone_entity: "loading_dock"
+    event_type: "truck_arrived"
+    priority: "high"
+    action: "Verify dispatch paperwork and loading crew readiness"
+  - id: "person_at_cutter"
+    class: "person"
+    zone_entity: "cutter_area"
+    event_type: "machine_operator_present"
+    priority: "low"
+    action: "Log operator presence at cutter station"
+  - id: "person_at_bender"
+    class: "person"
+    zone_entity: "bender_area"
+    event_type: "machine_operator_present"
+    priority: "low"
+    action: "Log operator presence at bender station"
+  - id: "truck_at_dispatch"
+    class: "truck"
+    zone_entity: "dispatch_yard"
+    event_type: "dispatch_activity_detected"
+    priority: "medium"
+    action: "Check if orders are ready for loading"
+  - id: "forklift_at_loading"
+    class: "forklift"
+    zone_entity: "loading_dock"
+    event_type: "loading_started"
+    priority: "medium"
+    action: "Material loading in progress"
+  - id: "person_restricted"
+    class: "person"
+    zone_entity: "restricted_inventory"
+    event_type: "unauthorized_zone_entry"
+    priority: "critical"
+    action: "ALERT — Unauthorized person in restricted inventory zone"
+
+after_hours:
+  start: "18:00"
+  end: "06:00"
+
+alerts:
+  webhook_url: ""
+  telegram_bot_token: ""
+  telegram_chat_id: ""
+
+detection:
+  model: "yolov8n.pt"
+  confidence_threshold: 0.4
+  frame_interval_ms: 1000

@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX idx_leads_odoo_id_unique ON leads ((metadata->>'odoo_id')) WHERE metadata->>'odoo_id' IS NOT NULL;

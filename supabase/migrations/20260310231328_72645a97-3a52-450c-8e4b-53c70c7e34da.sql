@@ -1,0 +1,1 @@
+ALTER TABLE public.cut_batches DROP CONSTRAINT cut_batches_company_id_fkey;

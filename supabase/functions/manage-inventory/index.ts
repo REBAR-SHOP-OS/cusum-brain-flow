@@ -1,0 +1,533 @@
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { z } from "https://deno.land/x/zod@v3.23.8/mod.ts";
+
+const DEFAULT_STOCK_LENGTH_MM = 12000;
+const REMNANT_THRESHOLD_MM = 300;
+
+function json(body: unknown, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+Deno.serve(async (req) => {
+  return handleRequest(req, async (ctx) => {
+    const { userId, companyId, serviceClient: svc, log } = ctx;
+
+    const topSchema = z.object({
+      action: z.string().min(1).max(50),
+    }).passthrough();
+    const parsed = topSchema.safeParse(ctx.body);
+    if (!parsed.success) {
+      return json({ error: "Validation failed", details: parsed.error.flatten().fieldErrors }, 400);
+    }
+    const body = parsed.data;
+    const { action } = body;
+    const now = new Date().toISOString();
+    const events: Record<string, unknown>[] = [];
+
+    switch (action) {
+      // ─── RECEIVE PO: create inventory_lots from a purchase order ────
+      case "receive-po": {
+        const { purchaseOrderId, lines } = body;
+        if (!purchaseOrderId) return json({ error: "Missing purchaseOrderId" }, 400);
+
+        // Validate PO exists and belongs to company
+        const { data: po, error: poErr } = await svc
+          .from("purchase_orders")
+          .select("id, company_id, status")
+          .eq("id", purchaseOrderId)
+          .single();
+        if (poErr || !po) return json({ error: "Purchase order not found" }, 404);
+        if (po.company_id !== companyId) return json({ error: "PO not in your company" }, 403);
+        if (po.status === "received") return json({ error: "PO already fully received" }, 400);
+
+        // If lines provided, receive specific lines; otherwise receive all
+        let linesToReceive = lines;
+        if (!linesToReceive) {
+          const { data: allLines } = await svc
+            .from("purchase_order_lines")
+            .select("id, bar_code, standard_length_mm, qty_ordered, qty_received")
+            .eq("purchase_order_id", purchaseOrderId);
+          linesToReceive = (allLines || []).map((l: any) => ({
+            lineId: l.id,
+            qtyReceiving: l.qty_ordered - l.qty_received,
+          }));
+        }
+
+        let totalReceived = 0;
+        for (const line of linesToReceive) {
+          const { lineId, qtyReceiving } = line;
+          if (!lineId || !qtyReceiving || qtyReceiving <= 0) continue;
+
+          // Get line details
+          const { data: polLine } = await svc
+            .from("purchase_order_lines")
+            .select("id, bar_code, standard_length_mm, qty_ordered, qty_received")
+            .eq("id", lineId)
+            .single();
+          if (!polLine) continue;
+
+          const remaining = polLine.qty_ordered - polLine.qty_received;
+          const actualQty = Math.min(qtyReceiving, remaining);
+          if (actualQty <= 0) continue;
+
+          // Create inventory_lot
+          const lotNumber = `PO-${purchaseOrderId.slice(0, 8)}-${Date.now().toString(36)}`;
+          const { error: lotErr } = await svc.from("inventory_lots").insert({
+            company_id: companyId,
+            bar_code: polLine.bar_code,
+            standard_length_mm: polLine.standard_length_mm,
+            qty_on_hand: actualQty,
+            qty_reserved: 0,
+            source: "purchase",
+            location: "yard",
+            lot_number: lotNumber,
+          });
+          if (lotErr) {
+            log.error("Lot insert error", lotErr);
+            continue;
+          }
+
+          // Update PO line qty_received
+          await svc.from("purchase_order_lines")
+            .update({ qty_received: polLine.qty_received + actualQty })
+            .eq("id", lineId);
+
+          totalReceived += actualQty;
+
+          events.push({
+            entity_type: "inventory",
+            entity_id: purchaseOrderId,
+            event_type: "po_received",
+            actor_id: userId,
+            actor_type: "user",
+            description: `Received ${actualQty}× ${polLine.bar_code} (${polLine.standard_length_mm}mm) from PO`,
+            metadata: { purchaseOrderId, lineId, barCode: polLine.bar_code, qty: actualQty, lotNumber },
+          });
+        }
+
+        // Check if fully received
+        const { data: updatedLines } = await svc
+          .from("purchase_order_lines")
+          .select("qty_ordered, qty_received")
+          .eq("purchase_order_id", purchaseOrderId);
+
+        const allReceived = updatedLines?.every((l: any) => l.qty_received >= l.qty_ordered);
+        const someReceived = updatedLines?.some((l: any) => l.qty_received > 0);
+
+        const newStatus = allReceived ? "received" : someReceived ? "partial" : po.status;
+        await svc.from("purchase_orders").update({
+          status: newStatus,
+          ...(allReceived ? { received_at: now, received_by: userId } : {}),
+        }).eq("id", purchaseOrderId);
+
+        if (events.length > 0) {
+          await svc.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
+        }
+
+        return json({ success: true, action, totalReceived, poStatus: newStatus });
+      }
+
+      // ─── RESERVE STOCK ──────────────────────────────────────────────
+      case "reserve": {
+        const { cutPlanId, cutPlanItemId, barCode, qty, sourceType, sourceId, stockLengthMm } = body;
+        if (!cutPlanId || !barCode || !qty || !sourceType || !sourceId) {
+          return json({ error: "Missing: cutPlanId, barCode, qty, sourceType, sourceId" }, 400);
+        }
+
+        const stockLen = stockLengthMm || DEFAULT_STOCK_LENGTH_MM;
+
+        // Decrement source qty_reserved
+        if (sourceType === "lot" || sourceType === "remnant") {
+          const { data: lot, error: lotErr } = await svc
+            .from("inventory_lots")
+            .select("id, qty_on_hand, qty_reserved")
+            .eq("id", sourceId)
+            .single();
+          if (lotErr || !lot) return json({ error: "Source lot not found" }, 404);
+          const available = lot.qty_on_hand - lot.qty_reserved;
+          if (qty > available) return json({ error: `Insufficient stock: ${available} available, ${qty} requested` }, 400);
+
+          await svc.from("inventory_lots")
+            .update({ qty_reserved: lot.qty_reserved + qty })
+            .eq("id", sourceId);
+        } else if (sourceType === "floor") {
+          const { data: fs, error: fsErr } = await svc
+            .from("floor_stock")
+            .select("id, qty_on_hand, qty_reserved")
+            .eq("id", sourceId)
+            .single();
+          if (fsErr || !fs) return json({ error: "Floor stock not found" }, 404);
+          const available = fs.qty_on_hand - fs.qty_reserved;
+          if (qty > available) return json({ error: `Insufficient floor stock: ${available} available` }, 400);
+
+          await svc.from("floor_stock")
+            .update({ qty_reserved: fs.qty_reserved + qty })
+            .eq("id", sourceId);
+        } else if (sourceType === "wip") {
+          const { data: wip, error: wipErr } = await svc
+            .from("cut_output_batches")
+            .select("id, qty_available")
+            .eq("id", sourceId)
+            .single();
+          if (wipErr || !wip) return json({ error: "WIP batch not found" }, 404);
+          if (qty > wip.qty_available) return json({ error: `Insufficient WIP: ${wip.qty_available} available` }, 400);
+          // WIP doesn't have qty_reserved, we just track via reservations
+        }
+
+        // Idempotency: check for existing reservation with same source
+        if (cutPlanItemId) {
+          const { data: existingRes } = await svc
+            .from("inventory_reservations")
+            .select("id")
+            .eq("cut_plan_item_id", cutPlanItemId)
+            .eq("source_id", sourceId)
+            .eq("status", "reserved")
+            .maybeSingle();
+          if (existingRes) {
+            return json({ success: true, action, reservationId: existingRes.id, deduplicated: true });
+          }
+        }
+
+        // Create reservation
+        const { data: reservation, error: resErr } = await svc
+          .from("inventory_reservations")
+          .insert({
+            company_id: companyId,
+            cut_plan_id: cutPlanId,
+            cut_plan_item_id: cutPlanItemId || null,
+            source_type: sourceType,
+            source_id: sourceId,
+            bar_code: barCode,
+            qty_reserved: qty,
+            stock_length_mm: stockLen,
+            status: "reserved",
+          })
+          .select()
+          .single();
+        if (resErr) throw resErr;
+
+        const eventType = sourceType === "floor" ? "floor_stock_reserved" : "inventory_reserved";
+        events.push({
+          entity_type: "inventory",
+          entity_id: reservation.id,
+          event_type: eventType,
+          actor_id: userId,
+          actor_type: "user",
+          description: `Reserved ${qty}× ${barCode} from ${sourceType} for plan`,
+          metadata: { reservationId: reservation.id, cutPlanId, barCode, qty, sourceType, sourceId, stockLengthMm: stockLen },
+        });
+        break;
+      }
+
+      // ─── CONSUME ON START (CUT) ────────────────────────────────────
+      case "consume-on-start": {
+        const { machineRunId, cutPlanItemId, barCode, qty, sourceType, sourceId } = body;
+        if (!machineRunId || !barCode || !qty || !sourceType || !sourceId) {
+          return json({ error: "Missing: machineRunId, barCode, qty, sourceType, sourceId" }, 400);
+        }
+
+        // ── Idempotency: check if this exact consumption was already recorded ──
+        const dedupeKey = `consume:${machineRunId}:${sourceId}:${sourceType}`;
+        const { data: existingEvent } = await svc
+          .from("activity_events")
+          .select("id")
+          .eq("dedupe_key", dedupeKey)
+          .maybeSingle();
+        if (existingEvent) {
+          log.warn("Deduplicated consume-on-start", { dedupeKey });
+          return json({ success: true, action, deduplicated: true });
+        }
+
+        if (sourceType === "lot" || sourceType === "remnant") {
+          const { data: lot } = await svc
+            .from("inventory_lots")
+            .select("id, qty_on_hand, qty_reserved")
+            .eq("id", sourceId)
+            .single();
+          if (!lot) return json({ error: "Lot not found" }, 404);
+
+          if (lot.qty_on_hand < qty) {
+            return json({ error: `Over-consumption: only ${lot.qty_on_hand} on hand, ${qty} requested` }, 400);
+          }
+
+          await svc.from("inventory_lots").update({
+            qty_on_hand: lot.qty_on_hand - qty,
+            qty_reserved: Math.max(0, lot.qty_reserved - qty),
+          }).eq("id", sourceId);
+
+          events.push({
+            entity_type: "inventory",
+            entity_id: sourceId,
+            event_type: "inventory_consumed",
+            actor_id: userId,
+            actor_type: "user",
+            description: `Consumed ${qty}× ${barCode} from lot on cut start`,
+            metadata: { machineRunId, barCode, qty, sourceType, sourceId },
+            dedupe_key: `consume:${machineRunId}:${sourceId}:${sourceType}`,
+          });
+        } else if (sourceType === "floor") {
+          const { data: fs } = await svc
+            .from("floor_stock")
+            .select("id, qty_on_hand, qty_reserved")
+            .eq("id", sourceId)
+            .single();
+          if (!fs) return json({ error: "Floor stock not found" }, 404);
+
+          if (fs.qty_on_hand < qty) {
+            return json({ error: `Over-consumption: only ${fs.qty_on_hand} floor stock on hand, ${qty} requested` }, 400);
+          }
+
+          await svc.from("floor_stock").update({
+            qty_on_hand: fs.qty_on_hand - qty,
+            qty_reserved: Math.max(0, fs.qty_reserved - qty),
+          }).eq("id", sourceId);
+
+          events.push({
+            entity_type: "inventory",
+            entity_id: sourceId,
+            event_type: "floor_stock_consumed",
+            actor_id: userId,
+            actor_type: "user",
+            description: `Consumed ${qty}× ${barCode} from floor stock on cut start`,
+            metadata: { machineRunId, barCode, qty, sourceType, sourceId },
+          });
+        } else if (sourceType === "wip") {
+          const { data: wip } = await svc
+            .from("cut_output_batches")
+            .select("id, qty_available, qty_consumed")
+            .eq("id", sourceId)
+            .single();
+          if (!wip) return json({ error: "WIP batch not found" }, 404);
+
+          const newAvail = Math.max(0, wip.qty_available - qty);
+          const newConsumed = wip.qty_consumed + qty;
+          await svc.from("cut_output_batches").update({
+            qty_available: newAvail,
+            qty_consumed: newConsumed,
+            status: newAvail === 0 ? "consumed" : "partial",
+          }).eq("id", sourceId);
+
+          events.push({
+            entity_type: "inventory",
+            entity_id: sourceId,
+            event_type: "wip_consumed",
+            actor_id: userId,
+            actor_type: "user",
+            description: `Consumed ${qty}× ${barCode} WIP on bend/spiral start`,
+            metadata: { machineRunId, barCode, qty, sourceId },
+          });
+        }
+
+        // Update reservation status
+        if (cutPlanItemId) {
+          const { data: reservations } = await svc
+            .from("inventory_reservations")
+            .select("id, qty_reserved, qty_consumed")
+            .eq("source_id", sourceId)
+            .eq("cut_plan_item_id", cutPlanItemId)
+            .eq("status", "reserved");
+
+          if (reservations?.length) {
+            const res = reservations[0];
+            const newConsumed = Math.min(res.qty_reserved, res.qty_consumed + qty);
+            await svc.from("inventory_reservations").update({
+              qty_consumed: newConsumed,
+              status: newConsumed >= res.qty_reserved ? "consumed" : "partial",
+            }).eq("id", res.id);
+          }
+        }
+        break;
+      }
+
+      // ─── CUT COMPLETION: remnant or scrap ──────────────────────────
+      case "cut-complete": {
+        const { machineRunId, barCode, stockLengthMm, cutLengthMm, piecesPerBar, bars } = body;
+        if (!barCode || !cutLengthMm) {
+          return json({ error: "Missing: barCode, cutLengthMm" }, 400);
+        }
+
+        const stockLen = stockLengthMm || DEFAULT_STOCK_LENGTH_MM;
+        const ppb = piecesPerBar || 1;
+        const numBars = bars || 1;
+
+        // Calculate leftover per bar
+        const usedPerBar = ppb * cutLengthMm;
+        const leftoverPerBar = stockLen - usedPerBar;
+
+        // Create WIP output batch
+        const totalPiecesProduced = ppb * numBars;
+        const { data: batch, error: batchErr } = await svc
+          .from("cut_output_batches")
+          .insert({
+            company_id: companyId,
+            machine_run_id: machineRunId || null,
+            bar_code: barCode,
+            cut_length_mm: cutLengthMm,
+            qty_produced: totalPiecesProduced,
+            qty_available: totalPiecesProduced,
+            status: "available",
+          })
+          .select()
+          .single();
+        if (batchErr) throw batchErr;
+
+        // Handle leftovers per bar
+        for (let b = 0; b < numBars; b++) {
+          if (leftoverPerBar >= REMNANT_THRESHOLD_MM) {
+            // Create remnant lot
+            const { error: remErr } = await svc
+              .from("inventory_lots")
+              .insert({
+                company_id: companyId,
+                bar_code: barCode,
+                source: "remnant",
+                standard_length_mm: leftoverPerBar,
+                qty_on_hand: 1,
+                qty_reserved: 0,
+                location: "floor",
+              });
+            if (remErr) log.error("Remnant insert error", remErr);
+
+            events.push({
+              entity_type: "inventory",
+              entity_id: batch.id,
+              event_type: "inventory_remnant_added",
+              actor_id: userId,
+              actor_type: "user",
+              description: `Remnant created: ${leftoverPerBar}mm ${barCode} from cut`,
+              metadata: { machineRunId, barCode, leftoverMm: leftoverPerBar, stockLengthMm: stockLen },
+            });
+          } else if (leftoverPerBar > 0) {
+            // Record scrap
+            const { error: scrapErr } = await svc
+              .from("inventory_scrap")
+              .insert({
+                company_id: companyId,
+                machine_run_id: machineRunId,
+                bar_code: barCode,
+                length_mm: leftoverPerBar,
+                qty: 1,
+                reason: "cutoff_below_threshold",
+              });
+            if (scrapErr) log.error("Scrap insert error", scrapErr);
+
+            events.push({
+              entity_type: "inventory",
+              entity_id: batch.id,
+              event_type: "inventory_scrap_recorded",
+              actor_id: userId,
+              actor_type: "user",
+              description: `Scrap recorded: ${leftoverPerBar}mm ${barCode} (below ${REMNANT_THRESHOLD_MM}mm threshold)`,
+              metadata: { machineRunId, barCode, leftoverMm: leftoverPerBar, threshold: REMNANT_THRESHOLD_MM },
+            });
+          }
+        }
+        break;
+      }
+
+      // ─── RELEASE RESERVATIONS (for replan) ─────────────────────────
+      case "release": {
+        const { cutPlanId, cutPlanItemId } = body;
+        if (!cutPlanId) return json({ error: "Missing cutPlanId" }, 400);
+
+        // Find all active reservations for this plan/item
+        let query = svc
+          .from("inventory_reservations")
+          .select("*")
+          .eq("cut_plan_id", cutPlanId)
+          .in("status", ["reserved", "partial"]);
+
+        if (cutPlanItemId) {
+          query = query.eq("cut_plan_item_id", cutPlanItemId);
+        }
+
+        const { data: reservations } = await query;
+        if (!reservations?.length) break;
+
+        for (const res of reservations) {
+          const unreserveQty = res.qty_reserved - res.qty_consumed;
+          if (unreserveQty <= 0) continue;
+
+          // Return reserved qty to source
+          if (res.source_type === "lot" || res.source_type === "remnant") {
+            const { data: lot } = await svc
+              .from("inventory_lots")
+              .select("id, qty_reserved")
+              .eq("id", res.source_id)
+              .single();
+            if (lot) {
+              await svc.from("inventory_lots").update({
+                qty_reserved: Math.max(0, lot.qty_reserved - unreserveQty),
+              }).eq("id", res.source_id);
+            }
+          } else if (res.source_type === "floor") {
+            const { data: fs } = await svc
+              .from("floor_stock")
+              .select("id, qty_reserved")
+              .eq("id", res.source_id)
+              .single();
+            if (fs) {
+              await svc.from("floor_stock").update({
+                qty_reserved: Math.max(0, fs.qty_reserved - unreserveQty),
+              }).eq("id", res.source_id);
+            }
+          }
+
+          // Mark reservation as released
+          await svc.from("inventory_reservations").update({ status: "released" }).eq("id", res.id);
+        }
+
+        events.push({
+          entity_type: "inventory",
+          entity_id: cutPlanId,
+          event_type: "reservation_reallocated",
+          actor_id: userId,
+          actor_type: "user",
+          description: `Released ${reservations.length} reservation(s) for plan recomputation`,
+          metadata: { cutPlanId, cutPlanItemId, releasedCount: reservations.length },
+        });
+        break;
+      }
+
+      // ─── REPLAN ────────────────────────────────────────────────────
+      case "replan": {
+        const { cutPlanId, reason } = body;
+        if (!cutPlanId) return json({ error: "Missing cutPlanId" }, 400);
+
+        events.push({
+          entity_type: "cut_plan",
+          entity_id: cutPlanId,
+          event_type: "plan_recomputed",
+          actor_id: userId,
+          actor_type: "user",
+          description: `Plan recomputed: ${reason || "operator change"}`,
+          metadata: { cutPlanId, reason },
+        });
+
+        // The actual release+re-reserve is done by calling release then reserve again
+        // This event just marks the replan intent
+        break;
+      }
+
+      default:
+        return json({ error: `Unknown action: ${action}` }, 400);
+    }
+
+    // Write events
+    if (events.length > 0) {
+      const { error: evtErr } = await svc.from("activity_events").insert(events.map((e: any) => ({ ...e, source: "system", company_id: companyId })));
+      if (evtErr) log.error("Failed to log inventory events", evtErr);
+    }
+
+    return json({ success: true, action });
+  }, {
+    functionName: "manage-inventory",
+    requireCompany: true,
+    requireAnyRole: ["admin", "workshop"],
+    rawResponse: true,
+  });
+});

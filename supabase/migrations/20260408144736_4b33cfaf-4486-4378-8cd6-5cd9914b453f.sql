@@ -1,0 +1,1 @@
+ALTER TABLE public.user_access_overrides ADD COLUMN IF NOT EXISTS menus text[] DEFAULT '{}';

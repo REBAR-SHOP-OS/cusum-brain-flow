@@ -1,0 +1,391 @@
+import { useState, useEffect, useRef } from "react";
+import { X, Plus, Brain, Loader2, Paperclip, Save, FileText, ImageIcon, Upload, Download } from "lucide-react";
+import { downloadFile } from "@/lib/downloadUtils";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { supabase } from "@/integrations/supabase/client";
+import { useCompanyId } from "@/hooks/useCompanyId";
+import { AddKnowledgeDialog } from "@/components/brain/AddKnowledgeDialog";
+import { KnowledgeDetailDialog } from "@/components/brain/KnowledgeDetailDialog";
+import { toast } from "sonner";
+
+interface KnowledgeItem {
+  id: string;
+  title: string;
+  content: string | null;
+  category: string;
+  source_url: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface PixelBrainDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
+
+const categoryIcons: Record<string, string> = {
+  memory: "🧠",
+  image: "🖼️",
+  video: "🎬",
+  webpage: "🌐",
+  document: "📄",
+};
+
+const LOGO_BUCKET = "social-images";
+const LOGO_PATH = "brand/company-logo.png";
+
+export function PixelBrainDialog({ open, onOpenChange }: PixelBrainDialogProps) {
+  const [items, setItems] = useState<KnowledgeItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<KnowledgeItem | null>(null);
+  const [instructions, setInstructions] = useState("");
+  const [instructionsSaving, setInstructionsSaving] = useState(false);
+  const [instructionsLoaded, setInstructionsLoaded] = useState(false);
+  const instructionsIdRef = useRef<string | null>(null);
+  const { companyId } = useCompanyId();
+
+  // Logo state
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const loadLogo = async () => {
+    const { data } = await supabase.storage.from(LOGO_BUCKET).createSignedUrl(LOGO_PATH, 3600);
+    if (data?.signedUrl) {
+      setLogoUrl(data.signedUrl);
+    } else {
+      // Auto-seed: upload bundled logo if missing
+      try {
+        const resp = await fetch("/brand-logo.png");
+        if (resp.ok) {
+          const blob = await resp.blob();
+          await supabase.storage
+            .from(LOGO_BUCKET)
+            .upload(LOGO_PATH, blob, { upsert: true, contentType: "image/png" });
+          const { data: d2 } = await supabase.storage
+            .from(LOGO_BUCKET)
+            .createSignedUrl(LOGO_PATH, 3600);
+          setLogoUrl(d2?.signedUrl ?? null);
+        }
+      } catch (err) {
+        console.warn("Failed to auto-seed logo:", err);
+      }
+    }
+  };
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const { error } = await supabase.storage
+        .from(LOGO_BUCKET)
+        .upload(LOGO_PATH, file, { upsert: true, contentType: file.type });
+      if (error) throw error;
+      toast.success("Logo uploaded!");
+      await loadLogo();
+    } catch (err: any) {
+      toast.error("Failed to upload logo: " + err.message);
+    } finally {
+      setLogoUploading(false);
+      if (logoInputRef.current) logoInputRef.current.value = "";
+    }
+  };
+
+  const fetchItems = async () => {
+    if (!companyId) return;
+    setLoading(true);
+    try {
+      const { data } = await supabase
+        .from("knowledge")
+        .select("*")
+        .eq("company_id", companyId)
+        .order("created_at", { ascending: false });
+
+      const all = (data || []) as KnowledgeItem[];
+      const instrItem = all.find(
+        (item) => (item.metadata as any)?.agent === "social" && (item.metadata as any)?.type === "instructions"
+      );
+      if (instrItem) {
+        instructionsIdRef.current = instrItem.id;
+        if (!instructionsLoaded) {
+          setInstructions(instrItem.content || "");
+          setInstructionsLoaded(true);
+        }
+      } else {
+        instructionsIdRef.current = null;
+        if (!instructionsLoaded) {
+          setInstructions("");
+          setInstructionsLoaded(true);
+        }
+      }
+
+      const filtered = all.filter(
+        (item) =>
+          (item.metadata as any)?.agent === "social" &&
+          (item.metadata as any)?.type !== "instructions"
+      );
+      setItems(filtered);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (open) {
+      setInstructionsLoaded(false);
+      fetchItems();
+      loadLogo();
+    }
+  }, [open, companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveInstructions = async () => {
+    if (!companyId) return;
+    setInstructionsSaving(true);
+    try {
+      if (instructionsIdRef.current) {
+        const { error } = await supabase
+          .from("knowledge")
+          .update({ content: instructions.trim(), updated_at: new Date().toISOString() })
+          .eq("id", instructionsIdRef.current);
+        if (error) throw error;
+      } else if (instructions.trim()) {
+        const { data, error } = await supabase
+          .from("knowledge")
+          .insert({
+            title: "Pixel Custom Instructions",
+            content: instructions.trim(),
+            category: "memory",
+            company_id: companyId,
+            metadata: { agent: "social", type: "instructions" },
+          })
+          .select("id")
+          .single();
+        if (error) throw error;
+        instructionsIdRef.current = data.id;
+      }
+      toast.success("Instructions saved!");
+    } catch (err) {
+      toast.error("Failed to save instructions");
+    } finally {
+      setInstructionsSaving(false);
+    }
+  };
+
+  if (!open) return null;
+
+  return (
+    <>
+      <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50" onClick={() => onOpenChange(false)}>
+        <div
+          className="w-full sm:max-w-md max-h-[80vh] bg-card rounded-t-2xl sm:rounded-2xl shadow-xl flex flex-col overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center gap-2">
+              <Brain className="w-5 h-5 text-primary" />
+              <h2 className="font-semibold text-lg">Pixel Brain</h2>
+            </div>
+            <button onClick={() => onOpenChange(false)} className="p-1 rounded-lg hover:bg-muted transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Logo Section */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold">Logo</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {logoUrl ? (
+                  <img
+                    src={logoUrl}
+                    alt="Company logo"
+                    className="w-16 h-16 rounded-lg border border-border object-contain bg-muted/30"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg border border-dashed border-border flex items-center justify-center bg-muted/30">
+                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                )}
+                <div className="flex-1">
+                  <input
+                    ref={logoInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-2 w-full"
+                    onClick={() => logoInputRef.current?.click()}
+                    disabled={logoUploading}
+                  >
+                    {logoUploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
+                    {logoUrl ? "Change Logo" : "Upload Logo"}
+                  </Button>
+                  <p className="text-[10px] text-muted-foreground mt-1">Used as watermark on generated images</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* Instructions Section */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold">Custom Instructions</span>
+              </div>
+              <Textarea
+                value={instructions}
+                onChange={(e) => setInstructions(e.target.value)}
+                placeholder="Write instructions for Pixel (tone, language, rules, brand guidelines)... These will be used in ALL chats."
+                className="min-h-[100px] max-h-[160px] text-sm resize-none"
+              />
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-2"
+                onClick={saveInstructions}
+                disabled={instructionsSaving}
+              >
+                {instructionsSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                Save Instructions
+              </Button>
+            </div>
+
+            <div className="h-px bg-border" />
+
+            {/* Knowledge Items */}
+            <div className="space-y-2">
+              <span className="text-sm font-semibold">Files & Resources</span>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : items.length === 0 ? (
+                <div className="text-center py-6 text-muted-foreground">
+                  <Brain className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-xs">No files added yet. Upload images, documents, or links for Pixel to reference.</p>
+                </div>
+              ) : (
+                items.map((item) => {
+                  const meta = item.metadata as Record<string, unknown> | null;
+                  const fileName = meta?.file_name as string | undefined;
+                  const fileType = (meta?.file_type as string | undefined)?.toUpperCase();
+                  const downloadUrl = (item.source_url || (meta?.file_url as string | undefined)) ?? null;
+                  return (
+                    <div
+                      key={item.id}
+                      className="w-full flex items-start gap-2 p-3 rounded-xl border border-border hover:border-primary/30 hover:bg-primary/5 transition-colors"
+                    >
+                      <button
+                        onClick={() => setSelectedItem(item)}
+                        className="flex items-start gap-3 flex-1 min-w-0 text-left"
+                      >
+                        <span className="text-lg mt-0.5">{categoryIcons[item.category] || "📝"}</span>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{item.title}</p>
+                          {fileName && (
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <Paperclip className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                              <span className="text-xs text-muted-foreground truncate">{fileName}</span>
+                              {fileType && (
+                                <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-muted text-muted-foreground flex-shrink-0">
+                                  {fileType}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {!fileName && item.content && (
+                            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{item.content}</p>
+                          )}
+                        </div>
+                      </button>
+                      {(downloadUrl || meta?.storage_path) && (
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const name = fileName || item.title || "download";
+                            let bucket = (meta?.storage_bucket as string | undefined) || "estimation-files";
+                            let path = meta?.storage_path as string | undefined;
+
+                            // If no explicit storage path, try parsing it out of a Supabase storage URL
+                            // (covers both signed `/object/sign/<bucket>/<path>` and public `/object/public/<bucket>/<path>`).
+                            // This avoids relying on expired signed URLs.
+                            if (!path && downloadUrl) {
+                              const m = downloadUrl.match(/\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^/]+)\/([^?]+)/);
+                              if (m) {
+                                bucket = decodeURIComponent(m[1]);
+                                path = decodeURIComponent(m[2]);
+                              }
+                            }
+
+                            try {
+                              if (path) {
+                                const { data, error } = await supabase.storage.from(bucket).download(path);
+                                if (error || !data) throw error || new Error("Empty");
+                                const blobUrl = URL.createObjectURL(data);
+                                const a = document.createElement("a");
+                                a.href = blobUrl;
+                                a.download = name;
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                                URL.revokeObjectURL(blobUrl);
+                                return;
+                              }
+                              if (downloadUrl) await downloadFile(downloadUrl, name);
+                            } catch (err: any) {
+                              toast.error("Download failed: " + (err?.message || "unknown"));
+                            }
+                          }}
+                          className="p-2 rounded-lg hover:bg-muted transition-colors flex-shrink-0"
+                          title="Download"
+                          aria-label="Download file"
+                        >
+                          <Download className="w-4 h-4 text-muted-foreground" />
+                        </button>
+                      )}
+
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="p-4 border-t border-border">
+            <Button className="w-full gap-2" onClick={() => setAddOpen(true)}>
+              <Plus className="w-4 h-4" />
+              Add File / Resource
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <AddKnowledgeDialog
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        onSuccess={fetchItems}
+        defaultMetadata={{ agent: "social" }}
+      />
+
+      <KnowledgeDetailDialog
+        item={selectedItem}
+        onClose={() => setSelectedItem(null)}
+        onUpdated={fetchItems}
+      />
+    </>
+  );
+}

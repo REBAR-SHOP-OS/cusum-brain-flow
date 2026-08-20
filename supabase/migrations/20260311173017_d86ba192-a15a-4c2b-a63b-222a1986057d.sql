@@ -1,0 +1,1 @@
+ALTER TABLE public.social_posts ADD COLUMN last_error text;

@@ -1,0 +1,9 @@
+# Security Headers for Lovable CDN
+# These headers are applied to all served files
+
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(self), geolocation=(), payment=()
+  X-XSS-Protection: 0

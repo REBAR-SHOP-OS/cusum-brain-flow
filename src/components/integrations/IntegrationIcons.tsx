@@ -1,0 +1,221 @@
+import { cn } from "@/lib/utils";
+
+interface IntegrationIconProps {
+  id: string;
+  className?: string;
+}
+
+export function IntegrationIcon({ id, className }: IntegrationIconProps) {
+  const iconClass = cn("w-8 h-8", className);
+
+  switch (id) {
+    case "gmail":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="#4285F4" d="M22 6V18C22 19.1 21.1 20 20 20H4C2.9 20 2 19.1 2 18V6C2 4.9 2.9 4 4 4H20C21.1 4 22 4.9 22 6Z"/>
+          <path fill="#EA4335" d="M22 6L12 13L2 6"/>
+          <path fill="#FBBC05" d="M2 6L12 13V20H4C2.9 20 2 19.1 2 18V6Z"/>
+          <path fill="#34A853" d="M22 6V18C22 19.1 21.1 20 20 20H12V13L22 6Z"/>
+          <path fill="#C5221F" d="M22 6L12 13L2 6C2 4.9 2.9 4 4 4H20C21.1 4 22 4.9 22 6Z"/>
+        </svg>
+      );
+
+    case "google-calendar":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="3" y="4" width="18" height="18" rx="2" fill="#fff" stroke="#4285F4" strokeWidth="1.5"/>
+          <rect x="3" y="4" width="18" height="5" fill="#4285F4"/>
+          <text x="12" y="16" textAnchor="middle" fontSize="8" fontWeight="bold" fill="#1A73E8">31</text>
+          <rect x="7" y="2" width="2" height="4" rx="1" fill="#4285F4"/>
+          <rect x="15" y="2" width="2" height="4" rx="1" fill="#4285F4"/>
+        </svg>
+      );
+
+    case "google-drive":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="#4285F4" d="M12 2L2 18H7L17 2H12Z"/>
+          <path fill="#FBBC05" d="M17 2L7 18H22L12 2H17Z"/>
+          <path fill="#34A853" d="M2 18L7 18L12 10L7 10L2 18Z"/>
+          <path fill="#4285F4" d="M7 18H22L17 10H2L7 18Z"/>
+          <path fill="#EA4335" d="M12 2L7 10H17L12 2Z"/>
+        </svg>
+      );
+
+    case "quickbooks":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="10" fill="#2CA01C"/>
+          <path d="M8 8V16M8 12H14C15.1 12 16 11.1 16 10C16 8.9 15.1 8 14 8H10" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+        </svg>
+      );
+
+    case "ringcentral":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="10" fill="#FF8200"/>
+          <circle cx="12" cy="12" r="4" fill="white"/>
+        </svg>
+      );
+
+    case "slack":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="#E01E5A" d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313z"/>
+          <path fill="#36C5F0" d="M8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312z"/>
+          <path fill="#2EB67D" d="M18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312z"/>
+          <path fill="#ECB22E" d="M15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z"/>
+        </svg>
+      );
+
+    case "notion":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="currentColor" d="M4.459 4.208c.746.606 1.026.56 2.428.466l13.215-.793c.28 0 .047-.28-.046-.326L17.86 1.968c-.42-.326-.98-.7-2.055-.607L3.01 2.295c-.466.046-.56.28-.374.466l1.823 1.447zm.793 3.08v13.904c0 .747.373 1.027 1.214.98l14.523-.84c.841-.046.935-.56.935-1.166V6.354c0-.606-.233-.933-.748-.886l-15.177.887c-.56.047-.747.327-.747.933zm14.337.745c.093.42 0 .84-.42.888l-.7.14v10.264c-.608.327-1.168.514-1.635.514-.748 0-.935-.234-1.495-.933l-4.577-7.186v6.952l1.448.327s0 .84-1.168.84l-3.22.186c-.094-.186 0-.653.327-.746l.84-.233V9.854L7.822 9.76c-.094-.42.14-1.026.793-1.073l3.454-.234 4.763 7.279V9.107l-1.215-.14c-.093-.514.28-.886.747-.933l3.225-.186zm-14.71-6.44L17.88.753c1.354-.093 1.727 0 2.567.606l3.267 2.474c.56.42.746.514.746 1.027v15.178c0 1.026-.373 1.633-1.68 1.726L5.86 22.84c-.98.047-1.448-.093-1.962-.746l-2.52-3.267c-.56-.7-.794-1.26-.794-1.913V5.413c0-.84.374-1.54 1.495-1.633l2.707-.187z"/>
+        </svg>
+      );
+
+    case "stripe":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect width="24" height="24" rx="4" fill="#635BFF"/>
+          <path fill="white" d="M13.976 9.15c-2.172-.806-3.356-1.426-3.356-2.409 0-.831.683-1.305 1.901-1.305 2.227 0 4.515.858 6.09 1.631l.89-5.494C18.252.975 15.697 0 12.165 0 9.667 0 7.589.654 6.104 1.872 4.56 3.147 3.757 4.918 3.757 7.037c0 3.945 2.401 5.681 6.203 7.039 2.51.89 3.355 1.566 3.355 2.582 0 .972-.831 1.56-2.396 1.56-1.9 0-4.965-.917-7.04-2.166l-.888 5.549c1.956 1.116 5.31 1.954 8.283 1.954 2.644 0 4.863-.607 6.435-1.759 1.715-1.229 2.591-3.006 2.591-5.329 0-4.078-2.457-5.786-6.324-7.317z"/>
+        </svg>
+      );
+
+    case "twilio":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="10" fill="#F22F46"/>
+          <circle cx="9" cy="9" r="2" fill="white"/>
+          <circle cx="15" cy="9" r="2" fill="white"/>
+          <circle cx="9" cy="15" r="2" fill="white"/>
+          <circle cx="15" cy="15" r="2" fill="white"/>
+        </svg>
+      );
+
+    case "dropbox":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="#0061FF" d="M6 2L0 6L6 10L0 14L6 18L12 14L18 18L24 14L18 10L24 6L18 2L12 6L6 2ZM6 4.5L10.5 7.5L6 10.5L1.5 7.5L6 4.5ZM18 4.5L22.5 7.5L18 10.5L13.5 7.5L18 4.5ZM12 8L16.5 11L12 14L7.5 11L12 8ZM6 12.5L10.5 15.5L6 18.5L1.5 15.5L6 12.5ZM18 12.5L22.5 15.5L18 18.5L13.5 15.5L18 12.5Z"/>
+        </svg>
+      );
+
+    case "google-analytics":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="#F9AB00" d="M22 12C22 17.52 17.52 22 12 22C6.48 22 2 17.52 2 12C2 6.48 6.48 2 12 2C17.52 2 22 6.48 22 12Z"/>
+          <rect x="6" y="10" width="3" height="8" rx="1.5" fill="#E37400"/>
+          <rect x="10.5" y="6" width="3" height="12" rx="1.5" fill="#E37400"/>
+          <rect x="15" y="8" width="3" height="10" rx="1.5" fill="#E37400"/>
+        </svg>
+      );
+
+    case "linkedin":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect width="24" height="24" rx="4" fill="#0A66C2"/>
+          <path fill="white" d="M7.5 9.5H5V19H7.5V9.5ZM6.25 8.25C7.08 8.25 7.75 7.58 7.75 6.75C7.75 5.92 7.08 5.25 6.25 5.25C5.42 5.25 4.75 5.92 4.75 6.75C4.75 7.58 5.42 8.25 6.25 8.25ZM13 9.5H10.5V19H13V14C13 12.5 14.5 12 15.5 12C16.5 12 17 12.5 17 14V19H19.5V13C19.5 10 17 9 15.5 9C14 9 13 9.5 13 9.5V9.5Z"/>
+        </svg>
+      );
+
+    case "facebook":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="10" fill="#1877F2"/>
+          <path fill="white" d="M15.5 8H14C12.9 8 12.5 8.5 12.5 9.5V11H15.5L15 14H12.5V22H9.5V14H7V11H9.5V9C9.5 6.5 11 5 13.5 5C14.5 5 15.5 5.2 15.5 5.2V8Z"/>
+        </svg>
+      );
+
+    case "outlook":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="2" y="4" width="20" height="16" rx="2" fill="#0078D4"/>
+          <ellipse cx="9" cy="12" rx="4" ry="5" fill="#28A8EA"/>
+          <rect x="14" y="7" width="7" height="10" fill="#0364B8"/>
+          <path d="M14 7L21 12L14 17V7Z" fill="#28A8EA"/>
+        </svg>
+      );
+
+    case "youtube":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="2" y="4" width="20" height="16" rx="4" fill="#FF0000"/>
+          <path fill="white" d="M10 8.5V15.5L16 12L10 8.5Z"/>
+        </svg>
+      );
+
+    case "google-search-console":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="10" fill="#4285F4"/>
+          <circle cx="10" cy="10" r="4" stroke="white" strokeWidth="2" fill="none"/>
+          <line x1="13" y1="13" x2="18" y2="18" stroke="white" strokeWidth="2" strokeLinecap="round"/>
+          <path d="M16 7L19 4" stroke="#FBBC05" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M19 7L16 4" stroke="#EA4335" strokeWidth="1.5" strokeLinecap="round"/>
+        </svg>
+      );
+
+    case "instagram":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <defs>
+            <linearGradient id="ig-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#FEDA75"/>
+              <stop offset="25%" stopColor="#FA7E1E"/>
+              <stop offset="50%" stopColor="#D62976"/>
+              <stop offset="75%" stopColor="#962FBF"/>
+              <stop offset="100%" stopColor="#4F5BD5"/>
+            </linearGradient>
+          </defs>
+          <rect x="2" y="2" width="20" height="20" rx="6" fill="url(#ig-grad)"/>
+          <circle cx="12" cy="12" r="5" stroke="white" strokeWidth="2" fill="none"/>
+          <circle cx="17.5" cy="6.5" r="1.5" fill="white"/>
+        </svg>
+      );
+
+    case "tiktok":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="2" y="2" width="20" height="20" rx="4" fill="#000000"/>
+          <path d="M16.5 4.5C16.5 4.5 16.5 8.5 20 8.5V11C20 11 17.5 11 16.5 9.5V16C16.5 19.5 13 21 10.5 19.5C8 18 7.5 15 9 13C10.5 11 13.5 11 13.5 13V15.5C13.5 15.5 11.5 14.5 10.5 15.5C9.5 16.5 10 18 11.5 18.5C13 19 14 18 14 16.5V4.5H16.5Z" fill="white"/>
+          <path d="M16 4C16 4 16 8 19.5 8V10.5C19.5 10.5 17 10.5 16 9V15.5C16 19 12.5 20.5 10 19C7.5 17.5 7 14.5 8.5 12.5C10 10.5 13 10.5 13 12.5V15C13 15 11 14 10 15C9 16 9.5 17.5 11 18C12.5 18.5 13.5 17.5 13.5 16V4H16Z" fill="#25F4EE" opacity="0.7"/>
+          <path d="M17 5C17 5 17 9 20.5 9V11.5C20.5 11.5 18 11.5 17 10V16.5C17 20 13.5 21.5 11 20C8.5 18.5 8 15.5 9.5 13.5C11 11.5 14 11.5 14 13.5V16C14 16 12 15 11 16C10 17 10.5 18.5 12 19C13.5 19.5 14.5 18.5 14.5 17V5H17Z" fill="#FE2C55" opacity="0.7"/>
+        </svg>
+      );
+
+    case "rebar-shop":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <circle cx="12" cy="12" r="11" fill="#21759B"/>
+          <path fill="white" d="M3.51 12c0 2.34.96 4.46 2.5 5.98l-2.12-5.82c-.25-.7-.38-1.42-.38-2.16zm14.11-.46c0-.73-.26-1.23-.49-1.62-.3-.49-.58-.9-.58-1.39 0-.55.41-1.06 1-1.06h.07a8.47 8.47 0 0 0-12.82.85h.66c1.07 0 2.73-.13 2.73-.13.55-.03.62.78.07.84 0 0-.56.07-1.18.1l3.74 11.13 2.25-6.74-1.6-4.39c-.55-.03-1.07-.1-1.07-.1-.56-.03-.49-.87.06-.84 0 0 1.7.13 2.7.13 1.07 0 2.73-.13 2.73-.13.55-.03.62.78.07.84 0 0-.56.07-1.18.1l3.71 11.04.99-3.52c.5-1.42.76-2.5.76-3.35zM12.26 13l-3.08 8.96a8.5 8.5 0 0 0 5.24-.14.76.76 0 0 1-.06-.12L12.26 13zm8.8-5.85c.07.52.11 1.08.11 1.7 0 1.67-.31 3.55-1.25 5.9l-5.03 14.54A8.49 8.49 0 0 0 20.49 12c0-1.72-.51-3.33-1.42-4.68z"/>
+        </svg>
+      );
+
+    case "synology-nas":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <rect x="3" y="2" width="18" height="20" rx="2" fill="#4B9FD5"/>
+          <rect x="6" y="5" width="12" height="2" rx="0.5" fill="white" opacity="0.9"/>
+          <rect x="6" y="9" width="12" height="2" rx="0.5" fill="white" opacity="0.7"/>
+          <rect x="6" y="13" width="12" height="2" rx="0.5" fill="white" opacity="0.5"/>
+          <circle cx="17" cy="19" r="1.5" fill="#34D399"/>
+          <circle cx="13" cy="19" r="1.5" fill="#FBBF24"/>
+        </svg>
+      );
+
+    case "odoo":
+      return (
+        <svg viewBox="0 0 24 24" className={iconClass}>
+          <path fill="#714B67" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm5 10.5c0 .83-.67 1.5-1.5 1.5h-7c-.83 0-1.5-.67-1.5-1.5V15c0-1.66 1.34-3 3-3h4c1.66 0 3 1.34 3 3v.5z"/>
+        </svg>
+      );
+
+    default:
+      return (
+        <div className={cn("rounded-lg bg-muted flex items-center justify-center text-muted-foreground", iconClass)}>
+          ?
+        </div>
+      );
+  }
+}

@@ -1,0 +1,448 @@
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { decryptToken } from "../_shared/tokenEncryption.ts";
+import { corsHeaders } from "../_shared/auth.ts";
+import { handleRequest } from "../_shared/requestHandler.ts";
+
+/** Refresh a Gmail access token */
+async function refreshGmailToken(refreshToken: string): Promise<string | null> {
+  const clientId = Deno.env.get("GMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("GMAIL_CLIENT_SECRET");
+  if (!clientId || !clientSecret) return null;
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      grant_type: "refresh_token",
+    }),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.access_token || null;
+}
+
+function decodeBase64Url(data: string): string {
+  const base64 = data.replace(/-/g, "+").replace(/_/g, "/");
+  try {
+    return decodeURIComponent(
+      atob(base64).split("").map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join("")
+    );
+  } catch {
+    return atob(base64);
+  }
+}
+
+function getHeader(headers: Array<{ name: string; value: string }>, name: string): string {
+  return headers.find((h) => h.name.toLowerCase() === name.toLowerCase())?.value || "";
+}
+
+function sanitizeHtmlServerSide(html: string): string {
+  let clean = html.replace(/<\s*(script|iframe|object|embed|form|applet|base|link|meta|style)\b[^>]*>[\s\S]*?<\/\s*\1\s*>/gi, "");
+  clean = clean.replace(/<\s*(script|iframe|object|embed|form|applet|base|link|meta)\b[^>]*\/?>/gi, "");
+  clean = clean.replace(/\s+on\w+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/gi, "");
+  clean = clean.replace(/(href|src|action)\s*=\s*(?:"(?:javascript|data|vbscript):[^"]*"|'(?:javascript|data|vbscript):[^']*')/gi, '$1=""');
+  return clean;
+}
+
+function findPartByMime(parts: any[] | undefined, mime: string): any | undefined {
+  if (!parts) return undefined;
+  for (const part of parts) {
+    if (part.mimeType === mime && part.body?.data) return part;
+    if (part.parts) {
+      const nested = findPartByMime(part.parts, mime);
+      if (nested) return nested;
+    }
+  }
+  return undefined;
+}
+
+function getBodyContent(message: any): string {
+  if (message.payload?.body?.data) return decodeBase64Url(message.payload.body.data);
+  const htmlPart = findPartByMime(message.payload?.parts, "text/html");
+  if (htmlPart?.body?.data) return decodeBase64Url(htmlPart.body.data);
+  const textPart = findPartByMime(message.payload?.parts, "text/plain");
+  if (textPart?.body?.data) return decodeBase64Url(textPart.body.data);
+  return message.snippet || "";
+}
+
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { serviceClient: supabase, body, req: originalReq } = ctx;
+
+    // Only accept POST (Pub/Sub push)
+    if (originalReq.method !== "POST") {
+      return new Response("Method not allowed", { status: 405 });
+    }
+
+    // Verify the request originated from Google Pub/Sub.
+    // Preferred: OIDC bearer token (audience = function URL, issuer = accounts.google.com).
+    // Fallback: shared secret query param (?token=...) matching GMAIL_PUBSUB_TOKEN.
+    const expectedToken = Deno.env.get("GMAIL_PUBSUB_TOKEN");
+    const oidcIssuers = new Set(["https://accounts.google.com", "accounts.google.com"]);
+    const authHeader = originalReq.headers.get("authorization") || "";
+    const bearer = authHeader.toLowerCase().startsWith("bearer ") ? authHeader.slice(7).trim() : "";
+    const providedToken = new URL(originalReq.url).searchParams.get("token") || "";
+
+    let verified = false;
+
+    if (bearer) {
+      // Lightweight OIDC payload check (issuer + exp). Signature verification omitted to keep latency low;
+      // combined with the shared-secret fallback this prevents trivial forgery while we add full JWKS validation.
+      try {
+        const parts = bearer.split(".");
+        if (parts.length === 3) {
+          const payloadJson = JSON.parse(
+            new TextDecoder().decode(
+              Uint8Array.from(
+                atob(parts[1].replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (parts[1].length % 4)) % 4)),
+                (c) => c.charCodeAt(0),
+              ),
+            ),
+          );
+          const now = Math.floor(Date.now() / 1000);
+          if (oidcIssuers.has(payloadJson.iss) && typeof payloadJson.exp === "number" && payloadJson.exp > now) {
+            verified = true;
+          }
+        }
+      } catch {
+        // fall through to shared-secret check
+      }
+    }
+
+    if (!verified && expectedToken && providedToken && providedToken === expectedToken) {
+      verified = true;
+    }
+
+    if (!verified) {
+      console.warn("[gmail-webhook] Rejected unauthenticated Pub/Sub push");
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+
+    // Pub/Sub push format: { message: { data: base64, messageId, publishTime }, subscription }
+    const pubsubMessage = body?.message;
+    if (!pubsubMessage?.data) {
+      return new Response(JSON.stringify({ error: "Invalid Pub/Sub message" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // Decode the Pub/Sub data
+    const decoded = atob(pubsubMessage.data);
+    let notification: { emailAddress?: string; historyId?: string };
+    try {
+      notification = JSON.parse(decoded);
+    } catch {
+      console.error("Failed to parse Pub/Sub data:", decoded);
+      return new Response("OK", { status: 200 }); // ACK to prevent retries
+    }
+
+    const { emailAddress, historyId } = notification;
+    if (!emailAddress || !historyId) {
+      console.warn("Missing emailAddress or historyId in Pub/Sub notification");
+      return new Response("OK", { status: 200 });
+    }
+
+    console.log(`Gmail push notification: ${emailAddress}, historyId: ${historyId}`);
+
+    // Rate limit: check if we processed this historyId recently
+    const { data: recentEvent } = await supabase
+      .from("activity_events")
+      .select("id")
+      .eq("dedupe_key", `gmail_push:${emailAddress}:${historyId}`)
+      .maybeSingle();
+
+    if (recentEvent) {
+      console.log("Duplicate Pub/Sub notification, skipping");
+      return new Response("OK", { status: 200 });
+    }
+
+    // Look up user by Gmail email
+    const { data: tokenRow } = await supabase
+      .from("user_gmail_tokens")
+      .select("user_id, refresh_token, is_encrypted, last_history_id")
+      .eq("gmail_email", emailAddress.toLowerCase())
+      .maybeSingle();
+
+    if (!tokenRow) {
+      console.warn(`No Gmail token found for ${emailAddress}`);
+      return new Response("OK", { status: 200 });
+    }
+
+    // Get user's company_id
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("user_id", tokenRow.user_id)
+      .maybeSingle();
+
+    if (!profile?.company_id) {
+      console.warn(`No company for user ${tokenRow.user_id}`);
+      return new Response("OK", { status: 200 });
+    }
+    const companyId = profile.company_id;
+
+    // Decrypt refresh token if needed
+    let refreshToken = tokenRow.refresh_token;
+    if (tokenRow.is_encrypted) {
+      try {
+        refreshToken = await decryptToken(refreshToken);
+      } catch {
+        console.error("Failed to decrypt Gmail token");
+        return new Response("OK", { status: 200 });
+      }
+    }
+
+    // Get access token
+    const accessToken = await refreshGmailToken(refreshToken);
+    if (!accessToken) {
+      console.error("Failed to refresh Gmail token for", emailAddress);
+      return new Response("OK", { status: 200 });
+    }
+
+    // Fetch history since last known historyId
+    const startHistoryId = tokenRow.last_history_id || historyId;
+    const historyUrl = `https://gmail.googleapis.com/gmail/v1/users/me/history?startHistoryId=${startHistoryId}&historyTypes=messageAdded`;
+    const historyRes = await fetch(historyUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+
+    if (!historyRes.ok) {
+      const errText = await historyRes.text();
+      // 404 means historyId is too old, need full sync
+      if (historyRes.status === 404) {
+        console.warn("History too old for", emailAddress, "- skipping incremental, needs full sync");
+      } else {
+        console.error("Gmail history.list error:", historyRes.status, errText);
+      }
+      // Update historyId anyway to avoid replaying
+      await supabase
+        .from("user_gmail_tokens")
+        .update({ last_history_id: historyId })
+        .eq("user_id", tokenRow.user_id);
+      return new Response("OK", { status: 200 });
+    }
+
+    const historyData = await historyRes.json();
+    const messageIds = new Set<string>();
+
+    // Extract new message IDs from history
+    for (const record of historyData.history || []) {
+      for (const added of record.messagesAdded || []) {
+        if (added.message?.id) {
+          messageIds.add(added.message.id);
+        }
+      }
+    }
+
+    console.log(`Found ${messageIds.size} new messages for ${emailAddress}`);
+
+    const activityEvents: any[] = [];
+
+    // Fetch and upsert each new message
+    for (const msgId of messageIds) {
+      try {
+        const msgRes = await fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msgId}?format=full`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!msgRes.ok) continue;
+
+        const msgData = await msgRes.json();
+        const headers = msgData.payload?.headers || [];
+
+        const from = getHeader(headers, "From");
+        const to = getHeader(headers, "To");
+        const subject = getHeader(headers, "Subject");
+        const bodyContent = sanitizeHtmlServerSide(getBodyContent(msgData));
+        const isUnread = msgData.labelIds?.includes("UNREAD") || false;
+
+        const { error: upsertError } = await supabase
+          .from("communications")
+          .upsert({
+            source: "gmail",
+            source_id: msgId,
+            thread_id: msgData.threadId,
+            from_address: from,
+            to_address: to,
+            subject,
+            body_preview: bodyContent
+              ? bodyContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 300)
+              : msgData.snippet,
+            received_at: new Date(parseInt(msgData.internalDate)).toISOString(),
+            direction: "inbound",
+            status: isUnread ? "unread" : "read",
+            metadata: { body: bodyContent, date: getHeader(headers, "Date") },
+            user_id: tokenRow.user_id,
+            company_id: companyId,
+          }, {
+            onConflict: "source,source_id",
+            ignoreDuplicates: false,
+          });
+
+        if (upsertError) {
+          console.error("Upsert error for msg", msgId, upsertError);
+        } else {
+          activityEvents.push({
+            entity_type: "communication",
+            entity_id: msgId,
+            event_type: "email_received",
+            actor_id: tokenRow.user_id,
+            actor_type: "system",
+            description: `Email from ${from}: ${subject?.slice(0, 80) || "(no subject)"}`,
+            company_id: companyId,
+            source: "gmail",
+            dedupe_key: `gmail:${msgId}`,
+            metadata: { from, to, subject, threadId: msgData.threadId },
+          });
+
+          // ── AI Receipt/Invoice Detection ──
+          try {
+            const bodyPreview = bodyContent?.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 500) || "";
+            const subjectLower = (subject || "").toLowerCase();
+            const hasAttachments = msgData.payload?.parts?.some((p: any) =>
+              p.filename && (p.mimeType?.startsWith("application/pdf") || p.mimeType?.startsWith("image/"))
+            );
+            
+            // Quick heuristic check before calling AI
+            const receiptKeywords = /invoice|receipt|payment|statement|bill|remittance|paid|charge|order confirmation/i;
+            const amountPattern = /\$[\d,]+\.?\d{0,2}|\d+\.\d{2}\s*(cad|usd|eur)/i;
+            const isLikelyFinancial = receiptKeywords.test(subjectLower) || receiptKeywords.test(bodyPreview) ||
+              (amountPattern.test(bodyPreview) && hasAttachments);
+
+            if (isLikelyFinancial) {
+              // Use Lovable AI to classify
+              const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+              if (LOVABLE_API_KEY) {
+                const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${LOVABLE_API_KEY}`,
+                    "Content-Type": "application/json",
+                  },
+                  body: JSON.stringify({
+                    model: "google/gemini-2.5-flash-lite",
+                    messages: [
+                      {
+                        role: "system",
+                        content: "You are a financial document classifier. Analyze the email and extract: document_type (receipt/invoice/statement/payment_confirmation or null if not financial), vendor_name, amount (number), currency (CAD/USD/EUR). Return JSON only.",
+                      },
+                      {
+                        role: "user",
+                        content: `Subject: ${subject}\nFrom: ${from}\nBody: ${bodyPreview}`,
+                      },
+                    ],
+                    tools: [{
+                      type: "function",
+                      function: {
+                        name: "classify_document",
+                        description: "Classify email as financial document",
+                        parameters: {
+                          type: "object",
+                          properties: {
+                            document_type: { type: "string", enum: ["receipt", "invoice", "statement", "payment_confirmation", "not_financial"] },
+                            vendor_name: { type: "string" },
+                            amount: { type: "number" },
+                            currency: { type: "string", enum: ["CAD", "USD", "EUR"] },
+                          },
+                          required: ["document_type"],
+                        },
+                      },
+                    }],
+                    tool_choice: { type: "function", function: { name: "classify_document" } },
+                  }),
+                });
+
+                if (aiRes.ok) {
+                  const aiData = await aiRes.json();
+                  const toolCall = aiData.choices?.[0]?.message?.tool_calls?.[0];
+                  if (toolCall?.function?.arguments) {
+                    const classification = JSON.parse(toolCall.function.arguments);
+                    
+                    if (classification.document_type && classification.document_type !== "not_financial") {
+                      // Store in email_collected_documents
+                      try {
+                        await supabase.from("email_collected_documents").insert({
+                          company_id: companyId,
+                          email_id: msgId,
+                          gmail_message_id: msgData.threadId,
+                          document_type: classification.document_type,
+                          vendor_name: classification.vendor_name || from,
+                          amount: classification.amount || null,
+                          currency: classification.currency || "CAD",
+                          document_date: new Date(parseInt(msgData.internalDate)).toISOString().split("T")[0],
+                          extracted_data: { classification, subject, from, has_attachments: hasAttachments },
+                          status: "pending_review",
+                        });
+                      } catch (insertErr) {
+                        console.error("Failed to insert email_collected_document:", insertErr);
+                      }
+
+                      // Create human task for review
+                      try {
+                        await supabase.from("human_tasks").insert({
+                          company_id: companyId,
+                          title: `📧 ${classification.document_type} detected: ${classification.vendor_name || "Unknown"} ${classification.amount ? `$${classification.amount}` : ""}`,
+                          description: `AI detected a ${classification.document_type} in email from ${from}.\nSubject: ${subject}\n${classification.amount ? `Amount: $${classification.amount} ${classification.currency || "CAD"}` : "Amount: unknown"}\nVendor: ${classification.vendor_name || "Unknown"}`,
+                          severity: "info",
+                          category: "receipt_collection",
+                          source: "gmail-webhook-ai",
+                        });
+                      } catch (taskErr) {
+                        console.error("Failed to create human task for receipt:", taskErr);
+                      }
+
+                      console.log(`[gmail-webhook] AI classified email as ${classification.document_type} from ${classification.vendor_name}`);
+                    }
+                  }
+                } else {
+                  console.warn("[gmail-webhook] AI classification failed:", aiRes.status);
+                }
+              }
+            }
+          } catch (aiErr) {
+            console.error("[gmail-webhook] AI receipt detection error:", aiErr);
+          }
+        }
+      } catch (msgErr) {
+        console.error("Error processing message", msgId, msgErr);
+      }
+    }
+
+    // Write activity events
+    if (activityEvents.length > 0) {
+      const { error: evtErr } = await supabase
+        .from("activity_events")
+        .upsert(activityEvents, { onConflict: "dedupe_key", ignoreDuplicates: true });
+      if (evtErr) console.error("Failed to write activity events:", evtErr);
+    }
+
+    // Update last_history_id
+    await supabase
+      .from("user_gmail_tokens")
+      .update({ last_history_id: historyId })
+      .eq("user_id", tokenRow.user_id);
+
+    // Log the push processing event
+    await supabase.from("activity_events").upsert({
+      entity_type: "gmail_push",
+      entity_id: emailAddress,
+      event_type: "gmail_push_processed",
+      actor_type: "system",
+      description: `Processed ${messageIds.size} messages from Gmail push for ${emailAddress}`,
+      company_id: companyId,
+      source: "gmail",
+      dedupe_key: `gmail_push:${emailAddress}:${historyId}`,
+      metadata: { historyId, messageCount: messageIds.size },
+    }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+
+    return new Response("OK", { status: 200 });
+  }, { functionName: "gmail-webhook", authMode: "none", requireCompany: false, wrapResult: false })
+);

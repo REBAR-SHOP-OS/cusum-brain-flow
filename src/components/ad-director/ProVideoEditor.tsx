@@ -1,0 +1,2831 @@
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/hooks/use-toast";
+import { invokeEdgeFunction } from "@/lib/invokeEdgeFunction";
+import { downloadFile } from "@/lib/downloadUtils";
+import { trimVideo } from "@/lib/videoTrim";
+import {
+  Play, Pause, Volume2, VolumeX, Maximize2,
+  Sparkles, Send, Download, ArrowLeft, Undo2, Redo2, RotateCcw,
+  Music, FileText, Loader2, CalendarClock, Check, Save,
+  SkipBack, SkipForward,
+  Palette, Film, LayoutGrid, X,
+  Mic, Captions, Gauge, MessageSquareText,
+  RectangleHorizontal, ImagePlus, Shuffle,
+} from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
+import { format } from "date-fns";
+import type { StoryboardScene, ClipOutput, ScriptSegment, BrandProfile, IntroOutroCardSettings } from "@/types/adDirector";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { DEFAULT_CARD_SETTINGS } from "@/types/adDirector";
+import type { VideoOverlay } from "@/types/videoOverlay";
+import { type LogoSettings, DEFAULT_LOGO_SETTINGS } from "@/types/editorSettings";
+import { MediaTab } from "./editor/MediaTab";
+import { MusicTab } from "./editor/MusicTab";
+import { ScriptTab } from "./editor/ScriptTab";
+import { TimelineBar, type AudioTrackItem } from "./editor/TimelineBar";
+import { TextOverlayDialog } from "./editor/TextOverlayDialog";
+import { AudioPromptDialog, type AudioPromptResult, type AudioUploadResult } from "./editor/AudioPromptDialog";
+import { VoiceoverDialog, type VoiceoverResult } from "./editor/VoiceoverDialog";
+import { SubtitleDialog } from "./editor/SubtitleDialog";
+import { TextVoiceDialog, type TextVoiceResult } from "./editor/TextVoiceDialog";
+import { SpeedControlDialog } from "./editor/SpeedControlPopover";
+import { EditOverlayDialog } from "./editor/EditOverlayDialog";
+import { ImageOverlayDialog } from "./editor/ImageOverlayDialog";
+import { TextTab } from "./editor/TextTab";
+import { TransitionsTab } from "./editor/TransitionsTab";
+import { BrandKitTab } from "./editor/BrandKitTab";
+import { IntroOutroEditor, drawCardToCanvas } from "./editor/IntroOutroEditor";
+import { supabase } from "@/integrations/supabase/client";
+import { getCurrentUser } from "@/lib/auth";
+import { uploadToStorage } from "@/lib/storageUpload";
+
+type EditorTab = "media" | "text" | "music" | "brand-kit" | "script" | "card-editor" | "voiceover" | "subtitle" | "speed" | "text-voice" | "image" | "transitions";
+
+const TRANSITION_STORAGE_KEY = "ad-director:transition-preset";
+const TRANSITION_DURATION_STORAGE_KEY = "ad-director:transition-duration";
+
+interface ProVideoEditorProps {
+  clips: ClipOutput[];
+  storyboard: StoryboardScene[];
+  segments: ScriptSegment[];
+  brand: BrandProfile;
+  finalVideoUrl: string | null;
+  onBack: () => void;
+  onExport?: () => void;
+  exporting?: boolean;
+  onRegenerateScene?: (sceneId: string) => void;
+  onUpdateClipUrl?: (sceneId: string, url: string) => void;
+  onUpdateSegment?: (id: string, text: string) => void;
+  onUpdateSegmentTiming?: (id: string, startTime: number, endTime: number) => void;
+  onUpdateSegments?: (segments: ScriptSegment[]) => void;
+  onUpdateStoryboard?: (storyboard: StoryboardScene[]) => void;
+  onUpdateBrand?: (brand: BrandProfile) => void;
+  onMusicSelect?: (url: string | null) => void;
+  onDuplicateClip?: (oldSceneId: string, newSceneId: string) => void;
+  onAddSceneWithMedia?: (url: string, fileName: string) => void;
+  externalActiveTab?: string | null;
+  onActiveTabChanged?: (tab: string | null) => void;
+  voiceoverUrl?: string | null;
+  musicTrackUrl?: string | null;
+}
+
+function ScheduleToSocialPopover({ finalVideoUrl, brandName, segments, clips }: {
+  finalVideoUrl: string | null;
+  brandName: string;
+  segments: ScriptSegment[];
+  clips: ClipOutput[];
+}) {
+  const [open, setOpen] = useState(false);
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>();
+  const [hour, setHour] = useState("09");
+  const [minute, setMinute] = useState("00");
+  const [scheduling, setScheduling] = useState(false);
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  const hours = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
+  const minutes = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
+
+  const handleSchedule = async () => {
+    if (!selectedDate) return;
+    const scheduledDateTime = new Date(selectedDate);
+    scheduledDateTime.setHours(parseInt(hour), parseInt(minute), 0, 0);
+
+    if (scheduledDateTime <= new Date()) {
+      toast({ title: "Invalid Time", description: "Cannot schedule in the past.", variant: "destructive" });
+      return;
+    }
+
+    setScheduling(true);
+    try {
+      const user = await getCurrentUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const content = segments.map(s => s.text).join(" ").slice(0, 2200);
+      const videoUrl = finalVideoUrl || clips.find(c => c.status === "completed")?.videoUrl || null;
+
+      const { error } = await supabase.from("social_posts").insert({
+        platform: "instagram",
+        content_type: "reel",
+        status: "scheduled",
+        qa_status: "scheduled",
+        title: brandName || "Ad Video",
+        content,
+        image_url: videoUrl,
+        scheduled_date: scheduledDateTime.toISOString(),
+        user_id: user.id,
+        hashtags: [],
+        reach: 0, impressions: 0, likes: 0, comments: 0, shares: 0, saves: 0, clicks: 0,
+        neel_approved: false,
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Scheduled ✅",
+        description: `Post scheduled for ${format(scheduledDateTime, "PPP")} at ${hour}:${minute}`,
+      });
+      setOpen(false);
+      setTimeout(() => navigate("/home"), 1200);
+    } catch (err: any) {
+      toast({ title: "Scheduling failed", description: err.message, variant: "destructive" });
+    } finally {
+      setScheduling(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          className="gap-1.5 text-xs h-7 bg-gradient-to-r from-primary to-primary/70 hover:from-primary/90 hover:to-primary/60"
+          disabled={clips.every(c => c.status !== "completed")}
+        >
+          <CalendarClock className="w-3.5 h-3.5" />
+          Schedule
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0" align="end" side="top">
+        <div className="p-3 space-y-3">
+          <p className="text-sm font-medium text-foreground">Schedule to Social</p>
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            onSelect={setSelectedDate}
+            disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+            className={cn("p-3 pointer-events-auto")}
+          />
+          <div className="flex items-center gap-2">
+            <Select value={hour} onValueChange={setHour}>
+              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {hours.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <span className="text-muted-foreground font-bold">:</span>
+            <Select value={minute} onValueChange={setMinute}>
+              <SelectTrigger className="w-20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {minutes.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          <Button
+            className="w-full"
+            disabled={!selectedDate || scheduling}
+            onClick={handleSchedule}
+          >
+            {scheduling ? <Loader2 className="w-4 h-4 mr-1 animate-spin" /> : <Check className="w-4 h-4 mr-1" />}
+            {scheduling ? "Scheduling…" : "Confirm Schedule"}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+export function ProVideoEditor({
+  clips, storyboard, segments, brand,
+  finalVideoUrl, onBack, onExport, exporting,
+  onRegenerateScene, onUpdateClipUrl, onUpdateSegment, onUpdateSegmentTiming, onUpdateSegments,
+  onUpdateStoryboard, onUpdateBrand, onMusicSelect, onDuplicateClip,
+  onAddSceneWithMedia,
+  externalActiveTab, onActiveTabChanged,
+  voiceoverUrl, musicTrackUrl,
+}: ProVideoEditorProps) {
+  const { toast } = useToast();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [activeTab, setActiveTab] = useState<EditorTab>("media");
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [videoSpeed, setVideoSpeed] = useState(1);
+  const [speedPopoverOpen, setSpeedPopoverOpen] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState<string>("16:9");
+  const [transitionPreset, setTransitionPreset] = useState<string>(() => {
+    if (typeof window === "undefined") return "Crossfade";
+    return localStorage.getItem(TRANSITION_STORAGE_KEY) || "Crossfade";
+  });
+  const [transitionDuration, setTransitionDuration] = useState<number>(() => {
+    if (typeof window === "undefined") return 0.5;
+    const v = parseFloat(localStorage.getItem(TRANSITION_DURATION_STORAGE_KEY) || "0.5");
+    return isNaN(v) ? 0.5 : v;
+  });
+
+  const handleTransitionSelect = useCallback((preset: string) => {
+    setTransitionPreset(preset);
+    try { localStorage.setItem(TRANSITION_STORAGE_KEY, preset); } catch {}
+  }, []);
+
+  const handleTransitionDurationChange = useCallback((d: number) => {
+    setTransitionDuration(d);
+    try { localStorage.setItem(TRANSITION_DURATION_STORAGE_KEY, String(d)); } catch {}
+  }, []);
+
+  // Per-clip transitions (pencil icon on each clip in timeline)
+  // Mirrored to localStorage so the export pipeline (AdDirectorContent → stitchClips)
+  // can read the same per-scene selection without prop drilling through the service.
+  const PER_SCENE_TX_STORAGE_KEY = "ad-director:per-scene-transitions";
+  const [clipTransitions, setClipTransitions] = useState<Record<string, { type: string; duration: number }>>(() => {
+    try {
+      const raw = typeof window !== "undefined" ? localStorage.getItem(PER_SCENE_TX_STORAGE_KEY) : null;
+      return raw ? JSON.parse(raw) : {};
+    } catch { return {}; }
+  });
+  const handleClipTransitionChange = useCallback((sceneId: string, transition: { type: string; duration: number }) => {
+    setClipTransitions(prev => {
+      const next = { ...prev, [sceneId]: transition };
+      try { localStorage.setItem(PER_SCENE_TX_STORAGE_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }, []);
+
+  // Hide global floating widgets (Vizzy, LiveChat, Feedback) while editor is mounted
+  useEffect(() => {
+    document.body.classList.add("hide-floating-widgets");
+    return () => document.body.classList.remove("hide-floating-widgets");
+  }, []);
+
+  // Forward-ref for pushHistory so early useCallbacks can call it before its definition.
+  // The actual implementation is wired to this ref further down.
+  const pushHistoryFnRef = useRef<() => void>(() => {});
+  const pushHistoryDebouncedFnRef = useRef<() => void>(() => {});
+
+  const ASPECT_RATIOS: Record<string, string> = {
+    "16:9": "16/9",
+    "9:16": "9/16",
+    "1:1": "1/1",
+  };
+
+  // Social media standard dimensions (export resolution)
+  const RATIO_DIMS: Record<string, [number, number]> = {
+    "16:9": [1920, 1080], // YouTube, LinkedIn landscape
+    "9:16": [1080, 1920], // Instagram Reels, TikTok, YouTube Shorts
+    "1:1": [1080, 1080],  // Instagram feed
+  };
+
+  const handleSetActiveTab = useCallback((tab: EditorTab) => {
+    if (tab === "music") {
+      setAudioPromptOpen(true);
+      return;
+    }
+    if (tab === "voiceover") {
+      setVoiceoverDialogOpen(true);
+      return;
+    }
+    if (tab === "subtitle") {
+      setSubtitleDialogOpen(true);
+      return;
+    }
+    if (tab === "speed") {
+      setSpeedPopoverOpen(true);
+      return;
+    }
+    if (tab === "text-voice") {
+      setTextVoiceDialogOpen(true);
+      return;
+    }
+    if (tab === "image") {
+      setImageDialogOpen(true);
+      return;
+    }
+    if (activeTab === tab) {
+      setPanelOpen(prev => !prev);
+    } else {
+      setActiveTab(tab);
+      setPanelOpen(true);
+    }
+    onActiveTabChanged?.(tab);
+  }, [onActiveTabChanged, activeTab]);
+
+  const handleGenerateAudio = useCallback(async (result: AudioPromptResult) => {
+    setGeneratingAudio(true);
+    try {
+      // Step 1: Enhance prompt with Gemini AI
+      toast({ title: "🧠 Enhancing prompt with AI..." });
+      const enhanceUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/enhance-music-prompt`;
+      const enhanceRes = await fetch(enhanceUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ prompt: result.prompt, type: result.type, duration: result.duration }),
+      });
+
+      let finalPrompt = result.prompt;
+      if (enhanceRes.ok) {
+        const enhanceData = await enhanceRes.json();
+        finalPrompt = enhanceData.enhancedPrompt || result.prompt;
+      } else {
+        console.warn("Prompt enhancement failed, using original prompt");
+      }
+
+      // Step 2: Generate audio with ElevenLabs using enhanced prompt
+      toast({ title: "🎵 Generating audio..." });
+      const functionName = result.type === "music" ? "lyria-music" : "elevenlabs-tts";
+      const body = result.type === "music"
+        ? { prompt: finalPrompt, duration: result.duration, type: "music" }
+        : { text: finalPrompt };
+
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/${functionName}`;
+      const { data: { session: audioSession } } = await supabase.auth.getSession();
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${audioSession?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Audio generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      pushHistoryFnRef.current();
+      setAudioTracks([{
+        sceneId: storyboard[0]?.id || "",
+        label: result.type === "music" ? "🎵 Generated Music" : "🎙️ Generated Voiceover",
+        audioUrl: audioUrl,
+        kind: result.type === "music" ? "music" : "voiceover",
+        startTime: 0,
+      }]);
+
+      setAudioPromptOpen(false);
+      toast({ title: "✅ Audio generated successfully" });
+    } catch (err: any) {
+      console.error("Audio generation error:", err);
+      toast({ title: "Audio generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingAudio(false);
+    }
+  }, [toast]);
+
+  const handleAudioUpload = useCallback((result: AudioUploadResult) => {
+    const audioUrl = URL.createObjectURL(result.file);
+    pushHistoryFnRef.current();
+    setAudioTracks(prev => [...prev, {
+      sceneId: storyboard[0]?.id || "",
+      label: result.kind === "music" ? `🎵 ${result.file.name}` : `🎙️ ${result.file.name}`,
+      audioUrl,
+      kind: result.kind,
+      startTime: 0,
+      globalStartTime: 0,
+    }]);
+    setAudioPromptOpen(false);
+    toast({ title: "✅ Audio file added" });
+  }, [toast]);
+
+  const handleGenerateVoiceover = useCallback(async (result: VoiceoverResult) => {
+    setGeneratingVoiceover(true);
+    try {
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: result.text, voiceId: result.voiceId, speed: result.speed }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Voiceover generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      pushHistoryFnRef.current();
+      setAudioTracks([{
+        sceneId: storyboard[0]?.id || "",
+        label: "🎙️ Voiceover",
+        audioUrl,
+        kind: "voiceover",
+        startTime: 0,
+      }]);
+
+      setVoiceoverDialogOpen(false);
+      toast({ title: "✅ Voiceover generated successfully" });
+    } catch (err: any) {
+      console.error("Voiceover generation error:", err);
+      toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingVoiceover(false);
+    }
+  }, [toast]);
+
+  const handleAddSubtitle = useCallback((overlay: VideoOverlay) => {
+    pushHistoryFnRef.current();
+    setOverlays(prev => [...prev, overlay]);
+    toast({ title: "✅ Subtitle added" });
+  }, [toast]);
+
+  const handleTextVoiceGenerate = useCallback(async (result: TextVoiceResult) => {
+    setGeneratingTextVoice(true);
+    try {
+      // 1. Update storyboard voiceover text
+      if (onUpdateStoryboard) {
+        const updated = storyboard.map(s =>
+          s.id === result.sceneId ? { ...s, voiceover: result.text } : s
+        );
+        onUpdateStoryboard(updated);
+      }
+
+      // 2. Generate TTS audio
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ text: result.text, voiceId: result.voiceId, speed: result.speed }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(errText || "Text+Voice generation failed");
+      }
+
+      const audioBlob = await response.blob();
+      const audioUrl = URL.createObjectURL(audioBlob);
+
+      // 3. Replace voiceover audio track for this scene
+      setAudioTracks(prev => {
+        const filtered = prev.filter(t => t.sceneId !== `tv-${result.sceneId}`);
+        return [...filtered, {
+          sceneId: `tv-${result.sceneId}`,
+          label: "🎙️ Text+Voice",
+          audioUrl,
+          kind: "voiceover" as const,
+        }];
+      });
+
+      // 4. Add/replace subtitle overlay for this scene
+      setOverlays(prev => {
+        const filtered = prev.filter(o => !(o.sceneId === result.sceneId && o.kind === "text" && o.position.y >= 80));
+        return [...filtered, {
+          id: crypto.randomUUID(),
+          kind: "text" as const,
+          position: { x: 5, y: 85 },
+          size: { w: 90, h: 10 },
+          content: result.text,
+          opacity: 0.95,
+          sceneId: result.sceneId,
+          animated: false,
+        }];
+      });
+
+      setTextVoiceDialogOpen(false);
+      toast({ title: "✅ Text & voice generated successfully" });
+    } catch (err: any) {
+      console.error("TextVoice generation error:", err);
+      toast({ title: "Text & voice generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingTextVoice(false);
+    }
+  }, [toast, storyboard, onUpdateStoryboard]);
+
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [aiCommand, setAiCommand] = useState("");
+  const [aiProcessing, setAiProcessing] = useState(false);
+  const [selectedSceneIndex, setSelectedSceneIndex] = useState(0);
+  const [logoSettings, setLogoSettings] = useState<LogoSettings>(DEFAULT_LOGO_SETTINGS);
+  const [overlays, setOverlays] = useState<VideoOverlay[]>([]);
+  
+  const [textDialogOpen, setTextDialogOpen] = useState(false);
+  const [editingOverlay, setEditingOverlay] = useState<VideoOverlay | null>(null);
+  const [audioTracks, setAudioTracks] = useState<AudioTrackItem[]>([]);
+  const tracksSeededRef = useRef(false);
+  const [generatingVoiceovers, setGeneratingVoiceovers] = useState(false);
+  const [generatingMusic, setGeneratingMusic] = useState(false);
+  const audioUploadRef = useRef<HTMLInputElement>(null);
+  const [audioPromptOpen, setAudioPromptOpen] = useState(false);
+  const [generatingAudio, setGeneratingAudio] = useState(false);
+  const [voiceoverDialogOpen, setVoiceoverDialogOpen] = useState(false);
+  const [generatingVoiceover, setGeneratingVoiceover] = useState(false);
+  const [subtitleDialogOpen, setSubtitleDialogOpen] = useState(false);
+  const [textVoiceDialogOpen, setTextVoiceDialogOpen] = useState(false);
+  const [generatingTextVoice, setGeneratingTextVoice] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
+
+  // ─── Drag overlay state ───
+  const [draggingOverlayId, setDraggingOverlayId] = useState<string | null>(null);
+  const dragOffset = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const videoContainerRef = useRef<HTMLDivElement>(null);
+
+  // ─── Resize overlay state ───
+  const [resizingOverlay, setResizingOverlay] = useState<{ id: string; handle: string } | null>(null);
+  const resizeStart = useRef<{ mouseX: number; mouseY: number; w: number; h: number; x: number; y: number }>({ mouseX: 0, mouseY: 0, w: 0, h: 0, x: 0, y: 0 });
+
+  const handleUploadAudio = useCallback(() => {
+    audioUploadRef.current?.click();
+  }, []);
+
+  const handleAudioFileSelected = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    pushHistoryFnRef.current();
+    setAudioTracks(prev => [
+      ...prev,
+      { kind: "music" as const, audioUrl: url, label: file.name, volume: 0.7, sceneId: storyboard[0]?.id || "", startTime: 0, globalStartTime: 0 },
+    ]);
+    e.target.value = "";
+  }, [storyboard]);
+  const [videoVolume, setVideoVolume] = useState(1);
+  const [musicUrl, setMusicUrl] = useState<string | null>(null);
+  const [mutedScenes, setMutedScenes] = useState<Set<string>>(new Set());
+  const [clipDurations, setClipDurations] = useState<Record<string, number>>({});
+  // Per-scene playback window into the underlying video (set when a clip is split)
+  const [clipStartOffsets, setClipStartOffsets] = useState<Record<string, number>>({});
+  // Scenes whose duration was explicitly set (split / trim) — protect from being clobbered by handleLoaded
+  const lockedDurationScenesRef = useRef<Set<string>>(new Set());
+  const [voiceoverDurations, setVoiceoverDurations] = useState<Record<string, number>>({});
+  const [cardSettingsMap, setCardSettingsMap] = useState<Record<string, IntroOutroCardSettings>>({});
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
+  const logoImgRef = useRef<HTMLImageElement | null>(null);
+
+  // Seed audio tracks from the generation pipeline (voiceover + background music)
+  // so the user sees them as editable timeline tracks the moment they open the editor.
+  useEffect(() => {
+    if (!storyboard.length) return;
+    setAudioTracks(prev => {
+      const next = [...prev];
+      let changed = false;
+      // Voiceover from props — add only if not already present
+      if (voiceoverUrl && !next.some(t => t.kind === "voiceover" && t.audioUrl === voiceoverUrl)) {
+        next.push({
+          sceneId: storyboard[0].id,
+          label: "🎙️ Voiceover",
+          audioUrl: voiceoverUrl,
+          kind: "voiceover",
+          volume: 1,
+          globalStartTime: 0,
+        });
+        changed = true;
+      }
+      // Music from props — add only if no music track exists yet
+      if (musicTrackUrl && !next.some(t => t.kind === "music")) {
+        next.push({
+          sceneId: "",
+          label: "🎵 Background Music",
+          audioUrl: musicTrackUrl,
+          kind: "music",
+          volume: 0.5,
+          globalStartTime: 0,
+        });
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+    if (musicTrackUrl) setMusicUrl(prev => prev ?? musicTrackUrl);
+  }, [voiceoverUrl, musicTrackUrl, storyboard]);
+
+  // Tracks URLs of extracted-from-video audio bars the user manually deleted,
+  // so the deterministic seeder doesn't re-create them.
+  const userRemovedExtractedRef = useRef<Set<string>>(new Set());
+
+  // Preload logo image for card rendering
+  useEffect(() => {
+    if (brand.logoUrl) {
+      const img = document.createElement("img");
+      img.crossOrigin = "anonymous";
+      img.src = brand.logoUrl;
+      img.onload = () => { logoImgRef.current = img; };
+    } else {
+      logoImgRef.current = null;
+    }
+  }, [brand.logoUrl]);
+
+  // Get or create card settings for current scene
+  const currentCardSettings = useMemo(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return null;
+    return cardSettingsMap[scene.id] || null;
+  }, [storyboard, selectedSceneIndex, cardSettingsMap]);
+
+  const handleCardSettingsChange = useCallback((s: IntroOutroCardSettings) => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    setCardSettingsMap(prev => ({ ...prev, [scene.id]: s }));
+  }, [storyboard, selectedSceneIndex]);
+
+  // Live canvas redraw when editing a static card
+  useEffect(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    const settings = cardSettingsMap[scene.id];
+    if (!settings || !liveCanvasRef.current) return;
+    const canvas = liveCanvasRef.current;
+    canvas.width = 1280;
+    canvas.height = 720;
+    drawCardToCanvas(canvas, settings, logoImgRef.current);
+  }, [cardSettingsMap, storyboard, selectedSceneIndex]);
+
+  const handleApplyCard = useCallback(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    const settings = cardSettingsMap[scene.id];
+    if (!settings) return;
+    const canvas = document.createElement("canvas");
+    canvas.width = 1280;
+    canvas.height = 720;
+    drawCardToCanvas(canvas, settings, logoImgRef.current);
+    const dataUrl = canvas.toDataURL("image/png");
+    onUpdateClipUrl?.(scene.id, dataUrl);
+    toast({ title: "Card updated", description: "Intro/outro card applied." });
+  }, [storyboard, selectedSceneIndex, cardSettingsMap, onUpdateClipUrl, toast]);
+
+  const openCardEditor = useCallback(() => {
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+    if (!cardSettingsMap[scene.id]) {
+      setCardSettingsMap(prev => ({ ...prev, [scene.id]: DEFAULT_CARD_SETTINGS(brand) }));
+    }
+    handleSetActiveTab("card-editor" as EditorTab);
+  }, [storyboard, selectedSceneIndex, cardSettingsMap, brand, handleSetActiveTab]);
+
+  // ─── Global timeline ───
+  const sceneDurations = useMemo(() => {
+    return storyboard.map((scene) => {
+      const clipDur = clipDurations[scene.id];
+      const voDur = voiceoverDurations[scene.id];
+      const seg = segments.find(s => s.id === scene.segmentId);
+      const segDur = seg ? seg.endTime - seg.startTime : 4;
+      // Use the longest of clip vs voiceover duration, fall back to segment timing
+      const mediaDur = clipDur && voDur ? Math.max(clipDur, voDur) : (clipDur || voDur);
+      return mediaDur || segDur;
+    });
+  }, [storyboard, segments, clipDurations, voiceoverDurations]);
+
+  const cumulativeStarts = useMemo(() => {
+    const starts: number[] = [0];
+    for (let i = 0; i < sceneDurations.length - 1; i++) {
+      starts.push(starts[i] + sceneDurations[i]);
+    }
+    return starts;
+  }, [sceneDurations]);
+
+  const totalDuration = useMemo(() => sceneDurations.reduce((a, b) => a + b, 0), [sceneDurations]);
+
+  const globalTime = (cumulativeStarts[selectedSceneIndex] || 0) + currentTime;
+
+  // ─── Deterministic embedded-audio seeding ───────────────────
+  // Every completed video clip gets a visual-only voiceover bar in the Audio lane.
+  // Synchronous + idempotent — no CORS / metadata detection, so behavior is
+  // identical for every project regardless of CDN headers.
+  // Real audio plays through the <video> element; the bar is purely visual.
+  useEffect(() => {
+    if (!storyboard.length) return;
+
+    const validClips = clips.filter(c =>
+      c.status === "completed" &&
+      c.videoUrl &&
+      !c.videoUrl.startsWith("data:image/")
+    );
+    const validUrls = new Set(validClips.map(c => c.videoUrl as string));
+
+    setAudioTracks(prev => {
+      let changed = false;
+
+      // Cleanup orphan extracted tracks (clip removed / url changed)
+      const next = prev.filter(t => {
+        if (!t.extractedFromVideo) return true;
+        const keep = !!(t.audioUrl && validUrls.has(t.audioUrl));
+        if (!keep) changed = true;
+        return keep;
+      });
+
+      // Add a bar for each valid clip that doesn't already have one
+      for (const clip of validClips) {
+        const url = clip.videoUrl as string;
+        if (userRemovedExtractedRef.current.has(url)) continue;
+
+        const sceneIdx = storyboard.findIndex(s => s.id === clip.sceneId);
+        if (sceneIdx < 0) continue;
+
+        const exists = next.some(
+          t => t.extractedFromVideo && t.audioUrl === url && t.sceneId === clip.sceneId
+        );
+        if (exists) continue;
+
+        const sceneStart = cumulativeStarts[sceneIdx] || 0;
+        const sceneDur = sceneDurations[sceneIdx] || 0;
+
+        next.push({
+          sceneId: clip.sceneId,
+          label: `Scene ${sceneIdx + 1} voice`,
+          audioUrl: url,
+          kind: "voiceover" as const,
+          volume: 0, // visual-only; real audio comes from <video>
+          globalStartTime: sceneStart,
+          duration: sceneDur,
+          extractedFromVideo: true,
+        });
+        changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [clips, storyboard, cumulativeStarts, sceneDurations]);
+
+
+  // ─── Deterministic text-overlay seeding per scene ───────────
+  // Idempotent: every time storyboard changes (load, add, split, regenerate),
+  // ensure each scene has a text bar in the Text lane — unless the user has
+  // explicitly removed it. Falls back through several content sources so a bar
+  // is created even when voiceover hasn't been generated yet.
+  const userRemovedTextScenesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!storyboard.length) return;
+    const newOverlays: VideoOverlay[] = [];
+    for (let i = 0; i < storyboard.length; i++) {
+      const scene = storyboard[i];
+      if (userRemovedTextScenesRef.current.has(scene.id)) continue;
+      // Skip if a text overlay already exists for this scene
+      if (overlays.some(o => o.kind === "text" && o.sceneId === scene.id)) continue;
+      const seg = segments.find(s => s.id === scene.segmentId);
+      const text = (
+        scene.voiceover ||
+        seg?.text ||
+        scene.subjectAction ||
+        scene.objective ||
+        scene.prompt ||
+        ""
+      ).trim();
+      if (!text) continue;
+      const sceneDur = sceneDurations[i] || 4;
+      newOverlays.push({
+        id: crypto.randomUUID(),
+        kind: "text" as const,
+        position: { x: 5, y: 82 },
+        size: { w: 90, h: 12 },
+        content: text.length > 140 ? text.slice(0, 140) + "…" : text,
+        opacity: 0.95,
+        sceneId: scene.id,
+        animated: false,
+        startTime: 0,
+        endTime: sceneDur,
+      });
+    }
+    if (newOverlays.length) {
+      setOverlays(prev => [...prev, ...newOverlays]);
+    }
+    // Clean up: forget user-removed flags for scenes that no longer exist,
+    // so that re-adding a scene with the same id will re-seed.
+    const validIds = new Set(storyboard.map(s => s.id));
+    Array.from(userRemovedTextScenesRef.current).forEach(id => {
+      if (!validIds.has(id)) userRemovedTextScenesRef.current.delete(id);
+    });
+  }, [storyboard, segments, sceneDurations, overlays]);
+
+  // Helper: split text into caption chunks of ~4-6 words
+  const splitIntoChunks = useCallback((text: string, maxWords = 5): string[] => {
+    const words = text.split(/\s+/).filter(Boolean);
+    const chunks: string[] = [];
+    for (let i = 0; i < words.length; i += maxWords) {
+      chunks.push(words.slice(i, i + maxWords).join(" "));
+    }
+    return chunks.length > 0 ? chunks : [text];
+  }, []);
+
+  // Build timed subtitle overlays from voiceover text
+  const buildTimedOverlays = useCallback((sceneId: string, voText: string, totalDur: number): VideoOverlay[] => {
+    const chunks = splitIntoChunks(voText);
+    const chunkDur = totalDur / chunks.length;
+    return chunks.map((chunk, i) => ({
+      id: crypto.randomUUID(),
+      kind: "text" as const,
+      position: { x: 5, y: 82 },
+      size: { w: 90, h: 12 },
+      content: chunk,
+      opacity: 0.95,
+      sceneId,
+      animated: false,
+      startTime: +(i * chunkDur).toFixed(2),
+      endTime: +((i + 1) * chunkDur).toFixed(2),
+    }));
+  }, [splitIntoChunks]);
+
+
+
+  // Auto-play after scene change
+  const autoPlayPending = useRef(false);
+  const sceneTransitioning = useRef(false);
+  useEffect(() => {
+    if (autoPlayPending.current && videoRef.current && !sceneTransitioning.current) {
+      videoRef.current.play().catch(() => {});
+      autoPlayPending.current = false;
+    }
+  }, [selectedSceneIndex]);
+
+  // Sync voiceover audio with video playback (time-locked)
+  const currentVoUrlRef = useRef<string | null>(null);
+  const voDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Ref to hold current scene's VO data — avoids re-triggering playback effect on array changes
+  const currentSceneVoRef = useRef<{ url: string; volume: number } | null>(null);
+
+  // Position-aware voiceover playback: audio plays only when playhead is within the track's time range
+  useEffect(() => {
+    if (!isPlaying || isMuted) {
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
+      currentVoUrlRef.current = null;
+      return;
+    }
+
+    // Don't start voiceover during scene transition
+    if (sceneTransitioning.current) return;
+
+    // Find the voiceover track that covers current globalTime
+    const activeVo = audioTracks.find(a => {
+      if (a.kind !== "voiceover") return false;
+      const start = a.globalStartTime ?? 0;
+      const dur = a.duration ?? totalDuration;
+      return globalTime >= start && globalTime < start + dur;
+    });
+
+    if (!activeVo) {
+      // Playhead is outside any voiceover track — pause
+      if (audioRef.current) { audioRef.current.pause(); }
+      return;
+    }
+
+    const voStart = activeVo.globalStartTime ?? 0;
+    const audioOffset = globalTime - voStart;
+
+    // Same VO already playing — just sync time, don't recreate
+    if (audioRef.current && currentVoUrlRef.current === activeVo.audioUrl) {
+      // Only correct if drift > 0.3s
+      if (Math.abs(audioRef.current.currentTime - audioOffset) > 0.3) {
+        audioRef.current.currentTime = audioOffset;
+      }
+      if (audioRef.current.paused) {
+        audioRef.current.play().catch(() => {});
+      }
+      return;
+    }
+
+    // Different VO or first play — create new Audio
+    if (audioRef.current) { audioRef.current.pause(); audioRef.current.onended = null; audioRef.current = null; }
+
+    const a = new Audio(activeVo.audioUrl);
+    a.currentTime = audioOffset;
+    a.playbackRate = videoSpeed;
+
+    // Apply muted-scene volume
+    const sceneId = activeVo.sceneId;
+    if (sceneId && mutedScenes.has(sceneId)) {
+      a.volume = 0;
+    } else {
+      a.volume = activeVo.volume ?? 1;
+    }
+
+    audioRef.current = a;
+    currentVoUrlRef.current = activeVo.audioUrl;
+    a.play().catch(() => {});
+  }, [globalTime, isPlaying, isMuted, audioTracks, totalDuration, videoSpeed]);
+
+  // ─── Background music playback (continuous, synced with video) ───
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
+  const currentMusicUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    const musicTrack = audioTracks.find(t => t.kind === "music");
+
+    if (!musicTrack) {
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current.src = "";
+        musicAudioRef.current = null;
+      }
+      currentMusicUrlRef.current = null;
+      return;
+    }
+
+    if (currentMusicUrlRef.current !== musicTrack.audioUrl) {
+      if (musicAudioRef.current) musicAudioRef.current.pause();
+      const a = new Audio(musicTrack.audioUrl);
+      a.loop = false;
+      a.preload = "auto";
+      a.volume = isMuted ? 0 : (musicTrack.volume ?? 0.3);
+      musicAudioRef.current = a;
+      currentMusicUrlRef.current = musicTrack.audioUrl;
+    } else if (musicAudioRef.current) {
+      musicAudioRef.current.volume = isMuted ? 0 : (musicTrack.volume ?? 0.3);
+    }
+
+    const a = musicAudioRef.current;
+    if (!a) return;
+    a.playbackRate = videoSpeed;
+
+    if (isPlaying && !isMuted) {
+      const musicStart = musicTrack.globalStartTime ?? 0;
+      const musicDur = musicTrack.duration ?? a.duration ?? 0;
+      const offset = globalTime - musicStart;
+
+      if (offset < 0 || (musicDur > 0 && offset >= musicDur)) {
+        if (!a.paused) a.pause();
+      } else {
+        if (Math.abs(a.currentTime - offset) > 0.4) {
+          a.currentTime = offset;
+        }
+        if (a.paused) a.play().catch(() => {});
+      }
+    } else {
+      if (!a.paused) a.pause();
+    }
+  }, [audioTracks, isPlaying, isMuted, globalTime, videoSpeed]);
+
+  // Cleanup music on unmount
+  useEffect(() => {
+    return () => {
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current.src = "";
+        musicAudioRef.current = null;
+      }
+    };
+  }, []);
+
+  // ─── Unified Undo/Redo history ───
+  // Snapshot captures storyboard + audioTracks + overlays + segments + mutedScenes
+  interface EditorSnapshot {
+    storyboard: StoryboardScene[];
+    audioTracks: AudioTrackItem[];
+    overlays: VideoOverlay[];
+    segments: ScriptSegment[];
+    mutedScenes: string[];
+  }
+  const HISTORY_CAP = 50;
+  const [history, setHistory] = useState<EditorSnapshot[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+  const historyIndexRef = useRef(-1);
+  // Refs to current state for stable pushHistory closure
+  const storyboardRef = useRef(storyboard);
+  const audioTracksRef = useRef(audioTracks);
+  const overlaysRef = useRef(overlays);
+  const segmentsRef = useRef(segments);
+  const mutedScenesRef = useRef(mutedScenes);
+  useEffect(() => { historyIndexRef.current = historyIndex; }, [historyIndex]);
+  useEffect(() => { storyboardRef.current = storyboard; }, [storyboard]);
+  useEffect(() => { audioTracksRef.current = audioTracks; }, [audioTracks]);
+  useEffect(() => { overlaysRef.current = overlays; }, [overlays]);
+  useEffect(() => { segmentsRef.current = segments; }, [segments]);
+  useEffect(() => { mutedScenesRef.current = mutedScenes; }, [mutedScenes]);
+
+  const [hasChanges, setHasChanges] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Deep-clone helper using structuredClone with fallback
+  const cloneSnapshot = (snap: EditorSnapshot): EditorSnapshot => {
+    try { return structuredClone(snap); }
+    catch { return JSON.parse(JSON.stringify(snap)); }
+  };
+
+  // Seed initial unified snapshot
+  useEffect(() => {
+    if (storyboard.length > 0 && history.length === 0) {
+      const seed: EditorSnapshot = {
+        storyboard,
+        audioTracks,
+        overlays,
+        segments,
+        mutedScenes: Array.from(mutedScenes),
+      };
+      setHistory([cloneSnapshot(seed)]);
+      setHistoryIndex(0);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storyboard.length]);
+
+  /** Push current full editor state to history. Call BEFORE applying a mutation. */
+  const pushHistory = useCallback((_legacy?: any) => {
+    const snap: EditorSnapshot = {
+      storyboard: storyboardRef.current,
+      audioTracks: audioTracksRef.current,
+      overlays: overlaysRef.current,
+      segments: segmentsRef.current,
+      mutedScenes: Array.from(mutedScenesRef.current),
+    };
+    const cloned = cloneSnapshot(snap);
+    const idx = historyIndexRef.current;
+    setHistory(prev => {
+      const next = [...prev.slice(0, idx + 1), cloned];
+      // Cap to HISTORY_CAP entries
+      if (next.length > HISTORY_CAP) {
+        const excess = next.length - HISTORY_CAP;
+        return next.slice(excess);
+      }
+      return next;
+    });
+    setHistoryIndex(idx => {
+      const newIdx = Math.min(idx + 1, HISTORY_CAP - 1);
+      return newIdx;
+    });
+    setHasChanges(true);
+  }, []);
+
+  // Debounced push for continuous operations (drag, resize, slider)
+  const pushDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pushHistoryDebounced = useCallback(() => {
+    if (pushDebounceRef.current) clearTimeout(pushDebounceRef.current);
+    pushDebounceRef.current = setTimeout(() => { pushHistory(); }, 300);
+  }, [pushHistory]);
+
+  // Wire forward refs so early useCallbacks (defined before pushHistory) can call them
+  useEffect(() => {
+    pushHistoryFnRef.current = pushHistory;
+    pushHistoryDebouncedFnRef.current = pushHistoryDebounced;
+  }, [pushHistory, pushHistoryDebounced]);
+
+  // Apply a snapshot to all relevant state
+  const applySnapshot = useCallback((snap: EditorSnapshot) => {
+    onUpdateStoryboard?.(snap.storyboard);
+    setAudioTracks(snap.audioTracks);
+    setOverlays(snap.overlays);
+    setMutedScenes(new Set(snap.mutedScenes));
+    if (onUpdateSegments) onUpdateSegments(snap.segments);
+  }, [onUpdateStoryboard, onUpdateSegments]);
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const target = historyIndex - 1;
+      setHistoryIndex(target);
+      applySnapshot(cloneSnapshot(history[target]));
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const target = historyIndex + 1;
+      setHistoryIndex(target);
+      applySnapshot(cloneSnapshot(history[target]));
+    }
+  };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+      if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); handleDeleteScene(selectedSceneIndex); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && !e.shiftKey) { e.preventDefault(); undo(); }
+      if ((e.metaKey || e.ctrlKey) && e.key === "z" && e.shiftKey) { e.preventDefault(); redo(); }
+      if (e.key === "s" && !e.metaKey && !e.ctrlKey) {
+        let playheadIdx = selectedSceneIndex;
+        for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
+          if (globalTime >= (cumulativeStarts[i] || 0)) { playheadIdx = i; break; }
+        }
+        handleSplitScene(playheadIdx);
+      }
+      if (e.key === "d" && !e.metaKey && !e.ctrlKey) { handleDuplicateScene(selectedSceneIndex); }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selectedSceneIndex, historyIndex, history.length]);
+
+  const resetAll = () => {
+    if (history.length > 0) {
+      applySnapshot(cloneSnapshot(history[0]));
+      setHistoryIndex(0);
+      toast({ title: "All edits reset" });
+    }
+  };
+
+  // Pick the video to show
+  // Prefer per-scene clip when scenes exist (sequential playback in editor).
+  // Fall back to finalVideoUrl only if no per-scene clip is available.
+  const selectedClip = clips.find(c => c.sceneId === storyboard[selectedSceneIndex]?.id);
+  const videoSrc = selectedClip?.videoUrl || finalVideoUrl || null;
+
+  // Detect static-card scenes (end cards rendered as PNG data URLs)
+  const currentScene = storyboard[selectedSceneIndex];
+  const isStaticCard = !finalVideoUrl && (
+    currentScene?.generationMode === "static-card" ||
+    (videoSrc?.startsWith("data:image/") ?? false)
+  );
+
+  // Static card duration: use segment timing or default 4s
+  const staticCardDuration = useMemo(() => {
+    if (!isStaticCard || !currentScene) return 4;
+    const seg = segments.find(s => s.id === currentScene.segmentId);
+    return seg ? seg.endTime - seg.startTime : 4;
+  }, [isStaticCard, currentScene, segments]);
+
+  // Timer-based playback for static cards
+  const staticTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const handleVideoEndedRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (!isStaticCard || !isPlaying) {
+      if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; }
+      if (isStaticCard && !isPlaying) setCurrentTime(0);
+      return;
+    }
+    setCurrentTime(0);
+    setDuration(staticCardDuration);
+    const start = Date.now();
+    staticTimerRef.current = setInterval(() => {
+      const elapsed = (Date.now() - start) / 1000;
+      if (elapsed >= staticCardDuration) {
+        clearInterval(staticTimerRef.current!);
+        staticTimerRef.current = null;
+        setCurrentTime(staticCardDuration);
+        handleVideoEndedRef.current();
+      } else {
+        setCurrentTime(elapsed);
+      }
+    }, 100);
+    return () => { if (staticTimerRef.current) { clearInterval(staticTimerRef.current); staticTimerRef.current = null; } };
+  }, [isStaticCard, isPlaying, staticCardDuration, selectedSceneIndex]);
+
+  // Track static card durations in clipDurations
+  useEffect(() => {
+    if (isStaticCard && currentScene?.id) {
+      setClipDurations(prev => ({ ...prev, [currentScene.id]: staticCardDuration }));
+    }
+  }, [isStaticCard, currentScene?.id, staticCardDuration]);
+
+  const togglePlay = () => {
+    if (isStaticCard) {
+      setIsPlaying(prev => !prev);
+      return;
+    }
+    if (!videoRef.current) return;
+    if (isPlaying) videoRef.current.pause(); else videoRef.current.play();
+    setIsPlaying(!isPlaying);
+  };
+
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    setIsMuted(!isMuted);
+  };
+
+  // Apply videoVolume and mute state to the video element
+  useEffect(() => {
+    if (videoRef.current) {
+      const sceneId = storyboard[selectedSceneIndex]?.id;
+      const isMutedScene = sceneId ? mutedScenes.has(sceneId) : false;
+      videoRef.current.volume = isMutedScene ? 0 : videoVolume;
+    }
+  }, [videoVolume, selectedSceneIndex, mutedScenes, storyboard]);
+
+  // Apply video and audio playback speed
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.playbackRate = videoSpeed;
+    }
+    if (audioRef.current) {
+      audioRef.current.playbackRate = videoSpeed;
+    }
+  }, [videoSpeed, selectedSceneIndex]);
+
+  // Apply per-track volume to voiceover audio (also handles mutedScenes)
+  useEffect(() => {
+    if (audioRef.current) {
+      const sceneId = storyboard[selectedSceneIndex]?.id;
+      const isMutedScene = sceneId ? mutedScenes.has(sceneId) : false;
+      if (isMutedScene) {
+        audioRef.current.volume = 0;
+      } else {
+        const vo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === sceneId);
+        audioRef.current.volume = vo?.volume ?? 1;
+      }
+    }
+  }, [audioTracks, selectedSceneIndex, storyboard, mutedScenes]);
+
+  const handleVideoVolumeChange = useCallback((v: number) => {
+    pushHistoryDebounced();
+    setVideoVolume(v);
+  }, [pushHistoryDebounced]);
+
+  const handleAudioTrackVolumeChange = useCallback((index: number, v: number) => {
+    pushHistoryDebounced();
+    setAudioTracks(prev => prev.map((t, i) => i === index ? { ...t, volume: v } : t));
+  }, [pushHistoryDebounced]);
+
+  const handleRemoveAudioTrack = useCallback((index: number) => {
+    pushHistory();
+    setAudioTracks(prev => {
+      const removed = prev[index];
+      // If removing an extracted-from-video voice track, mute that scene's video audio
+      // and remember the URL so the deterministic seeder won't re-add it.
+      if (removed?.extractedFromVideo && removed.sceneId) {
+        if (removed.audioUrl) userRemovedExtractedRef.current.add(removed.audioUrl);
+        setMutedScenes(m => {
+          const next = new Set(m);
+          next.add(removed.sceneId);
+          return next;
+        });
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  }, [pushHistory]);
+
+  const handleDeleteOverlay = useCallback((id: string) => {
+    pushHistory();
+    setOverlays(prev => {
+      const removed = prev.find(o => o.id === id);
+      // If user explicitly removes a text bar, don't auto-reseed it for this scene
+      if (removed?.kind === "text" && removed.sceneId) {
+        userRemovedTextScenesRef.current.add(removed.sceneId);
+      }
+      return prev.filter(o => o.id !== id);
+    });
+  }, [pushHistory]);
+
+
+  const handleTrimScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+
+    const sceneStart = cumulativeStarts[index] || 0;
+    const splitPoint = globalTime - sceneStart;
+    const sceneDur = seg.endTime - seg.startTime;
+
+    if (splitPoint < 0.5 || splitPoint > sceneDur - 0.5) {
+      toast({ title: "Cannot split", description: "Move playhead to the middle of the scene", variant: "destructive" });
+      return;
+    }
+
+    pushHistory(storyboard);
+
+    // Create new segment for the second half
+    const newSegId = crypto.randomUUID();
+    const newSceneId = crypto.randomUUID();
+    const newSeg: ScriptSegment = {
+      ...seg,
+      id: newSegId,
+      startTime: seg.startTime + splitPoint,
+      endTime: seg.endTime,
+      label: seg.label + " (2)",
+    };
+
+    // Update existing segment to end at split point + add new segment
+    const updatedSegments = segments.map(s => s.id === seg.id ? { ...s, endTime: seg.startTime + splitPoint } : s);
+    updatedSegments.splice(segments.indexOf(seg) + 1, 0, newSeg);
+    onUpdateSegments?.(updatedSegments);
+
+    // Insert new scene after current
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: newSegId,
+    };
+    const updatedStoryboard = [...storyboard];
+    updatedStoryboard.splice(index + 1, 0, newScene);
+    onUpdateStoryboard?.(updatedStoryboard);
+
+    toast({ title: "Scene split", description: `Split at ${globalTime.toFixed(1)}s` });
+  }, [storyboard, segments, globalTime, cumulativeStarts, toast, pushHistory, onUpdateSegments, onUpdateStoryboard]);
+
+
+  const handleResizeScene = useCallback((index: number, newDuration: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+    const clamped = Math.max(1, Math.round(newDuration * 10) / 10);
+    pushHistory(storyboard);
+    onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + clamped);
+  }, [storyboard, segments, pushHistory, onUpdateSegmentTiming]);
+
+  const [isTrimming, setIsTrimming] = useState(false);
+
+  const handleTrimApply = useCallback(async (index: number, trimStart: number, trimEnd: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const clip = clips.find(c => c.sceneId === scene.id);
+    if (!clip?.videoUrl) {
+      toast({ title: "Cannot trim", description: "No video for this scene", variant: "destructive" });
+      return;
+    }
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+
+    // Validate trim range
+    const newDuration = trimEnd - trimStart;
+    if (newDuration < 0.5) {
+      toast({ title: "Cannot trim", description: "Duration too short", variant: "destructive" });
+      return;
+    }
+
+    setIsTrimming(true);
+    try {
+      pushHistory(storyboard);
+      const trimmedUrl = await trimVideo(clip.videoUrl, trimStart, trimEnd);
+
+      // Update clip URL
+      onUpdateClipUrl?.(scene.id, trimmedUrl);
+
+      // Update segment timing to match new duration
+      onUpdateSegmentTiming?.(seg.id, seg.startTime, seg.startTime + newDuration);
+
+      // Update cached clip duration
+      setClipDurations(prev => ({ ...prev, [scene.id]: newDuration }));
+
+      toast({ title: "✂️ Scene trimmed", description: `New duration: ${newDuration.toFixed(1)}s` });
+    } catch (err: any) {
+      toast({ title: "Trim failed", description: err.message || "Video trimming error", variant: "destructive" });
+    } finally {
+      setIsTrimming(false);
+    }
+  }, [storyboard, clips, segments, pushHistory, onUpdateClipUrl, onUpdateSegmentTiming, toast]);
+
+  const handleSplitScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    if (!seg) return;
+
+    // Use scene-relative offset (globalTime - sceneStart) so split lands at the playhead inside this clip
+    const sceneStart = cumulativeStarts[index] || 0;
+    const sceneDur = clipDurations[scene.id] ?? (seg.endTime - seg.startTime);
+    const splitPoint = Math.max(0, globalTime - sceneStart);
+
+    if (splitPoint <= 0.1 || splitPoint >= sceneDur - 0.1) {
+      toast({
+        title: "Cannot split",
+        description: "Move the playhead inside this clip (away from the edges).",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    pushHistory(storyboard);
+
+    const absoluteSplit = seg.startTime + splitPoint;
+    const newSegId = crypto.randomUUID();
+    const newSceneId = crypto.randomUUID();
+
+    // Trim original segment and insert new second half
+    const updatedSegments = segments.map(s =>
+      s.id === seg.id ? { ...s, endTime: absoluteSplit } : s
+    );
+    const segIdx = updatedSegments.findIndex(s => s.id === seg.id);
+    const newSeg: ScriptSegment = {
+      ...seg,
+      id: newSegId,
+      startTime: absoluteSplit,
+      endTime: seg.endTime,
+      label: seg.label + " (2)",
+    };
+    updatedSegments.splice(segIdx + 1, 0, newSeg);
+    onUpdateSegments?.(updatedSegments);
+
+    // Insert new scene after current — mark sibling relationship for continuous bar rendering
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: newSegId,
+      splitFromId: scene.id,
+      splitIntoId: undefined,
+    };
+    const updated = storyboard.map((s, i) =>
+      i === index ? { ...s, splitIntoId: newSceneId } : s
+    );
+    updated.splice(index + 1, 0, newScene);
+    onUpdateStoryboard?.(updated);
+
+    // Duplicate the underlying clip so the second half has the same video source
+    onDuplicateClip?.(scene.id, newSceneId);
+
+    // Lock visual durations for both halves so timeline cards reflect the cut immediately,
+    // and remember the second half should seek into the underlying video at `splitPoint`.
+    const originalStartOffset = clipStartOffsets[scene.id] ?? 0;
+    const firstHalfDur = splitPoint;
+    const secondHalfDur = sceneDur - splitPoint;
+    setClipDurations(prev => ({
+      ...prev,
+      [scene.id]: firstHalfDur,
+      [newSceneId]: secondHalfDur,
+    }));
+    setClipStartOffsets(prev => ({
+      ...prev,
+      [scene.id]: originalStartOffset,
+      [newSceneId]: originalStartOffset + splitPoint,
+    }));
+    lockedDurationScenesRef.current.add(scene.id);
+    lockedDurationScenesRef.current.add(newSceneId);
+
+    // Move selection + playhead to start of the new (second) scene
+    setSelectedSceneIndex(index + 1);
+    setCurrentTime(0);
+
+    toast({ title: "Scene split", description: `Split at ${splitPoint.toFixed(1)}s into the clip` });
+  }, [storyboard, segments, cumulativeStarts, clipDurations, clipStartOffsets, globalTime, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
+
+  const handleDuplicateScene = useCallback((index: number) => {
+    const scene = storyboard[index];
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+
+    pushHistory(storyboard);
+
+    // Create new segment (copy with new ID)
+    const newSegId = crypto.randomUUID();
+    if (seg && onUpdateSegments) {
+      const newSeg = { ...seg, id: newSegId };
+      const updatedSegments = [...segments];
+      const segIdx = segments.indexOf(seg);
+      updatedSegments.splice(segIdx + 1, 0, newSeg);
+      onUpdateSegments(updatedSegments);
+    }
+
+    const newSceneId = crypto.randomUUID();
+    const newScene: StoryboardScene = {
+      ...scene,
+      id: newSceneId,
+      segmentId: seg ? newSegId : scene.segmentId,
+    };
+    const updated = [...storyboard];
+    updated.splice(index + 1, 0, newScene);
+    onUpdateStoryboard?.(updated);
+    onDuplicateClip?.(scene.id, newSceneId);
+    toast({ title: "Scene duplicated" });
+  }, [storyboard, segments, pushHistory, onUpdateStoryboard, onUpdateSegments, onDuplicateClip, toast]);
+
+  const handleMoveScene = useCallback((index: number, dir: -1 | 1) => {
+    const target = index + dir;
+    if (target < 0 || target >= storyboard.length) return;
+    pushHistory(storyboard);
+    const updated = [...storyboard];
+    [updated[index], updated[target]] = [updated[target], updated[index]];
+    onUpdateStoryboard?.(updated);
+    setSelectedSceneIndex(target);
+    toast({ title: "Scene moved" });
+  }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
+
+  const handleReorderScene = useCallback((fromIdx: number, toIdx: number) => {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0) return;
+    if (fromIdx >= storyboard.length || toIdx >= storyboard.length) return;
+    pushHistory(storyboard);
+    const updated = [...storyboard];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    onUpdateStoryboard?.(updated);
+    setSelectedSceneIndex(toIdx);
+    toast({ title: `Scene moved to position ${toIdx + 1}` });
+  }, [storyboard, pushHistory, onUpdateStoryboard, toast]);
+
+  const handleEditPrompt = useCallback((index: number) => {
+    setSelectedSceneIndex(index);
+    setActiveTab("media");
+  }, []);
+
+  const handleEditVoiceover = useCallback((index: number) => {
+    setSelectedSceneIndex(index);
+    setActiveTab("script");
+  }, []);
+
+  const handleMuteScene = useCallback((index: number) => {
+    const sceneId = storyboard[index]?.id;
+    if (!sceneId) return;
+    pushHistory();
+    setMutedScenes(prev => {
+      const next = new Set(prev);
+      if (next.has(sceneId)) next.delete(sceneId); else next.add(sceneId);
+      return next;
+    });
+    toast({ title: mutedScenes.has(storyboard[index]?.id) ? "Scene unmuted" : "Scene muted" });
+  }, [storyboard, mutedScenes, toast, pushHistory]);
+
+  const handleDeleteScene = useCallback((index: number) => {
+    const sceneId = storyboard[index]?.id;
+    if (!sceneId) return;
+    pushHistory(storyboard);
+    const updated = storyboard.filter((_, i) => i !== index);
+    onUpdateStoryboard?.(updated);
+    // Clean up associated audio tracks and overlays
+    setAudioTracks(prev => prev.filter(t => t.sceneId !== sceneId));
+    setOverlays(prev => prev.filter(o => o.sceneId !== sceneId));
+    // Adjust selection
+    if (updated.length === 0) {
+      setSelectedSceneIndex(0);
+    } else if (selectedSceneIndex >= updated.length) {
+      setSelectedSceneIndex(updated.length - 1);
+    }
+    toast({ title: "Scene deleted" });
+  }, [storyboard, pushHistory, onUpdateStoryboard, selectedSceneIndex, toast]);
+
+  const handleEditOverlayPosition = useCallback((id: string, position: "top" | "center" | "bottom") => {
+    const posMap = { top: { x: 25, y: 5 }, center: { x: 25, y: 45 }, bottom: { x: 25, y: 85 } };
+    pushHistory();
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, position: posMap[position] } : o));
+  }, [pushHistory]);
+
+  const handleResizeOverlay = useCallback((id: string, size: "small" | "medium" | "large") => {
+    const sizeMap = { small: { w: 30, h: 8 }, medium: { w: 50, h: 10 }, large: { w: 80, h: 15 } };
+    pushHistory();
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, size: sizeMap[size] } : o));
+  }, [pushHistory]);
+
+  const handleToggleOverlayAnimation = useCallback((id: string) => {
+    pushHistory();
+    setOverlays(prev => prev.map(o => o.id === id ? { ...o, animated: !o.animated } : o));
+  }, [pushHistory]);
+
+  const handleReRecordVoiceover = useCallback(async (sceneId: string, customText?: string) => {
+    const scene = storyboard.find(s => s.id === sceneId);
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+    const voiceoverText = customText?.trim() || scene.voiceover?.trim() || seg?.text?.trim();
+    if (!voiceoverText) return;
+
+    // If custom text provided, update the storyboard scene voiceover first
+    if (customText?.trim() && onUpdateStoryboard) {
+      const updated = storyboard.map(s => s.id === sceneId ? { ...s, voiceover: customText.trim() } : s);
+      onUpdateStoryboard(updated);
+    }
+
+    toast({ title: "Re-recording voiceover…" });
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ text: voiceoverText }),
+        }
+      );
+      if (!response.ok) throw new Error(`TTS failed: ${response.status}`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      setAudioTracks(prev => prev.map(t =>
+        t.kind === "voiceover" && t.sceneId === sceneId ? { ...t, audioUrl: url } : t
+      ));
+      toast({ title: "Voiceover re-recorded" });
+    } catch (err: any) {
+      toast({ title: "Re-record failed", description: err.message, variant: "destructive" });
+    }
+  }, [storyboard, segments, toast, onUpdateStoryboard]);
+
+  const handleUpdateVoiceoverText = useCallback((sceneId: string, text: string) => {
+    if (!onUpdateStoryboard) return;
+    const updated = storyboard.map(s => s.id === sceneId ? { ...s, voiceover: text } : s);
+    onUpdateStoryboard(updated);
+    toast({ title: "Voiceover text saved" });
+  }, [storyboard, onUpdateStoryboard, toast]);
+
+  const handleEditVoiceoverText = useCallback((sceneId: string) => {
+    const sceneIdx = storyboard.findIndex(s => s.id === sceneId);
+    if (sceneIdx >= 0) {
+      setSelectedSceneIndex(sceneIdx);
+      setActiveTab("script");
+    }
+  }, [storyboard]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, "0")}`;
+  };
+
+  const handleTimeUpdate = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    const startOffset = sceneId ? (clipStartOffsets[sceneId] ?? 0) : 0;
+    const targetDur = sceneId ? clipDurations[sceneId] : undefined;
+
+    // Report scene-relative time for the timeline playhead
+    setCurrentTime(Math.max(0, v.currentTime - startOffset));
+
+    // Auto-advance early when playback exits this scene's window (split halves)
+    if (targetDur !== undefined && lockedDurationScenesRef.current.has(sceneId!)) {
+      if (v.currentTime >= startOffset + targetDur - 0.05) {
+        if (!sceneTransitioning.current) {
+          handleVideoEndedRef.current();
+        }
+      }
+    }
+  };
+
+  const handleLoaded = () => {
+    if (!videoRef.current) return;
+    setDuration(videoRef.current.duration);
+    const sceneId = storyboard[selectedSceneIndex]?.id;
+    if (!sceneId || videoRef.current.duration <= 0) return;
+
+    // Re-apply per-scene mute/volume on src change (browser resets volume when src changes)
+    const isMutedScene = mutedScenes.has(sceneId);
+    videoRef.current.volume = isMutedScene ? 0 : videoVolume;
+
+    // Respect explicitly-locked durations (split / trim) — never overwrite
+    if (!lockedDurationScenesRef.current.has(sceneId)) {
+      setClipDurations(prev => ({ ...prev, [sceneId]: videoRef.current!.duration }));
+    }
+    // Seek into the correct window for split second-halves
+    const startOffset = clipStartOffsets[sceneId] ?? 0;
+    if (startOffset > 0 && Math.abs(videoRef.current.currentTime - startOffset) > 0.05) {
+      videoRef.current.currentTime = startOffset;
+    }
+  };
+
+  // ─── Auto-advance on video end with per-scene transition ───
+  const [sceneTransition, setSceneTransition] = useState(false);
+  const [activeTransition, setActiveTransition] = useState<{ type: string; duration: number } | null>(null);
+
+  // Map a transition type to a CSS class defined in src/index.css.
+  const transitionClassFor = (type: string | undefined | null): string => {
+    if (!type || type === "None") return "ad-tx-Crossfade";
+    const safe = type.replace(/\s+/g, "-");
+    return `ad-tx-${safe}`;
+  };
+
+  const advanceToNextScene = useCallback(() => {
+    const completedIndices = storyboard
+      .map((s, i) => ({ i, clip: clips.find(c => c.sceneId === s.id) }))
+      .filter(x => x.clip?.status === "completed" && x.clip?.videoUrl)
+      .map(x => x.i);
+
+    const nextIdx = completedIndices.find(i => i > selectedSceneIndex);
+    if (nextIdx === undefined) {
+      setIsPlaying(false);
+      return;
+    }
+
+    // Stop VO cleanly instead of orphaning — VO is speed-matched so cutting tail is acceptable
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
+      audioRef.current.onended = null;
+      audioRef.current = null;
+      currentVoUrlRef.current = null;
+    }
+
+    // Read user-selected transition for the OUTGOING scene.
+    const outgoingSceneId = storyboard[selectedSceneIndex]?.id;
+    const tx = (outgoingSceneId && clipTransitions[outgoingSceneId])
+      ? clipTransitions[outgoingSceneId]
+      : { type: "Crossfade", duration: 0.5 };
+    const durMs = Math.max(100, Math.round((tx.duration || 0.5) * 1000));
+
+    doAdvance(nextIdx, tx, durMs);
+
+    function doAdvance(idx: number, transition: { type: string; duration: number }, durationMs: number) {
+      setActiveTransition(transition);
+      setSceneTransition(true);
+      sceneTransitioning.current = true;
+      setTimeout(() => {
+        autoPlayPending.current = true;
+        setSelectedSceneIndex(idx);
+        const nextScene = storyboard[idx];
+        const nextClip = clips.find(c => c.sceneId === nextScene?.id);
+        const nextIsStatic = nextScene?.generationMode === "static-card" || nextClip?.videoUrl?.startsWith("data:image/");
+
+        // Preload next scene's voiceover
+        const nextVo = audioTracks.find(a => a.kind === "voiceover" && a.sceneId === nextScene?.id);
+        if (nextVo) {
+          const preload = new Audio(nextVo.audioUrl);
+          preload.preload = "auto";
+          preload.load();
+        }
+
+        if (nextIsStatic) {
+          sceneTransitioning.current = false;
+          setSceneTransition(false);
+          setActiveTransition(null);
+          setIsPlaying(true);
+          autoPlayPending.current = false;
+        } else {
+          const checkReady = () => {
+            if (videoRef.current && videoRef.current.readyState >= 3) {
+              sceneTransitioning.current = false;
+              setSceneTransition(false);
+              setActiveTransition(null);
+              if (autoPlayPending.current) {
+                videoRef.current.play().catch(() => {});
+                autoPlayPending.current = false;
+              }
+            } else {
+              setTimeout(checkReady, 50);
+            }
+          };
+          setTimeout(checkReady, 50);
+        }
+      }, durationMs);
+    }
+  }, [storyboard, clips, selectedSceneIndex, audioTracks, clipTransitions]);
+
+  const handleVideoEnded = useCallback(() => {
+    advanceToNextScene();
+  }, [advanceToNextScene]);
+  // Keep ref in sync for static card timer
+  handleVideoEndedRef.current = handleVideoEnded;
+
+  // ─── Global seek from timeline ───
+  const handleGlobalSeek = (globalTimeSec: number) => {
+    // Find which scene this falls into
+    let targetScene = 0;
+    for (let i = 0; i < cumulativeStarts.length; i++) {
+      if (globalTimeSec >= cumulativeStarts[i]) targetScene = i;
+      else break;
+    }
+    const offset = globalTimeSec - cumulativeStarts[targetScene];
+    if (targetScene !== selectedSceneIndex) {
+      setSelectedSceneIndex(targetScene);
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.currentTime = Math.min(offset, videoRef.current.duration || offset);
+        }
+      }, 100);
+    } else {
+      if (videoRef.current) {
+        videoRef.current.currentTime = Math.min(offset, videoRef.current.duration || offset);
+      }
+    }
+  };
+
+  const seekTo = (pct: number) => {
+    if (videoRef.current && duration > 0) {
+      videoRef.current.currentTime = (pct / 100) * duration;
+    }
+  };
+
+  const skipScene = (dir: -1 | 1) => {
+    const next = selectedSceneIndex + dir;
+    if (next >= 0 && next < storyboard.length) setSelectedSceneIndex(next);
+  };
+
+  // ─── Generate all voiceovers ───
+  // Helper to measure video clip duration from URL
+  const measureVideoDuration = (videoUrl: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      const tempVid = document.createElement("video");
+      tempVid.preload = "metadata";
+      tempVid.addEventListener("loadedmetadata", () => {
+        resolve(tempVid.duration && isFinite(tempVid.duration) ? tempVid.duration : null);
+      });
+      tempVid.addEventListener("error", () => resolve(null));
+      tempVid.src = videoUrl;
+    });
+  };
+
+  const generateAllVoiceovers = async () => {
+    setGeneratingVoiceovers(true);
+
+    // ── Clear all existing text overlays, voiceover, and music tracks ──
+    setOverlays(prev => prev.filter(o => o.kind !== "text"));
+    setAudioTracks([]);
+
+    const newTracks: AudioTrackItem[] = [];
+    const batchedDurations: Record<string, number> = {};
+    // Compute cumulative scene start times
+    let cumStart = 0;
+    const sceneStarts: Record<string, number> = {};
+    for (const scene of storyboard) {
+      sceneStarts[scene.id] = cumStart;
+      const seg = segments.find(s => s.id === scene.segmentId);
+      cumStart += seg ? seg.endTime - seg.startTime : 4;
+    }
+    try {
+      // ── Phase 1: Generate voiceovers ──
+      for (const seg of segments) {
+        if (!seg.text.trim()) continue;
+        const scene = storyboard.find(s => s.segmentId === seg.id);
+        if (!scene) continue;
+
+        // Prefer dedicated voiceover text from AI over generic segment text
+        const voiceoverText = scene.voiceover?.trim() || seg.text.trim();
+        if (!voiceoverText) continue;
+
+        // Ensure we have clip duration — measure from URL if not cached
+        let clipDur = clipDurations[scene.id];
+        if (!clipDur) {
+          const clip = clips.find(c => c.sceneId === scene.id);
+          if (clip?.videoUrl && !clip.videoUrl.startsWith("data:image/")) {
+            const measured = await measureVideoDuration(clip.videoUrl);
+            if (measured && measured > 0) {
+              clipDur = measured;
+              setClipDurations(prev => ({ ...prev, [scene.id]: measured }));
+            }
+          }
+        }
+
+        // First pass: generate VO at normal speed
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: voiceoverText }),
+          }
+        );
+        if (!response.ok) throw new Error(`TTS failed for ${seg.label}`);
+        let blob = await response.blob();
+        let url = URL.createObjectURL(blob);
+
+        // Measure VO duration
+        let voDur = await measureAudioDuration(url);
+
+        // Two-pass fitting: if VO is >20% longer than clip, regenerate with speed param
+        if (clipDur && voDur && voDur > clipDur * 1.2) {
+          const targetSpeed = Math.min(voDur / clipDur, 1.2); // ElevenLabs max speed is 1.2
+          const retryResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              },
+              body: JSON.stringify({ text: seg.text, speed: parseFloat(targetSpeed.toFixed(2)) }),
+            }
+          );
+          if (retryResponse.ok) {
+            URL.revokeObjectURL(url); // Free old blob
+            blob = await retryResponse.blob();
+            url = URL.createObjectURL(blob);
+            voDur = await measureAudioDuration(url);
+          }
+        }
+
+        const clipDuration = clipDur ?? (seg.endTime - seg.startTime);
+        const trackDuration = voDur ?? clipDuration;
+        if (voDur && isFinite(voDur)) {
+          batchedDurations[scene.id] = voDur;
+        }
+        newTracks.push({
+          sceneId: scene.id,
+          label: seg.label,
+          audioUrl: url,
+          kind: "voiceover",
+          globalStartTime: sceneStarts[scene.id] ?? 0,
+          duration: trackDuration,
+        });
+      }
+
+      // Batch-update durations to trigger text overlay useEffect once
+      setVoiceoverDurations(prev => ({ ...prev, ...batchedDurations }));
+
+      // ── Apply all voiceover tracks ──
+      setAudioTracks(newTracks);
+      toast({ title: "✅ Voiceover complete", description: `${newTracks.length} voiceover track(s) created` });
+    } catch (err: any) {
+      toast({ title: "Voiceover generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingVoiceovers(false);
+    }
+  };
+
+  // ─── Derive mood keywords from storyboard/brand (no narration text) ───
+  const deriveMood = (): string => {
+    const b: any = brand || {};
+    const tokens: string[] = [];
+
+    // Brand-level cues
+    if (b.industry) tokens.push(String(b.industry).toLowerCase());
+    if (b.tone) tokens.push(String(b.tone).toLowerCase());
+    if (b.referenceAesthetic) {
+      // e.g. "Premium cinematic industrial B2B" → keep as a stylistic hint
+      tokens.push(String(b.referenceAesthetic).toLowerCase());
+    }
+
+    // Scene-level cues (style/mood/emotionalTone), no dialog text
+    const sceneCues = (storyboard || [])
+      .flatMap((s: any) => [s?.emotionalTone, s?.visualStyle, s?.style, s?.mood])
+      .filter(Boolean)
+      .map((x: string) => String(x).toLowerCase());
+    tokens.push(...sceneCues);
+
+    // De-dup, drop very long phrases, cap to ~5 keywords
+    const cleaned = Array.from(new Set(
+      tokens
+        .join(",")
+        .split(/[,;|]/)
+        .map(t => t.trim())
+        .filter(t => t.length > 2 && t.length < 40)
+    )).slice(0, 5);
+
+    return cleaned.length ? cleaned.join(", ") : "professional, uplifting, corporate";
+  };
+
+  // ─── Generate background music only ───
+  const generateBackgroundMusic = async () => {
+    setGeneratingMusic(true);
+    try {
+      // Revoke previous blob-music URL to avoid leaks, then remove existing music tracks
+      setAudioTracks(prev => {
+        prev.filter(t => t.kind === "music").forEach(t => {
+          if (t.audioUrl?.startsWith("blob:")) {
+            try { URL.revokeObjectURL(t.audioUrl); } catch {}
+          }
+        });
+        return prev.filter(t => t.kind !== "music");
+      });
+      setMusicUrl(prev => {
+        if (prev?.startsWith("blob:")) { try { URL.revokeObjectURL(prev); } catch {} }
+        return null;
+      });
+
+      const moodKeywords = deriveMood();
+      const musicPrompt =
+        `100% instrumental, orchestral only. Pure instrumental background music. ` +
+        `STRICTLY NO vocals, NO lyrics, NO singing, NO human voice, NO speech, NO words, NO choir, NO humming. ` +
+        `Style: cinematic corporate advertising soundtrack. ` +
+        `Mood: ${moodKeywords}. ` +
+        `Tempo: medium, building energy. ` +
+        `Instruments: orchestral strings, subtle percussion, ambient synth pads — no voice instruments. ` +
+        `Suitable for B2B brand video background — must not compete with voiceover narration.`;
+
+      const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0);
+      // ElevenLabs Music min ~5s, cap at 60s for cost & UX
+      const safeDuration = Math.max(5, Math.min(totalDur || 30, 60));
+
+      toast({ title: "🎵 Generating music..." });
+
+      const { data: { session: musicSession } } = await supabase.auth.getSession();
+      const musicResponse = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/lyria-music`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+            Authorization: `Bearer ${musicSession?.access_token ?? import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ prompt: musicPrompt, duration: safeDuration }),
+        }
+      );
+
+      if (!musicResponse.ok) {
+        throw new Error(`Music generation failed: ${musicResponse.status}`);
+      }
+
+      const musicBlob = await musicResponse.blob();
+      const newMusicUrl = URL.createObjectURL(musicBlob);
+      setMusicUrl(newMusicUrl);
+
+      pushHistoryFnRef.current?.();
+      setAudioTracks(prev => [...prev.filter(t => t.kind !== "music"), {
+        sceneId: "",
+        label: "🎵 Auto Music",
+        audioUrl: newMusicUrl,
+        kind: "music" as const,
+        globalStartTime: 0,
+        duration: safeDuration,
+        volume: 0.3,
+      }]);
+
+      toast({ title: "🎵 Music generated", description: `${safeDuration}s instrumental track added` });
+    } catch (err: any) {
+      console.error("Music generation error:", err);
+      toast({ title: "Music generation failed", description: err.message, variant: "destructive" });
+    } finally {
+      setGeneratingMusic(false);
+    }
+  };
+
+
+  const handleRegenerateFullScene = async (sceneId: string) => {
+    const scene = storyboard.find(s => s.id === sceneId);
+    if (!scene) return;
+    const seg = segments.find(s => s.id === scene.segmentId);
+
+    // 1. Trigger video regeneration
+    onRegenerateScene?.(sceneId);
+    toast({ title: "🔄 Regenerating full scene...", description: "Video, audio, and text are being generated" });
+
+    // 2. Remove existing voiceover & text overlays for this scene
+    setAudioTracks(prev => prev.filter(a => !(a.sceneId === sceneId && a.kind === "voiceover")));
+    setOverlays(prev => prev.filter(o => !(o.sceneId === sceneId && o.kind === "text")));
+
+    // 3. Regenerate voiceover for this scene
+    if (seg?.text?.trim()) {
+      try {
+        const voiceoverText = scene.voiceover?.trim() || seg.text.trim();
+
+        // Compute cumulative start time for this scene
+        let cumStart = 0;
+        for (const s of storyboard) {
+          if (s.id === sceneId) break;
+          const sSeg = segments.find(x => x.id === s.segmentId);
+          cumStart += sSeg ? sSeg.endTime - sSeg.startTime : 4;
+        }
+
+        // Measure clip duration
+        let clipDur = clipDurations[sceneId];
+        if (!clipDur) {
+          const clip = clips.find(c => c.sceneId === sceneId);
+          if (clip?.videoUrl && !clip.videoUrl.startsWith("data:image/")) {
+            const measured = await measureVideoDuration(clip.videoUrl);
+            if (measured && measured > 0) {
+              clipDur = measured;
+              setClipDurations(prev => ({ ...prev, [sceneId]: measured }));
+            }
+          }
+        }
+
+        // Generate TTS
+        const response = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+              Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            },
+            body: JSON.stringify({ text: voiceoverText }),
+          }
+        );
+        if (response.ok) {
+          let blob = await response.blob();
+          let url = URL.createObjectURL(blob);
+          let voDur = await measureAudioDuration(url);
+
+          // Speed-fit if needed
+          if (clipDur && voDur && voDur > clipDur * 1.2) {
+            const targetSpeed = Math.min(voDur / clipDur, 1.2);
+            const retryResponse = await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/elevenlabs-tts`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+                  Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                },
+                body: JSON.stringify({ text: voiceoverText, speed: parseFloat(targetSpeed.toFixed(2)) }),
+              }
+            );
+            if (retryResponse.ok) {
+              URL.revokeObjectURL(url);
+              blob = await retryResponse.blob();
+              url = URL.createObjectURL(blob);
+              voDur = await measureAudioDuration(url);
+            }
+          }
+
+          const clipDuration = clipDur ?? (seg.endTime - seg.startTime);
+          const trackDuration = voDur ?? clipDuration;
+
+          if (voDur && isFinite(voDur)) {
+            setVoiceoverDurations(prev => ({ ...prev, [sceneId]: voDur! }));
+          }
+
+          setAudioTracks(prev => [
+            ...prev.filter(a => !(a.sceneId === sceneId && a.kind === "voiceover")),
+            {
+              sceneId,
+              label: seg.label,
+              audioUrl: url,
+              kind: "voiceover",
+              globalStartTime: cumStart,
+              duration: trackDuration,
+            },
+          ]);
+          toast({ title: "✅ Voiceover regenerated" });
+        }
+      } catch (err: any) {
+        console.warn("Single scene VO regen failed:", err.message);
+      }
+    }
+
+    // 4. Text overlays will auto-regenerate via the voiceoverDurations useEffect
+  };
+
+  // Helper to measure audio duration from a blob URL
+  const measureAudioDuration = (url: string): Promise<number | null> => {
+    return new Promise((resolve) => {
+      const tempAudio = new Audio(url);
+      tempAudio.addEventListener("loadedmetadata", () => {
+        resolve(tempAudio.duration && isFinite(tempAudio.duration) ? tempAudio.duration : null);
+      });
+      tempAudio.addEventListener("error", () => resolve(null));
+    });
+  };
+
+  // Handle music selection — also add to audio tracks
+  const handleMusicSelect = (url: string | null) => {
+    pushHistory();
+    setMusicUrl(url);
+    onMusicSelect?.(url);
+    setAudioTracks(prev => {
+      const withoutMusic = prev.filter(a => a.kind !== "music");
+      if (url) {
+        return [...withoutMusic, { sceneId: "", label: "Music", audioUrl: url, kind: "music" as const, globalStartTime: 0 }];
+      }
+      return withoutMusic;
+    });
+  };
+
+  // ─── Drag-to-reposition handlers ───
+  const handleMoveOverlay = useCallback((id: string, newSceneId: string, startTime?: number) => {
+    pushHistoryDebounced();
+    setOverlays(prev => prev.map(o => {
+      if (o.id !== id) return o;
+      const newSceneIdx = storyboard.findIndex(s => s.id === newSceneId);
+      const seg = newSceneIdx >= 0 ? segments.find(s => s.id === storyboard[newSceneIdx]?.segmentId) : null;
+      const newDur = seg ? seg.endTime - seg.startTime : 4;
+      if (startTime != null) {
+        const itemDuration = (o.endTime != null && o.startTime != null) ? (o.endTime - o.startTime) : 3;
+        const clampedStart = Math.max(0, startTime);
+        return { ...o, sceneId: newSceneId, startTime: clampedStart, endTime: clampedStart + itemDuration };
+      }
+      return { ...o, sceneId: newSceneId };
+    }));
+  }, [storyboard, segments, pushHistoryDebounced]);
+
+  const handleMoveAudioTrack = useCallback((index: number, _newSceneId: string, absoluteTime?: number) => {
+    pushHistoryDebounced();
+    setAudioTracks(prev => prev.map((at, i) => {
+      if (i !== index || absoluteTime == null) return at;
+      const totalDur = segments.reduce((sum, seg) => sum + (seg.endTime - seg.startTime), 0) || 30;
+      // Preserve existing duration; don't default to totalDur which breaks clamping
+      const trackDur = at.duration
+        ?? (at.endTime != null && at.startTime != null ? at.endTime - at.startTime : undefined);
+      // Clamp to totalDur (allow positioning anywhere), not totalDur - dur
+      const clampedStart = Math.max(0, Math.min(absoluteTime, totalDur));
+      return { ...at, globalStartTime: clampedStart, duration: trackDur };
+    }));
+  }, [segments]);
+
+  // AI Command Bar
+  const handleAiSubmit = async () => {
+    if (!aiCommand.trim() || aiProcessing) return;
+    const scene = storyboard[selectedSceneIndex];
+    if (!scene) return;
+
+    setAiProcessing(true);
+    try {
+      const result = await invokeEdgeFunction<any>(
+        "edit-video-prompt",
+        { originalPrompt: scene.prompt, editAction: "custom", editDetail: aiCommand }
+      );
+
+      if (result.type === "overlay") {
+        const overlay = result.overlay as { kind: string; position: string; size: string; content: string; animated?: boolean };
+        const posMap: Record<string, { x: number; y: number }> = {
+          "top-left": { x: 5, y: 5 }, "top-right": { x: 80, y: 5 },
+          "bottom-left": { x: 5, y: 80 }, "bottom-right": { x: 80, y: 80 },
+          "center": { x: 40, y: 40 },
+        };
+        const sizeMap: Record<string, { w: number; h: number }> = {
+          small: { w: 10, h: 10 }, medium: { w: 15, h: 15 }, large: { w: 25, h: 25 },
+        };
+        const content = overlay.content === "brand_logo" && brand.logoUrl ? brand.logoUrl : overlay.content;
+        const newOverlay: VideoOverlay = {
+          id: crypto.randomUUID(),
+          kind: (overlay.kind as VideoOverlay["kind"]) || "logo",
+          position: posMap[overlay.position] || posMap["bottom-right"],
+          size: sizeMap[overlay.size] || sizeMap["medium"],
+          content,
+          opacity: 0.85,
+          sceneId: scene.id,
+          animated: overlay.animated || false,
+        };
+        setOverlays(prev => [...prev, newOverlay]);
+        toast({ title: "Overlay added", description: `${overlay.kind} overlay applied${overlay.animated ? " with animation" : ""}.` });
+      } else {
+        const newPrompt = result.editedPrompt;
+        if (typeof newPrompt === "string" && newPrompt.length > 0) {
+          pushHistory(storyboard);
+          const updated = storyboard.map((s, i) =>
+            i === selectedSceneIndex ? { ...s, prompt: newPrompt, promptQuality: undefined } : s
+          );
+          onUpdateStoryboard?.(updated);
+          onRegenerateScene?.(scene.id);
+          toast({ title: "Regenerating scene", description: "AI is applying your edit…" });
+        }
+      }
+      setAiCommand("");
+    } catch (err: any) {
+      toast({ title: "AI edit failed", description: err.message, variant: "destructive" });
+    } finally {
+      setAiProcessing(false);
+    }
+  };
+
+  // Overlays for current scene — filter text overlays by currentTime
+  const currentSceneId = storyboard[selectedSceneIndex]?.id;
+  const sceneOverlays = overlays.filter(o => {
+    if (o.sceneId !== currentSceneId) return false;
+    if (o.kind === "text" && o.startTime != null && o.endTime != null) {
+      return currentTime >= o.startTime && currentTime < o.endTime;
+    }
+    return true; // logos/shapes always visible
+  });
+  const textOverlays = overlays.filter(o => o.kind === "text");
+
+  // Logo handlers
+  const handleDeleteLogo = () => onUpdateBrand?.({ ...brand, logoUrl: null });
+
+  const handleReplaceLogo = async (file: File) => {
+    try {
+      const user = await getCurrentUser();
+      if (!user) return;
+      const path = `${user.id}/logo-${Date.now()}.${file.name.split('.').pop()}`;
+      const { error } = await uploadToStorage("brand-assets", path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from("brand-assets").getPublicUrl(path);
+      onUpdateBrand?.({ ...brand, logoUrl: data.publicUrl });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-[calc(100vh-120px)] rounded-xl border border-border/30 overflow-hidden bg-background">
+      {/* ─── Top Bar ─── */}
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border/30 bg-card/80 shrink-0">
+        <Button variant="ghost" size="sm" onClick={onBack} className="gap-1.5 h-7 px-2 text-xs">
+          <ArrowLeft className="w-3.5 h-3.5" /> Back
+        </Button>
+
+        <div className="flex items-center gap-1 ml-2">
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={undo} disabled={historyIndex <= 0} title={`Undo (${historyIndex} step${historyIndex === 1 ? "" : "s"} back)`}>
+            <Undo2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={redo} disabled={historyIndex >= history.length - 1} title={`Redo (${history.length - 1 - historyIndex} step${(history.length - 1 - historyIndex) === 1 ? "" : "s"} forward)`}>
+            <Redo2 className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+
+        {/* Auto Music button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[10px] gap-1 ml-2"
+          onClick={generateBackgroundMusic}
+          disabled={generatingMusic || segments.length === 0}
+        >
+          {generatingMusic ? <Loader2 className="w-3 h-3 animate-spin" /> : <Music className="w-3 h-3" />}
+          {generatingMusic ? "Generating…" : "Auto Music"}
+        </Button>
+
+        <div className="flex-1" />
+
+        {/* Save Changes Button */}
+        <Button
+          variant="outline"
+          size="sm"
+          className={cn(
+            "h-7 text-[10px] gap-1 relative",
+            hasChanges && !saving && "border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+          )}
+          disabled={saving || exporting}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              await onExport?.();
+              setHasChanges(false);
+              toast({ title: "✅ Changes saved" });
+            } catch (e: any) {
+              toast({ title: "Save failed", description: e?.message, variant: "destructive" });
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+          {saving ? "Saving…" : "Save"}
+          {hasChanges && !saving && (
+            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-green-500" />
+          )}
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 text-[10px] gap-1"
+          disabled={hasChanges}
+          title={hasChanges ? "Save changes first" : "Download video"}
+          onClick={() => {
+            const url = finalVideoUrl || videoSrc;
+            if (!url) { toast({ title: "No video available to download" }); return; }
+            const fname = `${brand.name || "video"}-ad.mp4`;
+            downloadFile(url, fname, { provider: "wan" });
+          }}
+        >
+          <Download className="w-3 h-3" />
+          Download
+        </Button>
+
+        <ScheduleToSocialPopover
+          finalVideoUrl={finalVideoUrl}
+          brandName={brand.name}
+          segments={segments}
+          clips={clips}
+        />
+      </div>
+
+      {/* ─── Main Area ─── */}
+      <div className="flex flex-1 min-h-0">
+        {/* ─── Center Canvas ─── */}
+        <div className="flex-1 flex flex-col min-w-0 bg-black/90 relative items-center justify-center">
+
+          {/* Outer centering wrapper */}
+          <div className="flex-1 w-full flex items-center justify-center p-4 min-h-0">
+          {/* Inner aspect-locked frame — enforces exact social ratio */}
+          <div ref={videoContainerRef} className="relative overflow-hidden bg-black shadow-2xl max-h-[60vh] max-w-full" style={{ aspectRatio: ASPECT_RATIOS[aspectRatio] || "16/9", height: "60vh", width: "auto" }}
+            onMouseMove={(e) => {
+              if (!videoContainerRef.current) return;
+              const rect = videoContainerRef.current.getBoundingClientRect();
+              // ─── Resize logic ───
+              if (resizingOverlay) {
+                const dxPct = ((e.clientX - resizeStart.current.mouseX) / rect.width) * 100;
+                const dyPct = ((e.clientY - resizeStart.current.mouseY) / rect.height) * 100;
+                const { handle } = resizingOverlay;
+                let newW = resizeStart.current.w;
+                let newH = resizeStart.current.h;
+                let newX = resizeStart.current.x;
+                let newY = resizeStart.current.y;
+                if (handle.includes("e")) newW = resizeStart.current.w + dxPct;
+                if (handle.includes("w")) { newW = resizeStart.current.w - dxPct; newX = resizeStart.current.x + dxPct; }
+                if (handle.includes("s")) newH = resizeStart.current.h + dyPct;
+                if (handle.includes("n")) { newH = resizeStart.current.h - dyPct; newY = resizeStart.current.y + dyPct; }
+                newW = Math.max(5, Math.min(90, newW));
+                newH = Math.max(5, Math.min(90, newH));
+                newX = Math.max(0, Math.min(95, newX));
+                newY = Math.max(0, Math.min(95, newY));
+                setOverlays(prev => prev.map(o => o.id === resizingOverlay.id ? { ...o, size: { w: newW, h: newH }, position: { x: newX, y: newY } } : o));
+                return;
+              }
+              // ─── Drag logic ───
+              if (!draggingOverlayId) return;
+              const x = ((e.clientX - rect.left) / rect.width) * 100 - dragOffset.current.x;
+              const y = ((e.clientY - rect.top) / rect.height) * 100 - dragOffset.current.y;
+              setOverlays(prev => prev.map(o => o.id === draggingOverlayId ? { ...o, position: { x: Math.max(0, Math.min(90, x)), y: Math.max(0, Math.min(90, y)) } } : o));
+            }}
+            onMouseUp={() => { setDraggingOverlayId(null); setResizingOverlay(null); }}
+            onMouseLeave={() => { setDraggingOverlayId(null); setResizingOverlay(null); }}
+          >
+            {videoSrc ? (
+              <>
+                {(() => {
+                  const txClass = sceneTransition && activeTransition ? transitionClassFor(activeTransition.type) : "";
+                  const txStyle = sceneTransition && activeTransition
+                    ? ({ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties)
+                    : undefined;
+                  const fallbackOpacity = sceneTransition && !activeTransition ? "opacity-0" : "opacity-100";
+                  return (
+                    <>
+                      {isStaticCard ? (
+                        <>
+                          {currentCardSettings ? (
+                            <canvas
+                              ref={liveCanvasRef}
+                              width={RATIO_DIMS[aspectRatio]?.[0] || 1280}
+                              height={RATIO_DIMS[aspectRatio]?.[1] || 720}
+                              className={`max-w-full max-h-full object-contain ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                              style={txStyle}
+                            />
+                          ) : (
+                            <img
+                              src={videoSrc}
+                              alt="End Card"
+                              className={`max-w-full max-h-full object-contain ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                              style={txStyle}
+                            />
+                          )}
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="absolute bottom-20 right-4 z-20 gap-1.5 text-xs"
+                            onClick={openCardEditor}
+                          >
+                            <Palette className="w-3.5 h-3.5" /> Edit Card
+                          </Button>
+                        </>
+                      ) : (
+                        <video
+                          ref={videoRef}
+                          src={videoSrc}
+                          className={`w-full h-full object-cover ${txClass || `transition-opacity duration-300 ${fallbackOpacity}`}`}
+                          style={txStyle}
+                          muted={isMuted || (storyboard[selectedSceneIndex]?.id ? mutedScenes.has(storyboard[selectedSceneIndex].id) : false)}
+                          playsInline
+                          onTimeUpdate={handleTimeUpdate}
+                          onLoadedMetadata={handleLoaded}
+                          onPlay={() => setIsPlaying(true)}
+                          onPause={() => setIsPlaying(false)}
+                          onEnded={handleVideoEnded}
+                        />
+                      )}
+                      {/* Black/white flash overlay for "Fade Black" / "Fade White" transitions */}
+                      {sceneTransition && activeTransition?.type === "Fade Black" && (
+                        <div
+                          className="absolute inset-0 z-30 pointer-events-none ad-tx-overlay-black"
+                          style={{ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties}
+                        />
+                      )}
+                      {sceneTransition && activeTransition?.type === "Fade White" && (
+                        <div
+                          className="absolute inset-0 z-30 pointer-events-none ad-tx-overlay-white"
+                          style={{ ["--ad-tx-dur" as any]: `${Math.round((activeTransition.duration || 0.5) * 1000)}ms` } as React.CSSProperties}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
+                {sceneOverlays.map(ov => (
+                  <div
+                    key={ov.id}
+                    className={`absolute z-20 ${ov.animated ? "animate-logo-reveal" : ""} ${ov.kind === "text" ? "animate-in fade-in duration-300" : ""}`}
+                    style={{
+                      left: `${ov.position.x}%`,
+                      top: `${ov.position.y}%`,
+                      width: `${ov.size.w}%`,
+                      opacity: ov.opacity,
+                      cursor: draggingOverlayId === ov.id ? "grabbing" : "grab",
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (!videoContainerRef.current) return;
+                      const rect = videoContainerRef.current.getBoundingClientRect();
+                      const mouseXPct = ((e.clientX - rect.left) / rect.width) * 100;
+                      const mouseYPct = ((e.clientY - rect.top) / rect.height) * 100;
+                      dragOffset.current = { x: mouseXPct - ov.position.x, y: mouseYPct - ov.position.y };
+                      pushHistory();
+                      setDraggingOverlayId(ov.id);
+                    }}
+                  >
+                    {(ov.kind === "logo" || ov.kind === "image") ? (
+                      <div className="relative group">
+                        <img src={ov.content} alt="Overlay" className="w-full h-auto object-contain pointer-events-none" />
+                        {/* Resize handles */}
+                        {["nw","ne","sw","se"].map(handle => (
+                          <div
+                            key={handle}
+                            className={`absolute w-2.5 h-2.5 bg-white border-2 border-primary rounded-sm opacity-0 group-hover:opacity-100 transition-opacity ${resizingOverlay?.id === ov.id ? "opacity-100" : ""}`}
+                            style={{
+                              top: handle.includes("n") ? -5 : "auto",
+                              bottom: handle.includes("s") ? -5 : "auto",
+                              left: handle.includes("w") ? -5 : "auto",
+                              right: handle.includes("e") ? -5 : "auto",
+                              cursor: (handle === "nw" || handle === "se") ? "nwse-resize" : "nesw-resize",
+                              zIndex: 30,
+                              pointerEvents: "auto",
+                            }}
+                            onMouseDown={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              resizeStart.current = { mouseX: e.clientX, mouseY: e.clientY, w: ov.size.w, h: ov.size.h, x: ov.position.x, y: ov.position.y };
+                              pushHistory();
+                              setResizingOverlay({ id: ov.id, handle });
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex justify-center">
+                        <span className="text-white font-semibold text-base drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] bg-black/50 backdrop-blur-md px-4 py-2 rounded-md text-center leading-relaxed pointer-events-none" style={{ fontFamily: "'Space Grotesk', sans-serif" }}>
+                          {ov.content}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </>
+            ) : (
+              <div className="text-center space-y-3">
+                <span className="text-sm text-muted-foreground">No video — generate scenes first</span>
+                <Button variant="outline" size="sm" onClick={onBack}>
+                  <ArrowLeft className="w-3.5 h-3.5 mr-1.5" /> Back to Storyboard
+                </Button>
+              </div>
+            )}
+            {/* Dimensions badge */}
+            <div className="absolute top-2 right-2 z-30 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[10px] font-mono text-white/80 pointer-events-none">
+              {RATIO_DIMS[aspectRatio]?.[0]}×{RATIO_DIMS[aspectRatio]?.[1]} · {aspectRatio}
+            </div>
+          </div>
+          </div>
+
+          {/* Playback Controls */}
+          {videoSrc && (
+            <div className="shrink-0 flex items-center gap-3 px-4 py-2 bg-black/40 backdrop-blur-xl border-t border-white/[0.06] shadow-[0_-4px_24px_rgba(0,0,0,0.3)]">
+              <button onClick={() => skipScene(-1)} className="text-white/60 hover:text-white" disabled={selectedSceneIndex === 0}>
+                <SkipBack className="w-4 h-4" />
+              </button>
+              <button onClick={togglePlay} className="text-white/90 hover:text-white">
+                {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
+              </button>
+              <button onClick={() => skipScene(1)} className="text-white/60 hover:text-white" disabled={selectedSceneIndex >= storyboard.length - 1}>
+                <SkipForward className="w-4 h-4" />
+              </button>
+
+              <span className="text-white/50 text-[10px] font-mono min-w-[60px]">
+                {formatTime(globalTime)} / {formatTime(totalDuration)}
+              </span>
+
+              {/* Scrub bar */}
+              <div
+                className="flex-1 h-1 bg-white/20 rounded-full cursor-pointer group relative"
+                onClick={e => {
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  seekTo(((e.clientX - rect.left) / rect.width) * 100);
+                }}
+              >
+                <div
+                  className="h-full bg-primary rounded-full transition-all relative"
+                  style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                >
+                  <div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-primary opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
+              </div>
+
+              <button onClick={toggleMute} className="text-white/60 hover:text-white">
+                {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+              </button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button className="text-white/60 hover:text-white flex items-center gap-1">
+                    <RectangleHorizontal className="w-4 h-4" />
+                    <span className="text-[9px] font-mono">{aspectRatio}</span>
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-2" side="top" align="end">
+                  <div className="flex flex-wrap gap-1">
+                    {Object.keys(ASPECT_RATIOS).map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => setAspectRatio(r)}
+                        className={cn(
+                          "px-2.5 py-1 rounded text-xs font-medium transition-colors",
+                          aspectRatio === r
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/30 text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        )}
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+              <button
+                onClick={() => videoRef.current?.requestFullscreen?.()}
+                className="text-white/60 hover:text-white"
+              >
+                <Maximize2 className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* ─── Right Sidebar Panel ─── */}
+        {panelOpen && (
+          <div className="w-[300px] shrink-0 border-l border-white/10 bg-black/60 backdrop-blur-md flex flex-col animate-in slide-in-from-right-5 duration-200">
+            {/* Panel Header */}
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
+              <span className="text-xs font-semibold text-white capitalize">
+                {activeTab === "brand-kit" ? "Brand Kit" : activeTab === "card-editor" ? "Card Editor" : activeTab}
+              </span>
+              <button onClick={() => setPanelOpen(false)} className="text-white/50 hover:text-white transition-colors">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            {/* Panel Content */}
+            <ScrollArea className="flex-1 p-3">
+              {activeTab === "media" && (
+                <MediaTab
+                  storyboard={storyboard}
+                  clips={clips}
+                  segments={segments}
+                  selectedSceneIndex={selectedSceneIndex}
+                  onSelectScene={setSelectedSceneIndex}
+        onRegenerateScene={handleRegenerateFullScene}
+                  onUpdateClipUrl={onUpdateClipUrl}
+                  onAddSceneWithMedia={onAddSceneWithMedia}
+                />
+              )}
+              {activeTab === "text" && (
+                <TextTab onAddText={() => setTextDialogOpen(true)} />
+              )}
+              {activeTab === "music" && (
+                <MusicTab onTrackSelect={(track) => handleMusicSelect(track?.url || null)} />
+              )}
+              {activeTab === "script" && (
+                <ScriptTab segments={segments} onUpdateSegment={onUpdateSegment} />
+              )}
+              {activeTab === "brand-kit" && (
+                <BrandKitTab
+                  brand={brand}
+                  logo={logoSettings}
+                  onLogoChange={setLogoSettings}
+                  onDeleteLogo={handleDeleteLogo}
+                  onReplaceLogo={handleReplaceLogo}
+                />
+              )}
+              {activeTab === "card-editor" && currentCardSettings && (
+                <IntroOutroEditor
+                  settings={currentCardSettings}
+                  brand={brand}
+                  onChange={handleCardSettingsChange}
+                  onApply={handleApplyCard}
+                />
+              )}
+              {activeTab === "card-editor" && !currentCardSettings && (
+                <div className="text-xs text-muted-foreground text-center py-8">
+                  Select a static card scene to edit
+                </div>
+              )}
+              {activeTab === "transitions" && (
+                <TransitionsTab
+                  activeTransition={transitionPreset}
+                  onSelect={handleTransitionSelect}
+                  duration={transitionDuration}
+                  onDurationChange={handleTransitionDurationChange}
+                />
+              )}
+            </ScrollArea>
+          </div>
+        )}
+
+      </div>
+
+      {/* ─── Bottom Timeline ─── */}
+      <TimelineBar
+        sidebarTabs={[
+          { id: "media", label: "Media", icon: <Film className="w-3.5 h-3.5" /> },
+          { id: "text", label: "Text", icon: <FileText className="w-3.5 h-3.5" /> },
+          { id: "transitions", label: "Transitions", icon: <Shuffle className="w-3.5 h-3.5" /> },
+          { id: "music", label: "Music", icon: <Music className="w-3.5 h-3.5" /> },
+          { id: "image", label: "Image", icon: <ImagePlus className="w-3.5 h-3.5" /> },
+          { id: "voiceover", label: "Voice", icon: <Mic className="w-3.5 h-3.5" /> },
+          { id: "subtitle", label: "Subtitle", icon: <Captions className="w-3.5 h-3.5" /> },
+          
+          { id: "text-voice", label: "Text+Voice", icon: <MessageSquareText className="w-3.5 h-3.5" /> },
+          { id: "speed", label: `${videoSpeed}×`, icon: <Gauge className="w-3.5 h-3.5" /> },
+        ]}
+        activeSidebarTab={activeTab}
+        onSidebarTabSelect={handleSetActiveTab}
+        clips={clips}
+        storyboard={storyboard}
+        segments={segments}
+        globalTime={globalTime}
+        totalDuration={totalDuration}
+        cumulativeStarts={cumulativeStarts}
+        selectedSceneIndex={selectedSceneIndex}
+        onSeek={handleGlobalSeek}
+        onSelectScene={setSelectedSceneIndex}
+        onAddText={() => setTextDialogOpen(true)}
+        onAddAudio={handleUploadAudio}
+        textOverlays={textOverlays}
+        audioTracks={audioTracks}
+        videoVolume={videoVolume}
+        onVideoVolumeChange={handleVideoVolumeChange}
+        onAudioTrackVolumeChange={handleAudioTrackVolumeChange}
+        onDeleteOverlay={handleDeleteOverlay}
+        onRemoveAudioTrack={handleRemoveAudioTrack}
+        onRegenerateScene={onRegenerateScene}
+        onDeleteScene={handleDeleteScene}
+        onTrimScene={handleTrimScene}
+        
+        onSplitScene={(idx) => {
+          // Toolbar passes selectedSceneIndex; per-clip menus pass the actual clip index.
+          // For the toolbar case prefer the scene the playhead is currently inside.
+          const playheadIdx = (() => {
+            for (let i = cumulativeStarts.length - 1; i >= 0; i--) {
+              if (globalTime >= (cumulativeStarts[i] || 0)) return i;
+            }
+            return idx;
+          })();
+          handleSplitScene(idx === selectedSceneIndex ? playheadIdx : idx);
+        }}
+        onDuplicateScene={handleDuplicateScene}
+        onMoveScene={handleMoveScene}
+        onReorderScene={handleReorderScene}
+        onEditPrompt={handleEditPrompt}
+        onEditVoiceover={handleEditVoiceover}
+        onMuteScene={handleMuteScene}
+        onResizeScene={handleResizeScene}
+        onTrimApply={handleTrimApply}
+        isTrimming={isTrimming}
+        mutedScenes={mutedScenes}
+        onEditOverlayPosition={handleEditOverlayPosition}
+        onResizeOverlay={handleResizeOverlay}
+        onToggleOverlayAnimation={handleToggleOverlayAnimation}
+        onReRecordVoiceover={handleReRecordVoiceover}
+        onUpdateVoiceoverText={handleUpdateVoiceoverText}
+        onEditVoiceoverText={handleEditVoiceoverText}
+        onMoveOverlay={handleMoveOverlay}
+        onMoveAudioTrack={handleMoveAudioTrack}
+        onEditOverlay={(ov) => setEditingOverlay(ov)}
+        onRegenerateAll={generateAllVoiceovers}
+        isRegeneratingAll={generatingVoiceovers}
+        isPlaying={isPlaying}
+        onTogglePlay={togglePlay}
+        onFrameStep={(dir) => {
+          const step = 0.016 * dir; // ~1 frame at 60fps
+          handleGlobalSeek(Math.max(0, Math.min(totalDuration, globalTime + step)));
+        }}
+        onSkipScene={skipScene}
+        clipTransitions={clipTransitions}
+        onClipTransitionChange={handleClipTransitionChange}
+      />
+
+      {/* Audio Prompt Dialog */}
+      <AudioPromptDialog
+        open={audioPromptOpen}
+        onOpenChange={setAudioPromptOpen}
+        onGenerate={handleGenerateAudio}
+        onUpload={handleAudioUpload}
+        loading={generatingAudio}
+      />
+
+      {/* Text Overlay Dialog */}
+      <TextOverlayDialog
+        open={textDialogOpen}
+        onClose={() => setTextDialogOpen(false)}
+        storyboard={storyboard}
+        segments={segments}
+        selectedSceneIndex={selectedSceneIndex}
+        onAdd={(overlay) => { pushHistory(); setOverlays(prev => [...prev, overlay]); }}
+      />
+
+      {/* Edit Overlay Dialog */}
+      <EditOverlayDialog
+        open={!!editingOverlay}
+        overlay={editingOverlay}
+        onSave={(id, newContent) => { pushHistory(); setOverlays(prev => prev.map(o => o.id === id ? { ...o, content: newContent } : o)); }}
+        onClose={() => setEditingOverlay(null)}
+      />
+
+      {/* Voiceover Dialog */}
+      <VoiceoverDialog
+        open={voiceoverDialogOpen}
+        onClose={() => setVoiceoverDialogOpen(false)}
+        onGenerate={handleGenerateVoiceover}
+        generating={generatingVoiceover}
+      />
+
+      {/* Subtitle Dialog */}
+      <SubtitleDialog
+        open={subtitleDialogOpen}
+        onClose={() => setSubtitleDialogOpen(false)}
+        sceneId={storyboard[selectedSceneIndex]?.id || ""}
+        onAdd={handleAddSubtitle}
+      />
+
+      {/* Speed Control Dialog */}
+      <SpeedControlDialog
+        open={speedPopoverOpen}
+        onOpenChange={setSpeedPopoverOpen}
+        speed={videoSpeed}
+        onSpeedChange={setVideoSpeed}
+      />
+
+      {/* Text+Voice Dialog */}
+      <TextVoiceDialog
+        open={textVoiceDialogOpen}
+        onClose={() => setTextVoiceDialogOpen(false)}
+        onGenerate={handleTextVoiceGenerate}
+        generating={generatingTextVoice}
+        initialText={storyboard[selectedSceneIndex]?.voiceover || segments[selectedSceneIndex]?.text || ""}
+        sceneId={storyboard[selectedSceneIndex]?.id || ""}
+      />
+
+      {/* Image Overlay Dialog */}
+      <ImageOverlayDialog
+        open={imageDialogOpen}
+        onClose={() => setImageDialogOpen(false)}
+        storyboard={storyboard}
+        selectedSceneIndex={selectedSceneIndex}
+        onAdd={(overlay) => { pushHistory(); setOverlays(prev => [...prev, overlay]); }}
+      />
+
+      <input
+        ref={audioUploadRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={handleAudioFileSelected}
+      />
+    </div>
+  );
+}

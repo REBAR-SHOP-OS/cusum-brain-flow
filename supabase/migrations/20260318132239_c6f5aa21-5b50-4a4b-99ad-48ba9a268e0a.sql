@@ -1,0 +1,1 @@
+ALTER TABLE seo_keyword_ai ADD COLUMN IF NOT EXISTS volume integer;

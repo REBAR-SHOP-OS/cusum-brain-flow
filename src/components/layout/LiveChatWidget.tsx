@@ -1,0 +1,214 @@
+// forwardRef cache bust
+import React, { useState, useRef, useEffect } from "react";
+import { useAuth } from "@/lib/auth";
+import { Sparkles, X, Send, Loader2, Square, Trash2, ShieldAlert, CheckCircle2, XCircle, SpellCheck } from "lucide-react";
+import { useGrammarCheck } from "@/hooks/useGrammarCheck";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { useAdminChat } from "@/hooks/useAdminChat";
+import { RichMarkdown } from "@/components/chat/RichMarkdown";
+import { getVisibleAgents } from "@/lib/userAccessConfig";
+import { useUserAccessOverrides } from "@/hooks/useUserAccessOverrides";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { parseQuickReplies } from "@/lib/parseQuickReplies";
+import { QuickReplies } from "@/components/chat/QuickReplies";
+
+export const LiveChatWidget = React.forwardRef<HTMLDivElement, {}>(function LiveChatWidget(_props, ref) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+
+  // Listen for external toggle requests
+  useEffect(() => {
+    const handler = () => setOpen((prev) => !prev);
+    window.addEventListener("toggle-live-chat", handler);
+    return () => window.removeEventListener("toggle-live-chat", handler);
+  }, []);
+  const [input, setInput] = useState("");
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, pendingAction, confirmAction, cancelAction, deleteMessage } = useAdminChat();
+  const grammar = useGrammarCheck();
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const { override: accessOverride } = useUserAccessOverrides(user?.email);
+
+  const visibleAgents = accessOverride?.agents?.length
+    ? accessOverride.agents
+    : getVisibleAgents(user?.email);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
+
+  // Block users with zero agent access from seeing the chat widget
+  if (visibleAgents.length === 0) return null;
+
+  // Cancel stream when closing the panel
+  const handleClose = () => {
+    if (isStreaming) cancelStream();
+    setOpen(false);
+  };
+
+  const handleSend = () => {
+    if (!input.trim() || isStreaming || pendingAction) return;
+    sendMessage(input.trim());
+    setInput("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  return (
+    <>
+      {/* Chat panel */}
+      {open && (
+        <div className="fixed bottom-20 right-4 z-50 md:bottom-20 md:right-6 w-[340px] sm:w-[380px] max-h-[500px] bg-card border border-border rounded-2xl shadow-2xl flex flex-col animate-scale-in overflow-hidden">
+          {/* Header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" />
+              <span className="text-xs font-bold tracking-wider uppercase">Vizzy</span>
+            </div>
+            <div className="flex items-center gap-1">
+              {messages.length > 0 && (
+                <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={clearChat} title="Clear">
+                  <Trash2 className="w-3.5 h-3.5" />
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleClose}>
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <ScrollArea className="flex-1 max-h-[340px]">
+            <div className="p-3 space-y-3">
+              {messages.length === 0 && (
+                <div className="text-center py-8">
+                  <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
+                  <p className="text-sm font-medium">Vizzy</p>
+                  <p className="text-xs text-muted-foreground mt-1">Your executive intelligence assistant.</p>
+                  <div className="mt-4 space-y-1.5 text-[10px] text-muted-foreground/60">
+                    <p>"What's the biggest risk today?"</p>
+                    <p>"Diagnose why AR is climbing"</p>
+                    <p>"Who needs follow-up this week?"</p>
+                  </div>
+                </div>
+              )}
+
+              {messages.map((msg, idx) => {
+                const isLastAssistant = msg.role === "assistant" && idx === messages.length - 1;
+                const parsed = msg.role === "assistant" ? parseQuickReplies(msg.content) : null;
+                const displayContent = parsed ? parsed.content : msg.content;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={cn(
+                      "group/msg relative rounded-xl px-3 py-2 text-xs max-w-[90%]",
+                      msg.role === "user"
+                        ? "ml-auto bg-primary text-primary-foreground"
+                        : "mr-auto bg-muted text-foreground"
+                    )}
+                  >
+                    <button
+                      onClick={() => deleteMessage(msg.id)}
+                      className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-2.5 h-2.5" />
+                    </button>
+                    {msg.role === "assistant" ? (
+                      <RichMarkdown content={displayContent} className="text-xs [&_p]:text-xs" />
+                    ) : (
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    )}
+                    {isLastAssistant && !isStreaming && parsed && parsed.replies.length > 0 && (
+                      <QuickReplies replies={parsed.replies} onSelect={sendMessage} disabled={isStreaming || !!pendingAction} />
+                    )}
+                  </div>
+                );
+              })}
+
+              {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+                <div className="mr-auto bg-muted rounded-xl px-3 py-2 text-xs flex items-center gap-2">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  <span className="text-muted-foreground">Thinking...</span>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </div>
+          </ScrollArea>
+
+          {/* Confirmation Card */}
+          {pendingAction && (
+            <div className="px-3 pb-2 shrink-0">
+              <div className="border-l-4 border-l-yellow-500 bg-card rounded-lg p-2.5 space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <ShieldAlert className="w-3.5 h-3.5 text-yellow-500 shrink-0" />
+                  <p className="text-[11px] font-semibold">Confirm action</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground truncate">{pendingAction.tool}</p>
+                <div className="flex justify-end gap-1">
+                  <Button variant="outline" size="sm" onClick={cancelAction} disabled={isStreaming} className="h-6 text-[11px] gap-1 px-2">
+                    <XCircle className="w-3 h-3" /> Cancel
+                  </Button>
+                  <Button size="sm" onClick={confirmAction} disabled={isStreaming} className="h-6 text-[11px] gap-1 px-2 bg-yellow-600 hover:bg-yellow-700 text-white">
+                    <CheckCircle2 className="w-3 h-3" /> Approve
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="border-t border-border p-3">
+            <div className="flex gap-1.5 items-end">
+              <textarea
+                ref={inputRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={pendingAction ? "Approve or cancel above..." : "Type a message..."}
+                className="flex-1 min-h-[36px] max-h-[80px] text-xs resize-none bg-secondary rounded-lg px-3 py-2 focus:outline-none focus:ring-1 focus:ring-primary/30"
+                rows={1}
+                disabled={isStreaming || !!pendingAction}
+              />
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!input.trim()) return;
+                  const result = await grammar.check(input);
+                  if (result.changed) setInput(result.corrected);
+                }}
+                disabled={grammar.checking || !input.trim() || isStreaming}
+                title="Check spelling"
+                className="h-9 w-9 p-0 shrink-0 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {grammar.checking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <SpellCheck className="w-3.5 h-3.5" />}
+              </button>
+              {isStreaming ? (
+                <Button size="sm" variant="destructive" className="h-9 w-9 p-0 shrink-0 rounded-lg" onClick={cancelStream}>
+                  <Square className="w-3 h-3" />
+                </Button>
+              ) : (
+                <Button size="sm" className="h-9 w-9 p-0 shrink-0 rounded-lg" onClick={handleSend} disabled={!input.trim() || !!pendingAction}>
+                  <Send className="w-3.5 h-3.5" />
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+    </>
+  );
+});
+LiveChatWidget.displayName = "LiveChatWidget";

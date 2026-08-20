@@ -1,0 +1,1 @@
+ALTER TABLE public.extract_sessions ADD COLUMN IF NOT EXISTS dedupe_status text NOT NULL DEFAULT 'pending';

@@ -1,0 +1,1 @@
+ALTER TABLE qb_company_config ALTER COLUMN default_tax_code SET DEFAULT NULL;

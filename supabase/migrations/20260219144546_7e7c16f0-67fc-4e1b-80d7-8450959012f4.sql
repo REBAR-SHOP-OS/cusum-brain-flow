@@ -1,0 +1,2 @@
+ALTER TABLE customers
+ALTER COLUMN company_id SET NOT NULL;

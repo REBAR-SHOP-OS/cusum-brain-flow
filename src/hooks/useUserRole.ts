@@ -1,0 +1,55 @@
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/lib/auth";
+
+export type AppRole =
+  | "admin"
+  | "sales"
+  | "accounting"
+  | "office"
+  | "workshop"
+  | "field"
+  | "shop_supervisor"
+  | "customer"
+  | "marketing";
+
+export function useUserRole() {
+  const { user } = useAuth();
+
+  const { data: roles, isLoading } = useQuery({
+    queryKey: ["user_roles", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      return data.map((r) => r.role as AppRole);
+    },
+  });
+
+  const hasRole = (role: AppRole) => roles?.includes(role) ?? false;
+  const isAdmin = hasRole("admin");
+  const isOffice = hasRole("office") || hasRole("sales") || hasRole("accounting");
+  const isWorkshop = hasRole("workshop") || hasRole("shop_supervisor");
+  const isShopSupervisor = hasRole("shop_supervisor");
+  const isCustomer = hasRole("customer");
+  const isField = hasRole("field");
+  const isMarketing = hasRole("marketing");
+  const canAccessSocialModules = isAdmin || isMarketing;
+
+  return {
+    roles: roles ?? [],
+    isLoading,
+    hasRole,
+    isAdmin,
+    isMarketing,
+    canAccessSocialModules,
+    isOffice,
+    isWorkshop,
+    isShopSupervisor,
+    isCustomer,
+    isField,
+  };
+}

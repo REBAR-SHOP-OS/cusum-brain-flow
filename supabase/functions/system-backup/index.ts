@@ -1,0 +1,517 @@
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { SUPER_ADMIN_EMAILS, SYSTEM_DEVICE_EMAILS } from "../_shared/accessPolicies.ts";
+
+const TABLES_TO_BACKUP = [
+  // Core CRM & Sales
+  "leads", "orders", "profiles", "contacts", "customers",
+  "projects", "project_tasks", "order_items", "work_orders",
+  // Lead activity & history
+  "lead_activities", "lead_events", "lead_files",
+  "scheduled_activities", "activity_events",
+  // Quotes
+  "quotes", "quote_items",
+  // Communications
+  "communications", "comms_alerts",
+  // Chat
+  "chat_messages", "chat_sessions",
+  // QuickBooks & Accounting
+  "qb_transactions", "qb_customers", "qb_accounts", "qb_vendors", "qb_items",
+  "accounting_mirror", "gl_transactions", "gl_lines",
+  // System
+  "notifications", "user_roles",
+  // Manufacturing
+  "machines", "machine_capabilities", "machine_runs",
+  "cut_plans", "cut_plan_items",
+  // Extraction
+  "tasks", "extract_sessions", "extract_rows",
+  // Support
+  "support_conversations", "support_messages",
+  // Team messaging
+  "team_messages", "team_channels", "team_channel_members",
+];
+
+function json(body: unknown, status = 200) {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  };
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+Deno.serve((req) =>
+  handleRequest(req, async (ctx) => {
+    const { userId, serviceClient, userClient, body } = ctx;
+
+    // ---------- Auth: super-admin / admin role / scheduled bypass ----------
+    const ALL_ADMIN_EMAILS = [...SUPER_ADMIN_EMAILS, ...SYSTEM_DEVICE_EMAILS];
+
+    let userEmail = "";
+    if (userId && userClient) {
+      const { data: userData } = await userClient.auth.getUser();
+      userEmail = (userData?.user?.email ?? "").toLowerCase();
+    }
+
+    // Check admin role
+    let isAdmin = false;
+    if (userId) {
+      const { data: roleRows } = await serviceClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
+      isAdmin = roleRows?.some((r: any) => r.role === "admin") ?? false;
+    }
+
+    const isSuperAdmin = ALL_ADMIN_EMAILS.includes(userEmail);
+    if (isSuperAdmin) isAdmin = true;
+
+    // Scheduled callers authenticate via Bearer token matching the service role
+    // key (or mirrored CRON_AUTH_TOKEN). Manual callers must be an admin user.
+    const authHeader = req.headers.get("Authorization") || "";
+    const bearer = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    const cronToken = Deno.env.get("CRON_AUTH_TOKEN") || "";
+    const hasCronAuth = !!bearer && (bearer === serviceKey || (cronToken && bearer === cronToken));
+    const isScheduled = hasCronAuth && body.backup_type === "scheduled";
+
+    if (!isAdmin && !isScheduled) {
+      return json({ error: "Forbidden: admin access required" }, 403);
+    }
+
+    const action = body.action as string;
+
+    // ---------- Resolve creator info ----------
+    let creatorName = "System";
+    let companyId: string | null = null;
+    if (userId) {
+      const { data: profile } = await serviceClient
+        .from("profiles")
+        .select("full_name, company_id")
+        .eq("user_id", userId)
+        .single();
+      creatorName = profile?.full_name ?? "Admin";
+      companyId = profile?.company_id ?? null;
+    }
+    // For scheduled backups (verified via internal secret), accept body.company_id
+    if (!companyId && isScheduled && body.company_id && typeof body.company_id === "string") {
+      companyId = body.company_id;
+    }
+    if (!companyId) {
+      return json({ error: "Could not resolve company_id for backup" }, 400);
+    }
+
+    // ==========================================================
+    // ACTION: list
+    // ==========================================================
+    if (action === "list") {
+      const { data, error } = await serviceClient
+        .from("system_backups")
+        .select("*")
+        .order("started_at", { ascending: false })
+        .limit(20);
+
+      if (error) return json({ error: error.message }, 500);
+      return json({ backups: data });
+    }
+
+    // ==========================================================
+    // ACTION: run (create backup)
+    // ==========================================================
+    if (action === "run") {
+      const throttleMs = isScheduled ? 11 * 60 * 60 * 1000 : 5 * 60 * 1000;
+      const throttleSince = new Date(Date.now() - throttleMs).toISOString();
+      const { data: recent } = await serviceClient
+        .from("system_backups")
+        .select("id, started_at")
+        .gte("started_at", throttleSince)
+        .in("status", ["pending", "running", "success"])
+        .limit(1);
+
+      if (recent && recent.length > 0) {
+        return json({ error: "Throttled: a backup was already run recently.", skipped: true }, 429);
+      }
+
+      const { data: backupRow, error: insertErr } = await serviceClient
+        .from("system_backups")
+        .insert({
+          company_id: companyId,
+          created_by: userId || null,
+          created_by_name: creatorName,
+          status: "running",
+          backup_type: isScheduled ? "scheduled" : "manual",
+          started_at: new Date().toISOString(),
+          tables_backed_up: TABLES_TO_BACKUP,
+        })
+        .select()
+        .single();
+
+      if (insertErr || !backupRow) {
+        return json({ error: "Failed to create backup record: " + insertErr?.message }, 500);
+      }
+
+      const backupId = backupRow.id;
+
+      try {
+        const snapshot: Record<string, unknown[]> = {};
+        for (const table of TABLES_TO_BACKUP) {
+          const { data: rows, error: tableErr } = await serviceClient
+            .from(table)
+            .select("*")
+            .limit(50000);
+          if (tableErr) {
+            console.warn(`Warning: could not back up table ${table}: ${tableErr.message}`);
+            snapshot[table] = [];
+          } else {
+            snapshot[table] = rows ?? [];
+          }
+        }
+
+        const snapshotJson = JSON.stringify({
+          version: "1.0",
+          created_at: new Date().toISOString(),
+          backup_id: backupId,
+          tables: snapshot,
+        });
+
+        const filePath = `backups/${backupId}.json`;
+        const fileBytes = new TextEncoder().encode(snapshotJson);
+
+        const { error: uploadErr } = await serviceClient.storage
+          .from("system-backups")
+          .upload(filePath, fileBytes, {
+            contentType: "application/json",
+            upsert: true,
+          });
+
+        if (uploadErr) {
+          await serviceClient.from("system_backups").update({
+            status: "failed",
+            error_message: uploadErr.message,
+            completed_at: new Date().toISOString(),
+          }).eq("id", backupId);
+
+          return json({ error: "Storage upload failed: " + uploadErr.message }, 500);
+        }
+
+        await serviceClient.from("system_backups").update({
+          status: "success",
+          file_path: filePath,
+          file_size_bytes: fileBytes.byteLength,
+          completed_at: new Date().toISOString(),
+        }).eq("id", backupId);
+
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: backupId,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "backup",
+          result: "success",
+        });
+
+        return json({ success: true, backup_id: backupId, file_path: filePath });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await serviceClient.from("system_backups").update({
+          status: "failed",
+          error_message: msg,
+          completed_at: new Date().toISOString(),
+        }).eq("id", backupId);
+
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: backupId,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "backup",
+          result: "failed",
+          error_message: msg,
+        });
+
+        return json({ error: msg }, 500);
+      }
+    }
+
+    // ==========================================================
+    // ACTION: restore
+    // ==========================================================
+    if (action === "restore") {
+      const backupId = body.backup_id as string;
+      const confirm = body.confirm as string;
+
+      if (!backupId) return json({ error: "backup_id is required" }, 400);
+      if (confirm !== "RESTORE") {
+        return json({ error: 'Confirmation string must be exactly "RESTORE"' }, 400);
+      }
+
+      const { data: backup, error: fetchErr } = await serviceClient
+        .from("system_backups")
+        .select("*")
+        .eq("id", backupId)
+        .single();
+
+      if (fetchErr || !backup) {
+        return json({ error: "Backup not found" }, 404);
+      }
+      if (backup.status !== "success" || !backup.file_path) {
+        return json({ error: "Backup is not in a restorable state" }, 400);
+      }
+
+      try {
+        const { data: fileData, error: dlErr } = await serviceClient.storage
+          .from("system-backups")
+          .download(backup.file_path);
+
+        if (dlErr || !fileData) {
+          return json({ error: "Could not download backup file: " + dlErr?.message }, 500);
+        }
+
+        const snapshotText = await fileData.text();
+        const snapshot = JSON.parse(snapshotText) as {
+          tables: Record<string, unknown[]>;
+        };
+
+        const errors: string[] = [];
+        for (const table of TABLES_TO_BACKUP) {
+          const rows = snapshot.tables?.[table];
+          if (!rows || rows.length === 0) continue;
+
+          const batchSize = 500;
+          for (let i = 0; i < rows.length; i += batchSize) {
+            const batch = rows.slice(i, i + batchSize);
+            const { error: upsertErr } = await serviceClient
+              .from(table)
+              .upsert(batch as Record<string, unknown>[], {
+                onConflict: "id",
+                ignoreDuplicates: false,
+              });
+            if (upsertErr) {
+              errors.push(`${table}: ${upsertErr.message}`);
+            }
+          }
+        }
+
+        if (errors.length > 0) {
+          const errMsg = errors.join("; ");
+          await serviceClient.from("backup_restore_logs").insert({
+            backup_id: backupId,
+            performed_by: userId || null,
+            performed_by_name: creatorName,
+            action: "restore",
+            result: "failed",
+            error_message: errMsg,
+          });
+          return json({ error: "Partial restore failure: " + errMsg }, 500);
+        }
+
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: backupId,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "restore",
+          result: "success",
+        });
+
+        return json({ success: true, restored_from: backup.file_path });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: backupId,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "restore",
+          result: "failed",
+          error_message: msg,
+        });
+        return json({ error: msg }, 500);
+      }
+    }
+
+    // ==========================================================
+    // ACTION: download (signed URL)
+    // ==========================================================
+    if (action === "download") {
+      const backupId = body.backup_id as string;
+      if (!backupId) return json({ error: "backup_id is required" }, 400);
+
+      const { data: backup, error: fetchErr } = await serviceClient
+        .from("system_backups")
+        .select("file_path, status")
+        .eq("id", backupId)
+        .single();
+
+      if (fetchErr || !backup) return json({ error: "Backup not found" }, 404);
+      if (backup.status !== "success" || !backup.file_path) {
+        return json({ error: "Backup file not available" }, 400);
+      }
+
+      const { data: signedData, error: signErr } = await serviceClient.storage
+        .from("system-backups")
+        .createSignedUrl(backup.file_path, 3600);
+
+      if (signErr || !signedData?.signedUrl) {
+        return json({ error: "Failed to generate download URL: " + signErr?.message }, 500);
+      }
+
+      await serviceClient.from("backup_restore_logs").insert({
+        backup_id: backupId,
+        performed_by: userId || null,
+        performed_by_name: creatorName,
+        action: "download",
+        result: "success",
+      });
+
+      return json({ url: signedData.signedUrl });
+    }
+
+    // ==========================================================
+    // ACTION: delete
+    // ==========================================================
+    if (action === "delete") {
+      const backupId = body.backup_id as string;
+      const confirm = body.confirm as string;
+
+      if (!backupId) return json({ error: "backup_id is required" }, 400);
+      if (confirm !== "DELETE") {
+        return json({ error: 'Confirmation string must be exactly "DELETE"' }, 400);
+      }
+
+      const { data: backup, error: fetchErr } = await serviceClient
+        .from("system_backups")
+        .select("file_path")
+        .eq("id", backupId)
+        .single();
+
+      if (fetchErr || !backup) return json({ error: "Backup not found" }, 404);
+
+      try {
+        if (backup.file_path) {
+          const { error: removeErr } = await serviceClient.storage
+            .from("system-backups")
+            .remove([backup.file_path]);
+          if (removeErr) {
+            console.warn("Storage delete warning:", removeErr.message);
+          }
+        }
+
+        const { error: delErr } = await serviceClient
+          .from("system_backups")
+          .delete()
+          .eq("id", backupId);
+
+        if (delErr) {
+          throw new Error("DB delete failed: " + delErr.message);
+        }
+
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: null,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "delete",
+          result: "success",
+        });
+
+        return json({ success: true });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: null,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "delete",
+          result: "failed",
+          error_message: msg,
+        });
+        return json({ error: msg }, 500);
+      }
+    }
+
+    // ==========================================================
+    // ACTION: import
+    // ==========================================================
+    if (action === "import") {
+      const importData = body.data as string;
+      if (!importData) return json({ error: "data field is required (JSON string)" }, 400);
+
+      try {
+        const parsed = JSON.parse(importData);
+        if (!parsed.version || !parsed.tables) {
+          return json({ error: "Invalid backup format: must contain 'version' and 'tables'" }, 400);
+        }
+
+        const backupId = crypto.randomUUID();
+        const filePath = `backups/${backupId}.json`;
+        const fileBytes = new TextEncoder().encode(importData);
+
+        const { error: uploadErr } = await serviceClient.storage
+          .from("system-backups")
+          .upload(filePath, fileBytes, {
+            contentType: "application/json",
+            upsert: true,
+          });
+
+        if (uploadErr) {
+          return json({ error: "Storage upload failed: " + uploadErr.message }, 500);
+        }
+
+        const tableNames = Object.keys(parsed.tables);
+        const { error: insertErr } = await serviceClient
+          .from("system_backups")
+          .insert({
+            id: backupId,
+            company_id: companyId,
+            created_by: userId || null,
+            created_by_name: creatorName,
+            status: "success",
+            backup_type: "imported",
+            started_at: parsed.created_at || new Date().toISOString(),
+            completed_at: new Date().toISOString(),
+            file_path: filePath,
+            file_size_bytes: fileBytes.byteLength,
+            tables_backed_up: tableNames,
+          });
+
+        if (insertErr) {
+          return json({ error: "Failed to create backup record: " + insertErr.message }, 500);
+        }
+
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: backupId,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "import",
+          result: "success",
+        });
+
+        return json({ success: true, backup_id: backupId });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        await serviceClient.from("backup_restore_logs").insert({
+          backup_id: null,
+          performed_by: userId || null,
+          performed_by_name: creatorName,
+          action: "import",
+          result: "failed",
+          error_message: msg,
+        });
+        return json({ error: "Import failed: " + msg }, 500);
+      }
+    }
+
+    // ==========================================================
+    // ACTION: logs
+    // ==========================================================
+    if (action === "logs") {
+      const { data, error } = await serviceClient
+        .from("backup_restore_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) return json({ error: error.message }, 500);
+      return json({ logs: data });
+    }
+
+    return json({ error: "Unknown action. Use: run | restore | list | download | delete | import | logs" }, 400);
+  }, { functionName: "system-backup", authMode: "optional", requireCompany: false, wrapResult: false })
+);

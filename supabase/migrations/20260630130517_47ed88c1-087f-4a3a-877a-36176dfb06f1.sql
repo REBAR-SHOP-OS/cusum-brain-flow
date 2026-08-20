@@ -1,0 +1,1 @@
+UPDATE public.social_posts SET publishing_lock_id = NULL, publishing_started_at = NULL, status = CASE WHEN status = 'publishing' THEN 'scheduled' ELSE status END WHERE publishing_lock_id IS NOT NULL OR status = 'publishing';

@@ -1,0 +1,1 @@
+ALTER TABLE public.user_ringcentral_tokens ADD COLUMN IF NOT EXISTS code_verifier text;

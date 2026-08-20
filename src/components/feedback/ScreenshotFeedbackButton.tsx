@@ -1,0 +1,295 @@
+import { useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
+import { getFloatingPortalContainer } from "@/lib/floatingPortal";
+import { Camera, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import html2canvas from "html2canvas";
+import { AnnotationOverlay, SpeechControls } from "./AnnotationOverlay";
+import { FloatingMicButton } from "./FloatingMicButton";
+import { useDraggablePosition } from "@/hooks/useDraggablePosition";
+import { useLocation } from "react-router-dom";
+
+const THROTTLE_MS = 3000;
+const BTN_SIZE = 40;
+
+export function ScreenshotFeedbackButton() {
+  const location = useLocation();
+  const [overlayOpen, setOverlayOpen] = useState(false);
+  const [screenshot, setScreenshot] = useState("");
+  const [capturing, setCapturing] = useState(false);
+  const [initialDescription, setInitialDescription] = useState("");
+  const cooldown = useRef(false);
+  const speechControlRef = useRef<SpeechControls | null>(null);
+  const [speechState, setSpeechState] = useState({ isListening: false, isSupported: true });
+
+  const { pos, handlers, wasDragged } = useDraggablePosition({
+    storageKey: "feedback-btn-pos",
+    btnSize: BTN_SIZE,
+    defaultPos: () => ({
+      x: typeof window !== "undefined" ? window.innerWidth - BTN_SIZE - 24 : 300,
+      y: typeof window !== "undefined" ? window.innerHeight - BTN_SIZE - 96 : 300,
+    }),
+  });
+  const isAppBuilderDashboard = location.pathname === "/app-builder";
+
+  const btnRef = useRef<HTMLButtonElement>(null);
+
+  const capture = useCallback(async () => {
+    if (cooldown.current || capturing) return;
+    cooldown.current = true;
+    setCapturing(true);
+    setTimeout(() => { cooldown.current = false; }, THROTTLE_MS);
+
+    // ── FREEZE: lock the visual state immediately (sync) ──
+    const freezeOverlay = document.createElement("div");
+    freezeOverlay.setAttribute("data-feedback-btn", "true"); // exclude from screenshot
+    freezeOverlay.style.cssText = "position:fixed;inset:0;z-index:9998;background:transparent;pointer-events:all;";
+    document.body.appendChild(freezeOverlay);
+
+    const freezeStyle = document.createElement("style");
+    freezeStyle.textContent = "* { animation-play-state: paused !important; transition: none !important; }";
+    document.head.appendChild(freezeStyle);
+
+    const prevPointerEvents = document.body.style.pointerEvents;
+    document.body.style.pointerEvents = "none";
+
+    const hasOverlay = document.querySelector(
+      '[data-radix-dialog-overlay], [role="dialog"], [data-state="open"][data-radix-dialog-content], [vaul-drawer]'
+    );
+    const target = hasOverlay ? document.body : (document.getElementById("main-content") || document.body);
+    const isOverlay = !!hasOverlay;
+
+    // Route-enforced viewport mode: pipeline always captures viewport only
+    const path = window.location.pathname;
+    const isPipelineRoute = path === "/pipeline" || path.startsWith("/pipeline/");
+    const isStationRoute = path.startsWith("/shopfloor/station");
+    const totalCount = target.querySelectorAll("*").length;
+    const isHeavyRoute = totalCount > 3000;
+    const isExtremelyHeavy = totalCount > 6000;
+    const forceViewportOnly = isOverlay || isPipelineRoute || isStationRoute || isHeavyRoute;
+
+    // --- Pre-capture: temporarily expand overflow-hidden containers ---
+    const expandedEls: { el: HTMLElement; orig: string }[] = [];
+    const expand = (el: HTMLElement, css: string) => {
+      expandedEls.push({ el, orig: el.style.cssText });
+      el.style.cssText += css;
+    };
+
+    // Only expand overflow on lighter pages — viewport-only pages skip expansion entirely
+    if (!forceViewportOnly && target instanceof HTMLElement) {
+      expand(target, "; overflow: visible !important; height: auto !important;");
+      target.querySelectorAll<HTMLElement>('.overflow-x-auto, .overflow-x-scroll')
+        .forEach(el => expand(el, "; overflow: visible !important; height: auto !important;"));
+      target.querySelectorAll<HTMLElement>('[data-radix-scroll-area-viewport], .overflow-y-auto, .overflow-y-scroll, .overflow-auto')
+        .forEach(el => expand(el, "; overflow: visible !important; max-height: none !important; height: auto !important;"));
+
+      // Walk up ancestors to remove clipping
+      let parent = target.parentElement;
+      while (parent && parent !== document.body) {
+        const cs = getComputedStyle(parent);
+        if (cs.overflow !== "visible" || cs.overflowY !== "visible" || cs.overflowX !== "visible") {
+          expand(parent, "; overflow: visible !important; max-height: none !important; height: auto !important;");
+        }
+        parent = parent.parentElement;
+      }
+    }
+
+    const MAX_DIM = 8192;
+    const captureWidth  = forceViewportOnly ? window.innerWidth  : Math.min(target.scrollWidth, MAX_DIM);
+    const captureHeight = forceViewportOnly ? window.innerHeight : Math.min(target.scrollHeight, MAX_DIM);
+    const targetRect    = isOverlay ? null : target.getBoundingClientRect();
+    const captureX = 0;
+    const captureY = 0;
+
+    const baseIgnore = (el: Element) => {
+      const tag = el.tagName?.toLowerCase();
+      if (tag === "iframe" || tag === "embed" || tag === "object") return true;
+      if (el.getAttribute?.("data-feedback-btn") === "true") return true;
+      if (el.classList?.contains("floating-vizzy")) return true;
+      if (el.getAttribute?.("data-state") === "inactive" && el.getAttribute?.("role") === "tabpanel") return true;
+      return false;
+    };
+
+    const baseOpts = {
+      useCORS: true,
+      allowTaint: false,
+      scale: 1,
+      width: captureWidth,
+      height: captureHeight,
+      windowWidth: Math.max(window.innerWidth, captureWidth),
+      windowHeight: Math.max(window.innerHeight, captureHeight),
+      x: captureX,
+      y: captureY,
+      scrollX: isOverlay ? 0 : -target.scrollLeft,
+      scrollY: isOverlay ? 0 : -target.scrollTop,
+      backgroundColor: getComputedStyle(document.documentElement).backgroundColor || "#0f172a",
+      logging: false,
+      ignoreElements: baseIgnore,
+      onclone: (clonedDoc: Document) => {
+        try {
+          const style = clonedDoc.createElement("style");
+          style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+          clonedDoc.head.appendChild(style);
+        } catch {}
+        clonedDoc.querySelectorAll("iframe, embed, object").forEach((el) => {
+          try {
+            const placeholder = clonedDoc.createElement("div");
+            placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
+            el.parentNode?.replaceChild(placeholder, el);
+          } catch {}
+        });
+      },
+    };
+
+    const isHeavyPage = isHeavyRoute;
+
+    const captureOnce = (skipImages: boolean): Promise<HTMLCanvasElement> => {
+      const ignoreElements = skipImages
+        ? (el: Element) => {
+            if (baseIgnore(el)) return true;
+            const tag = el.tagName?.toLowerCase();
+            return tag === "img" || tag === "video" || tag === "picture" || tag === "source" || tag === "svg" || tag === "canvas";
+          }
+        : baseIgnore;
+
+      const onclone = (clonedDoc: Document) => {
+        try {
+          const style = clonedDoc.createElement("style");
+          style.textContent = "*, *::before, *::after { animation: none !important; transition: none !important; }";
+          clonedDoc.head.appendChild(style);
+        } catch {}
+        clonedDoc.querySelectorAll("iframe, embed, object").forEach((el) => {
+          try {
+            const placeholder = clonedDoc.createElement("div");
+            placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth}px;height:${(el as HTMLElement).offsetHeight}px;background:#1e293b;`;
+            el.parentNode?.replaceChild(placeholder, el);
+          } catch {}
+        });
+        if (skipImages) {
+          clonedDoc.querySelectorAll("img, video, picture, svg, canvas").forEach((el) => {
+            try {
+              const placeholder = clonedDoc.createElement("div");
+              placeholder.style.cssText = `width:${(el as HTMLElement).offsetWidth || 0}px;height:${(el as HTMLElement).offsetHeight || 0}px;background:#334155;`;
+              el.parentNode?.replaceChild(placeholder, el);
+            } catch {}
+          });
+        }
+      };
+
+      const opts = {
+        ...baseOpts,
+        scale: forceViewportOnly
+          ? Math.min(window.devicePixelRatio || 1, 1.5)
+          : (isExtremelyHeavy ? 0.5 : (isHeavyPage ? 0.75 : 1)),
+        imageTimeout: skipImages ? 0 : (isHeavyPage ? 0 : 5000),
+        ignoreElements,
+        onclone,
+      };
+      return Promise.race([
+        html2canvas(target, opts),
+        new Promise<never>((_, rej) => setTimeout(() => rej(new Error("screenshot_timeout")), isHeavyPage ? 12000 : 15000)),
+      ]);
+    };
+
+    try {
+      await document.fonts.ready;
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+
+      let dataUrl: string;
+      try {
+        const canvas = await captureOnce(false);
+        dataUrl = canvas.toDataURL("image/png");
+        if (dataUrl.length < 1000) throw new Error("blank_canvas");
+      } catch (firstErr) {
+        console.warn("Screenshot attempt 1 failed, retrying without images:", firstErr);
+        const canvas = await captureOnce(true);
+        dataUrl = canvas.toDataURL("image/png");
+        if (dataUrl.length < 1000) throw new Error("blank_canvas_after_retry");
+      }
+
+      setScreenshot(dataUrl);
+      setOverlayOpen(true);
+    } catch (err: any) {
+      console.error("Screenshot failed after retry:", err?.message, err?.stack, {
+        path: window.location.pathname,
+        domElements: document.body.querySelectorAll("*").length,
+      });
+      toast.error(`Failed to capture screen on ${window.location.pathname}`);
+    } finally {
+      // ── UNFREEZE ──
+      freezeOverlay.remove();
+      freezeStyle.remove();
+      document.body.style.pointerEvents = prevPointerEvents;
+
+      expandedEls.forEach(({ el, orig }) => { el.style.cssText = orig; });
+      setCapturing(false);
+    }
+  }, [capturing]);
+
+  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+    handlers.onPointerUp(e);
+    if (!wasDragged.current) {
+      setInitialDescription("");
+      capture();
+    }
+  }, [handlers, capture, wasDragged]);
+
+  const handleToggleVoice = useCallback(() => {
+    speechControlRef.current?.toggle();
+  }, []);
+
+  const handleSpeechStateChange = useCallback((state: { isListening: boolean; isSupported: boolean }) => {
+    setSpeechState(state);
+  }, []);
+
+  return createPortal(
+    <>
+      {overlayOpen && (
+        <FloatingMicButton
+          onToggleVoice={handleToggleVoice}
+          isListening={speechState.isListening}
+          isSupported={speechState.isSupported}
+        />
+      )}
+
+      <button
+        ref={btnRef}
+        data-feedback-btn="true"
+        onPointerDown={handlers.onPointerDown}
+        onPointerMove={handlers.onPointerMove}
+        onPointerUp={handlePointerUp}
+        className={`fixed z-[9999] flex items-center justify-center rounded-full shadow-lg transition-transform cursor-grab active:cursor-grabbing select-none hover:scale-110 ${
+          isAppBuilderDashboard
+            ? "w-12 h-12 bg-[hsl(var(--dashboard-reference-fab))] text-[#08252f] ring-1 ring-black/15"
+            : "w-10 h-10 bg-primary text-primary-foreground ring-1 ring-white/30"
+        }`}
+        style={{
+          left: isAppBuilderDashboard ? window.innerWidth - 54 : pos.x,
+          top: isAppBuilderDashboard ? window.innerHeight - 112 : pos.y,
+          touchAction: "none",
+          pointerEvents: "auto",
+        }}
+        aria-label="Report a change"
+        title="Screenshot Feedback"
+      >
+        {capturing ? (
+          <Loader2 className="w-5 h-5 pointer-events-none animate-spin" />
+        ) : (
+          <Camera className="w-5 h-5 pointer-events-none" />
+        )}
+      </button>
+
+      {overlayOpen && (
+        <AnnotationOverlay
+          open={overlayOpen}
+          onClose={() => { setOverlayOpen(false); setInitialDescription(""); }}
+          screenshotDataUrl={screenshot}
+          initialDescription={initialDescription}
+          speechControlRef={speechControlRef}
+          onSpeechStateChange={handleSpeechStateChange}
+        />
+      )}
+    </>,
+    getFloatingPortalContainer()
+  );
+}

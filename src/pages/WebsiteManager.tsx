@@ -1,0 +1,206 @@
+import { useState, useRef, useCallback, useEffect } from "react";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { WebsiteToolbar, DeviceMode } from "@/components/website/WebsiteToolbar";
+import { WebsiteChat } from "@/components/website/WebsiteChat";
+import { SpeedDashboard } from "@/components/website/SpeedDashboard";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { MessageSquare, Gauge, Maximize2, Eye } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+const SITE_ORIGIN = "https://rebar.shop";
+
+type ChatMode = "normal" | "fullscreen" | "minimized";
+
+const DEVICE_TARGET_WIDTHS: Record<DeviceMode, number> = {
+  desktop: 1440,
+  tablet: 768,
+  mobile: 375,
+};
+
+export default function WebsiteManager() {
+  const [currentPath, setCurrentPath] = useState("/");
+  const [device, setDevice] = useState<DeviceMode>("desktop");
+  const [rightPanel, setRightPanel] = useState<"chat" | "speed">("chat");
+  const [chatMode, setChatMode] = useState<ChatMode>("normal");
+  const [mobileTab, setMobileTab] = useState<"preview" | "chat">("preview");
+  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerWidth(entry.contentRect.width);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const refreshIframe = useCallback(() => {
+    if (iframeRef.current) {
+      iframeRef.current.src = `${SITE_ORIGIN}${currentPath}`;
+    }
+  }, [currentPath]);
+
+  const handlePageChange = useCallback((path: string) => {
+    setCurrentPath(path);
+    if (iframeRef.current) {
+      iframeRef.current.src = `${SITE_ORIGIN}${path}`;
+    }
+  }, []);
+
+  const handleWriteConfirmed = useCallback(() => {
+    setTimeout(() => refreshIframe(), 1500);
+  }, [refreshIframe]);
+
+  const targetWidth = DEVICE_TARGET_WIDTHS[device];
+  const scale = containerWidth > 0 ? Math.min(containerWidth / targetWidth, 1) : 1;
+
+  const previewPanel = (
+    <div ref={containerRef} className="h-full bg-muted/30 overflow-hidden relative">
+      <div
+        style={{
+          width: `${targetWidth}px`,
+          height: `${100 / scale}%`,
+          transform: `scale(${scale})`,
+          transformOrigin: "top left",
+        }}
+      >
+        <iframe
+          ref={iframeRef}
+          src={`${SITE_ORIGIN}${currentPath}`}
+          className="w-full h-full border-0"
+          title="Website Preview"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+        />
+      </div>
+    </div>
+  );
+  const rightPanelContent = (
+    <div className="flex flex-col h-full">
+      <Tabs value={rightPanel} onValueChange={(v) => setRightPanel(v as "chat" | "speed")} className="shrink-0">
+        <TabsList className="w-full rounded-none border-b border-border bg-card h-9">
+          <TabsTrigger value="chat" className="text-xs gap-1 flex-1">
+            <MessageSquare className="w-3.5 h-3.5" /> Chat
+          </TabsTrigger>
+          <TabsTrigger value="speed" className="text-xs gap-1 flex-1">
+            <Gauge className="w-3.5 h-3.5" /> Speed
+          </TabsTrigger>
+        </TabsList>
+      </Tabs>
+      <div className="flex-1 overflow-hidden">
+        {rightPanel === "chat" ? (
+          <WebsiteChat
+            currentPagePath={currentPath}
+            onWriteConfirmed={handleWriteConfirmed}
+            chatMode={chatMode}
+            onChatModeChange={setChatMode}
+          />
+        ) : (
+          <SpeedDashboard />
+        )}
+      </div>
+    </div>
+  );
+
+  // Minimized: thin vertical strip with expand button
+  if (chatMode === "minimized") {
+    return (
+      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+        <WebsiteToolbar
+          currentPath={currentPath}
+          onPageChange={handlePageChange}
+          device={device}
+          onDeviceChange={setDevice}
+          onRefresh={refreshIframe}
+        />
+        <div className="flex-1 flex">
+          <div className="flex-1">{previewPanel}</div>
+          <div className="w-10 border-l border-border bg-card flex flex-col items-center pt-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setChatMode("normal")}
+              title="Expand chat"
+            >
+              <Maximize2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Fullscreen: chat only, no preview
+  if (chatMode === "fullscreen") {
+    return (
+      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+        <WebsiteToolbar
+          currentPath={currentPath}
+          onPageChange={handlePageChange}
+          device={device}
+          onDeviceChange={setDevice}
+          onRefresh={refreshIframe}
+        />
+        <div className="flex-1 overflow-hidden min-h-0">{rightPanelContent}</div>
+      </div>
+    );
+  }
+
+  // Mobile: tabbed interface
+  if (isMobile) {
+    return (
+      <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+        <WebsiteToolbar
+          currentPath={currentPath}
+          onPageChange={handlePageChange}
+          device={device}
+          onDeviceChange={setDevice}
+          onRefresh={refreshIframe}
+        />
+        <Tabs value={mobileTab} onValueChange={(v) => setMobileTab(v as "preview" | "chat")} className="shrink-0">
+          <TabsList className="w-full rounded-none border-b border-border bg-card h-9">
+            <TabsTrigger value="preview" className="text-xs gap-1 flex-1">
+              <Eye className="w-3.5 h-3.5" /> Preview
+            </TabsTrigger>
+            <TabsTrigger value="chat" className="text-xs gap-1 flex-1">
+              <MessageSquare className="w-3.5 h-3.5" /> Chat
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        <div className="flex-1 overflow-hidden min-h-0">
+          {mobileTab === "preview" ? previewPanel : rightPanelContent}
+        </div>
+      </div>
+    );
+  }
+
+  // Normal: resizable split
+  return (
+    <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      <WebsiteToolbar
+        currentPath={currentPath}
+        onPageChange={handlePageChange}
+        device={device}
+        onDeviceChange={setDevice}
+        onRefresh={refreshIframe}
+      />
+      <ResizablePanelGroup direction="horizontal" className="flex-1">
+        <ResizablePanel defaultSize={70} minSize={40}>
+          {previewPanel}
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={30} minSize={20} maxSize={50}>
+          {rightPanelContent}
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  );
+}

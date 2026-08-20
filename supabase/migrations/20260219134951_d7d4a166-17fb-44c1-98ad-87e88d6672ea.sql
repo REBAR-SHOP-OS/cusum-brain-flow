@@ -1,0 +1,1 @@
+ALTER TABLE public.qb_bank_activity ADD COLUMN IF NOT EXISTS unaccepted_count integer NOT NULL DEFAULT 0;

@@ -1,0 +1,120 @@
+import { handleRequest } from "../_shared/requestHandler.ts";
+
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient }) => {
+    // Resolve company_id from automation_configs (authoritative source)
+    const { data: automationConfig } = await serviceClient
+      .from("automation_configs")
+      .select("company_id, enabled")
+      .eq("automation_key", "friday_ideas")
+      .maybeSingle();
+
+    const companyId = automationConfig?.company_id;
+    if (!companyId) {
+      console.warn("⚠️ friday-ideas: No automation_configs row found for friday_ideas — skipping");
+      return { skipped: true, reason: "no automation config with company_id" };
+    }
+    const [fixRes, taskRes, machineRes, orderRes, deliveryRes] = await Promise.all([
+      serviceClient.from("vizzy_fix_requests").select("id, title, severity, status").eq("status", "open").limit(20),
+      serviceClient.from("human_tasks").select("id, title, severity, category, status").in("status", ["open", "snoozed"]).limit(20),
+      serviceClient.from("machines").select("id, name, status, type").in("status", ["blocked", "down"]),
+      serviceClient.from("orders").select("id, order_number, status, total_amount").in("status", ["pending", "confirmed"]).limit(20),
+      serviceClient.from("deliveries").select("id, delivery_number, status").in("status", ["planned", "loading"]).limit(10),
+    ]);
+
+    const context = {
+      openFixRequests: fixRes.data?.length || 0,
+      fixSamples: (fixRes.data || []).slice(0, 5).map((f: any) => `[${f.severity}] ${f.title}`),
+      staleTasks: taskRes.data?.length || 0,
+      taskSamples: (taskRes.data || []).slice(0, 5).map((t: any) => `[${t.severity}] ${t.title}`),
+      machinesDown: (machineRes.data || []).map((m: any) => `${m.name}: ${m.status}`),
+      pendingOrders: orderRes.data?.length || 0,
+      pendingDeliveries: deliveryRes.data?.length || 0,
+    };
+
+    const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
+    if (!GEMINI_API_KEY) throw new Error("GEMINI_API_KEY not configured");
+
+    const prompt = `You are ARIA, the Platform Supervisor for a rebar manufacturing business.
+
+Based on this weekly business snapshot, suggest 3-5 actionable improvement ideas for:
+1. rebar.shop (WordPress/WooCommerce website)
+2. The ERP (production, orders, delivery management)
+3. Odoo CRM (lead pipeline, customer sync)
+
+Business Snapshot:
+- Open fix requests: ${context.openFixRequests} ${context.fixSamples.length ? "\n  " + context.fixSamples.join("\n  ") : ""}
+- Stale human tasks: ${context.staleTasks} ${context.taskSamples.length ? "\n  " + context.taskSamples.join("\n  ") : ""}
+- Machines down/blocked: ${context.machinesDown.length ? context.machinesDown.join(", ") : "None"}
+- Pending orders: ${context.pendingOrders}
+- Pending deliveries: ${context.pendingDeliveries}
+
+Format each idea as:
+**[Platform] Idea Title**
+Brief description of what to improve and expected impact.
+
+Keep it practical and prioritized by business impact.`;
+
+    const aiResp = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${GEMINI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gemini-2.5-flash",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 2000,
+          temperature: 0.5,
+        }),
+      }
+    );
+
+    if (!aiResp.ok) {
+      const errText = await aiResp.text();
+      console.error("Gemini error:", aiResp.status, errText);
+      throw new Error("AI service error");
+    }
+
+    const aiData = await aiResp.json();
+    const ideas = aiData.choices?.[0]?.message?.content || "No ideas generated.";
+
+    const { data: adminProfiles } = await serviceClient
+      .from("profiles")
+      .select("user_id, user_roles!inner(role)")
+      .eq("is_active", true);
+    const admins = (adminProfiles || [])
+      .filter((p: any) => p.user_roles?.some((r: any) => r.role === "admin"));
+
+    for (const admin of admins || []) {
+      await serviceClient.from("notifications").insert({
+        user_id: admin.user_id, type: "notification",
+        title: "💡 Weekly Improvement Ideas from ARIA",
+        description: ideas.slice(0, 500),
+        priority: "normal", link_to: "/empire", agent_name: "ARIA", status: "unread",
+        metadata: { full_ideas: ideas, generated_at: new Date().toISOString() },
+      });
+    }
+
+    const { data: adminProfile } = await serviceClient
+      .from("profiles")
+      .select("id")
+      .eq("user_id", admins?.[0]?.user_id)
+      .maybeSingle();
+
+    if (adminProfile) {
+      await serviceClient.from("human_tasks").insert({
+        company_id: companyId,
+        title: "Review weekly improvement ideas from ARIA",
+        description: ideas.slice(0, 1000),
+        category: "improvement_idea", severity: "info", status: "open",
+        source_agent: "aria", assigned_to: adminProfile.id,
+      });
+    }
+
+    console.log(`✅ Friday ideas generated and ${admins?.length || 0} admin(s) notified`);
+    return { ok: true, adminsNotified: admins?.length || 0 };
+  }, { functionName: "friday-ideas", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+);

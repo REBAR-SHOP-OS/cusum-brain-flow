@@ -1,0 +1,3 @@
+UPDATE machine_runs SET status = 'canceled', ended_at = now(), notes = 'Auto-canceled: stale run manual recovery' WHERE id = '1102e9fa-4b64-490f-99de-6ed01da93798' AND status = 'running';
+
+UPDATE machines SET current_run_id = NULL, active_job_id = NULL, active_plan_id = NULL, cut_session_status = 'idle', machine_lock = false, status = 'idle' WHERE id = 'e2dfa6e1-8a49-48eb-82a8-2be40e20d4b3' AND current_run_id = '1102e9fa-4b64-490f-99de-6ed01da93798';

@@ -1,0 +1,763 @@
+import { handleRequest } from "../_shared/requestHandler.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders } from "../_shared/auth.ts";
+import { acquirePublishLock, releasePublishLock, recoverStaleLocks, normalizePageName } from "../_shared/publishLock.ts";
+import { getWorkspaceTimezone } from "../_shared/getWorkspaceTimezone.ts";
+import { META_RECONNECT_MESSAGE, resolveValidMetaToken } from "../_shared/metaTokenResolver.ts";
+import { publishInstagramMedia, prepareInstagramImageUrl } from "../_shared/instagramPublish.ts";
+
+const GRAPH_API = "https://graph.facebook.com/v21.0";
+
+/**
+ * Refresh a Facebook Page token using the user's long-lived token.
+ */
+async function refreshPageToken(
+  userLongLivedToken: string,
+  pageId: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `${GRAPH_API}/${pageId}?fields=access_token&access_token=${userLongLivedToken}`
+    );
+    if (res.ok) {
+      const data = await res.json();
+      if (data.access_token) {
+        console.log(`[social-cron-publish] Refreshed page token for page ${pageId}`);
+        return data.access_token;
+      }
+    } else {
+      const errBody = await res.text();
+      console.warn(`[social-cron-publish] Page token refresh failed (${res.status}): ${errBody}`);
+    }
+  } catch (e) {
+    console.warn(`[social-cron-publish] Page token refresh exception:`, e);
+  }
+  return null;
+}
+
+/** Strip Persian translation block — never publish Persian text */
+function stripPersianBlock(text: string): string {
+  let t = text;
+  const idx = t.indexOf("---PERSIAN---");
+  if (idx !== -1) t = t.slice(0, idx);
+  t = t.replace(/🖼️\s*متن روی عکس:[\s\S]*/m, "");
+  t = t.replace(/📝\s*ترجمه کپشن:[\s\S]*/m, "");
+  // Strip any remaining Persian/Arabic characters as safety net
+  t = t.split("\n").filter(l => !/[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(l)).join("\n");
+  return t.trim();
+}
+
+Deno.serve((req) =>
+  handleRequest(req, async ({ serviceClient: supabase }) => {
+
+    const now = new Date().toISOString();
+    console.log(`[social-cron-publish] Querying scheduled posts. Current UTC: ${now}`);
+
+    // Recovery: reset posts stuck in "publishing" for >10 minutes to "failed" (NOT "scheduled")
+    const recovered = await recoverStaleLocks(supabase);
+    const recoveredSet = new Set(recovered);
+    if (recovered.length > 0) {
+      console.log(`[social-cron-publish] Recovered ${recovered.length} stale publishing posts to FAILED: ${recovered.join(", ")}`);
+    }
+
+    const { data: rawDuePosts, error: fetchError } = await supabase
+      .from("social_posts")
+      .select("*")
+      .eq("status", "scheduled")
+      .eq("neel_approved", true)
+      .lte("scheduled_date", now)
+      .order("scheduled_date", { ascending: true })
+      .limit(20);
+
+    // Defense-in-depth: exclude any just-recovered posts in case status update hasn't propagated
+    const duePosts = (rawDuePosts || []).filter(p => !recoveredSet.has(p.id));
+
+    console.log(`[social-cron-publish] Query returned ${duePosts?.length ?? 0} approved posts, error: ${fetchError?.message ?? 'none'}`);
+
+    // Surface a precise last_error on any scheduled post whose slot has passed
+    // but is still missing Neel/Sattar approval. We do NOT change status — the
+    // midnight sweep below still owns the final 'failed' transition — but the
+    // operator sees "Awaiting Neel/Sattar approval — scheduled time passed" the
+    // moment the slot is missed, instead of an empty error field.
+    const { data: missedApproval } = await supabase
+      .from("social_posts")
+      .select("id, last_error")
+      .eq("status", "scheduled")
+      .eq("neel_approved", false)
+      .lte("scheduled_date", now)
+      .limit(50);
+
+    if (missedApproval && missedApproval.length > 0) {
+      const msg = "Awaiting Neel/Sattar approval — scheduled time passed. Approve to publish.";
+      for (const mp of missedApproval) {
+        if (mp.last_error === msg) continue;
+        await supabase
+          .from("social_posts")
+          .update({ last_error: msg })
+          .eq("id", mp.id);
+      }
+    }
+
+    // Flag overdue unapproved posts as failed — do NOT auto-approve
+    const midnightCutoff = new Date();
+    midnightCutoff.setUTCHours(0, 0, 0, 0);
+
+    const { data: overduePosts } = await supabase
+      .from("social_posts")
+      .select("id, platform, scheduled_date")
+      .eq("status", "scheduled")
+      .eq("neel_approved", false)
+      .lt("scheduled_date", midnightCutoff.toISOString())
+      .order("scheduled_date", { ascending: true })
+      .limit(20);
+
+    if (overduePosts && overduePosts.length > 0) {
+      console.log(`[social-cron-publish] Found ${overduePosts.length} overdue unapproved posts — marking as failed`);
+      for (const op of overduePosts) {
+        console.log(`[social-cron-publish] Failing overdue post ${op.id}: platform=${op.platform}, scheduled_date=${op.scheduled_date}`);
+        await supabase
+          .from("social_posts")
+          .update({ status: "failed", qa_status: "needs_review", last_error: "Approval deadline passed — not approved by Neel/Sattar" })
+          .eq("id", op.id);
+      }
+    }
+
+    if (fetchError) {
+      console.error("Error fetching due posts:", fetchError);
+      throw new Error("Failed to fetch scheduled posts");
+    }
+
+    // Fallback: auto-promote stuck draft posts that have qa_status=scheduled but status=draft
+    const { data: stuckPosts } = await supabase
+      .from("social_posts")
+      .select("id, scheduled_date, platform")
+      .eq("qa_status", "scheduled")
+      .eq("status", "draft")
+      .lte("scheduled_date", now)
+      .limit(20);
+
+    if (stuckPosts && stuckPosts.length > 0) {
+      console.log(`[social-cron-publish] Found ${stuckPosts.length} stuck draft posts with qa_status=scheduled — promoting to scheduled`);
+      for (const sp of stuckPosts) {
+        console.log(`  Promoting stuck post ${sp.id}: platform=${sp.platform}, scheduled_date=${sp.scheduled_date}`);
+        await supabase
+          .from("social_posts")
+          .update({ status: "scheduled" })
+          .eq("id", sp.id);
+      }
+      // Re-fetch to include newly promoted posts
+      const { data: refreshed } = await supabase
+        .from("social_posts")
+        .select("*")
+        .eq("status", "scheduled")
+        .eq("neel_approved", true)
+        .lte("scheduled_date", now)
+        .order("scheduled_date", { ascending: true })
+        .limit(20);
+      if (refreshed && refreshed.length > 0) {
+        duePosts!.push(...refreshed.filter(r => !duePosts!.some(d => d.id === r.id)));
+      }
+    }
+
+    if (!duePosts || duePosts.length === 0) {
+      return new Response(
+        JSON.stringify({ message: "No posts due for publishing", published: 0 }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`Found ${duePosts.length} posts due for publishing. Current UTC: ${now}`);
+    for (const p of duePosts) {
+      console.log(`  Post ${p.id}: platform=${p.platform}, scheduled_date=${p.scheduled_date}, status=${p.status}`);
+    }
+
+    const results: { postId: string; platform: string; success: boolean; error?: string; pages?: string[] }[] = [];
+    const SUPPORTED_PLATFORMS = ["facebook", "instagram", "linkedin"];
+
+    for (const post of duePosts) {
+      if (!SUPPORTED_PLATFORMS.includes(post.platform)) {
+        console.log(`[social-cron-publish] Skipping ${post.id} — platform "${post.platform}" not yet supported`);
+        results.push({ postId: post.id, platform: post.platform, success: false, error: "Platform not yet supported" });
+        continue;
+      }
+
+      try {
+        // ── Atomic Lock ──────────────────────────────────────────────
+        const lock = await acquirePublishLock(supabase, post.id, ["scheduled"]);
+        if (!lock.locked) {
+          console.log(`[social-cron-publish] Skipping ${post.id} — ${lock.reason}`);
+          continue;
+        }
+        const lockId = lock.lockId!;
+        console.log(`[social-cron-publish] Acquired lock for post ${post.id}: lockId=${lockId}`);
+
+        // ── Enhanced Duplicate Guard ─────────────────────────────────
+        const tz = await getWorkspaceTimezone(supabase);
+        const nowLocal = new Date(new Date().toLocaleString("en-US", { timeZone: tz }));
+        const dayStr = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth() + 1).padStart(2, "0")}-${String(nowLocal.getDate()).padStart(2, "0")}`;
+        const localMidnight = new Date(`${dayStr}T00:00:00`);
+        const offsetMs = new Date().getTime() - new Date(new Date().toLocaleString("en-US", { timeZone: tz })).getTime();
+        const dayStartUtc = new Date(localMidnight.getTime() + offsetMs).toISOString();
+        const dayEndUtc = new Date(localMidnight.getTime() + offsetMs + 86400000 - 1).toISOString();
+
+        const { data: publishedToday } = await supabase
+          .from("social_posts")
+          .select("id, title, content, image_url, page_name")
+          .eq("platform", post.platform)
+          .eq("status", "published")
+          .neq("id", post.id)
+          .gte("scheduled_date", dayStartUtc)
+          .lte("scheduled_date", dayEndUtc)
+          .limit(50);
+
+        const individualPages = post.page_name
+          ? post.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
+          : [];
+
+        let isDuplicate = false;
+        if (publishedToday && publishedToday.length > 0) {
+          for (const pub of publishedToday) {
+            const sameContent = pub.content === post.content && pub.image_url === post.image_url;
+            const sameTitle = pub.title && post.title && pub.title === post.title;
+
+            // Only block on content+image match, not title alone
+            if (sameContent) {
+              const pubPages = pub.page_name
+                ? pub.page_name.split(", ").map((p: string) => p.trim()).filter(Boolean)
+                : [];
+              // Only overlap when both sides have pages and they intersect
+              const hasPageOverlap = individualPages.length > 0 && pubPages.length > 0
+                && individualPages.some((pg: string) => pubPages.includes(pg));
+
+              if (hasPageOverlap) {
+                isDuplicate = true;
+                console.warn(`[social-cron-publish] Duplicate detected: post ${post.id} matches published ${pub.id}`);
+                break;
+              }
+            } else if (sameTitle) {
+              console.log(`[social-cron-publish] INFO — same title as ${pub.id} but different content, allowing publish`);
+            }
+          }
+        }
+
+        if (isDuplicate) {
+          await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: "Duplicate — same content already published today" });
+          results.push({ postId: post.id, platform: post.platform, success: false, error: "Duplicate content already published" });
+          continue;
+        }
+
+        // Strip Persian translation block
+        const cleanContent = stripPersianBlock(post.content || "");
+        const contentHasHashtags = /#[a-zA-Z]\w/.test(cleanContent);
+        const message = contentHasHashtags
+          ? cleanContent
+          : [cleanContent, (post.hashtags || []).length > 0 ? "\n\n" + (post.hashtags || []).join(" ") : ""].join("");
+
+        // ── Multi-Page Publishing Loop ───────────────────────────────
+        const pageErrors: string[] = [];
+        const pageSuccesses: string[] = [];
+
+        if (post.platform === "facebook" || post.platform === "instagram") {
+          const tokenPlatform = post.platform === "instagram" ? "instagram" : "facebook";
+
+          // Unified resolver: post-owner first → same-company teammate, both health-checked.
+          const resolved = await resolveValidMetaToken(supabase, post.user_id, tokenPlatform as "facebook" | "instagram");
+          let tokenData: { access_token: string; pages: any; instagram_accounts: any; user_id: string } | null = null;
+          let tokenOwnerUserId = post.user_id;
+
+          if (resolved) {
+            tokenData = {
+              access_token: resolved.accessToken,
+              pages: resolved.pages,
+              instagram_accounts: resolved.instagramAccounts,
+              user_id: resolved.tokenOwnerUserId,
+            };
+            tokenOwnerUserId = resolved.tokenOwnerUserId;
+            if (resolved.source === "team") {
+              console.log(`[social-cron-publish] Team-shared ${tokenPlatform} token from user ${tokenOwnerUserId} for post ${post.id}`);
+            }
+          }
+
+          if (!tokenData) {
+            const errMsg = META_RECONNECT_MESSAGE;
+            console.error(`[social-cron-publish] ${errMsg}`);
+            await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
+            results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
+            continue;
+          }
+
+
+          const pages = (tokenData.pages as Array<{ id: string; name?: string }>) || [];
+          if (pages.length === 0) {
+            const errMsg = "No Facebook Pages found in token data";
+            await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
+            results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
+            continue;
+          }
+
+          // NO FALLBACK: if no pages assigned, fail explicitly
+          if (individualPages.length === 0) {
+            const errMsg = "No pages assigned to post (page_name is empty). Cannot publish without explicit page assignment.";
+            console.error(`[social-cron-publish] FAIL post ${post.id}: ${errMsg}`);
+            await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
+            results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
+            continue;
+          }
+
+          console.log(`[social-cron-publish] Post ${post.id}: target_pages=[${individualPages.join(", ")}], available_pages=[${pages.map(p => p.name).join(", ")}]`);
+
+          const publishedFbPageIds = new Set<string>();
+          const publishedIgIds = new Set<string>();
+          const igPublishQueue: Array<{ igAccountId: string; pageAccessToken: string; targetPageName: string }> = [];
+
+          // ── One-shot Instagram image preparation (same contract as social-publish) ──
+          let igImageUrl: string | null | undefined = post.image_url;
+          if (post.platform === "instagram" && post.image_url) {
+            const isVideoUrl = /\.(mp4|m4v|mov|webm|mkv)(\?|$)/i.test(post.image_url);
+            if (!isVideoUrl) {
+              const prepared = await prepareInstagramImageUrl(post.image_url, "[social-cron-publish][IG-prep]");
+              if (!prepared.ok) {
+                console.error(`[social-cron-publish] IG image preparation failed for post ${post.id}: ${prepared.error}`);
+                for (const tpn of individualPages) {
+                  pageErrors.push(`Page "${tpn}": ${prepared.error}`);
+                }
+                individualPages = [];
+              } else {
+                igImageUrl = prepared.url;
+                if (prepared.prepared && igImageUrl !== post.image_url) {
+                  await supabase
+                    .from("social_posts")
+                    .update({ image_url: igImageUrl })
+                    .eq("id", post.id);
+                }
+              }
+            }
+          }
+
+
+          for (const targetPageName of individualPages) {
+            if (!targetPageName) {
+              pageErrors.push("Empty page name — skipped");
+              continue;
+            }
+
+            // Normalized matching: case-insensitive + trim
+            const normalizedTarget = normalizePageName(targetPageName);
+            const selectedPage = pages.find((p) => normalizePageName(p.name || "") === normalizedTarget);
+            if (!selectedPage) {
+              console.warn(`[social-cron-publish] SKIP — page "${targetPageName}" not found in token pages [${pages.map(p => p.name).join(", ")}]. Will NOT fall back.`);
+              pageErrors.push(`Page "${targetPageName}": not found in connected pages — skipped`);
+              continue;
+            }
+            const pageId = selectedPage.id;
+
+            // Get page-specific access token (use token owner, not post owner)
+            const { data: pageTokenData } = await supabase
+              .from("user_meta_tokens")
+              .select("access_token")
+              .eq("user_id", tokenOwnerUserId)
+              .eq("platform", `${tokenPlatform}_page_${pageId}`)
+              .maybeSingle();
+            let pageAccessToken = pageTokenData?.access_token || tokenData.access_token;
+
+            let publishResult: { id?: string; error?: string } = { error: "Unsupported platform" };
+
+            if (post.platform === "facebook") {
+              // Refresh page token
+              const refreshedToken = await refreshPageToken(tokenData.access_token, pageId);
+              if (refreshedToken) {
+                pageAccessToken = refreshedToken;
+                await supabase
+                  .from("user_meta_tokens")
+                  .upsert({
+                    user_id: tokenOwnerUserId,
+                    platform: `facebook_page_${pageId}`,
+                    access_token: refreshedToken,
+                  }, { onConflict: "user_id,platform" });
+              }
+
+              // Pre-flight: verify page token validity
+              const preflightRes = await fetch(`${GRAPH_API}/${pageId}?fields=id,name&access_token=${pageAccessToken}`);
+              const preflightData = await preflightRes.json();
+              if (preflightData.error) {
+                console.error(`[social-cron-publish] Facebook pre-flight failed for page "${targetPageName}":`, preflightData.error);
+                pageErrors.push(`Page "${targetPageName}": ${preflightData.error.message || "Token invalid"}`);
+                continue;
+              }
+
+              // Verify permissions
+              try {
+                const permRes = await fetch(`${GRAPH_API}/me/permissions?access_token=${pageAccessToken}`);
+                const permData = await permRes.json();
+                if (permData.data && Array.isArray(permData.data)) {
+                  const managePostsPerm = permData.data.find((p: any) => p.permission === "pages_manage_posts");
+                  if (!managePostsPerm || managePostsPerm.status !== "granted") {
+                    pageErrors.push(`Page "${targetPageName}": Missing pages_manage_posts permission`);
+                    continue;
+                  }
+                }
+              } catch (permErr) {
+                console.warn(`[social-cron-publish] Permission check failed for page "${targetPageName}", proceeding:`, permErr);
+              }
+
+              if (publishedFbPageIds.has(pageId)) {
+                console.log(`[social-cron-publish] Skipping page "${targetPageName}" — FB page ${pageId} already published`);
+                pageSuccesses.push(targetPageName);
+                continue;
+              }
+              publishedFbPageIds.add(pageId);
+
+              publishResult = await publishToFacebook(pageId, pageAccessToken, message, post.image_url, post.content_type);
+
+              // NO text-only fallback — if image publish fails, propagate the error
+              if (publishResult.error && post.image_url) {
+                console.error(`[social-cron-publish] Facebook image publish failed for page "${targetPageName}" — will NOT retry without image. Error: ${publishResult.error}`);
+              }
+            } else {
+              // Instagram — collect for parallel publishing below
+              const refreshedToken = await refreshPageToken(tokenData.access_token, pageId);
+              if (refreshedToken) {
+                pageAccessToken = refreshedToken;
+                await supabase
+                  .from("user_meta_tokens")
+                  .upsert({
+                    user_id: tokenOwnerUserId,
+                    platform: `instagram_page_${pageId}`,
+                    access_token: refreshedToken,
+                  }, { onConflict: "user_id,platform" });
+                console.log(`[social-cron-publish] Refreshed page token for IG (page ${pageId})`);
+              }
+
+              const igAccounts = (tokenData.instagram_accounts as Array<{ id: string; pageId?: string; username?: string }>) || [];
+              console.log(`[social-cron-publish] IG accounts available: [${igAccounts.map(ig => `${ig.id}(page=${ig.pageId})`).join(", ")}]`);
+              if (igAccounts.length === 0) {
+                pageErrors.push(`Page "${targetPageName}": No Instagram Business Account found`);
+                continue;
+              }
+              const matchedIg = igAccounts.find(ig => ig.pageId === pageId);
+              if (!matchedIg) {
+                console.warn(`[social-cron-publish] SKIP — no IG account linked to FB page ${pageId} ("${targetPageName}")`);
+                pageErrors.push(`Page "${targetPageName}": no linked Instagram account — skipped`);
+                continue;
+              }
+              console.log(`[social-cron-publish] Matched IG account: id=${matchedIg.id}, username=${(matchedIg as any).username || "unknown"}, for page "${targetPageName}"`);
+              if (publishedIgIds.has(matchedIg.id)) {
+                console.log(`[social-cron-publish] Skipping page "${targetPageName}" — IG account ${matchedIg.id} already published`);
+                pageSuccesses.push(targetPageName);
+                continue;
+              }
+              publishedIgIds.add(matchedIg.id);
+              igPublishQueue.push({ igAccountId: matchedIg.id, pageAccessToken, targetPageName });
+              continue;
+            }
+
+            if (publishResult.error) {
+              console.error(`[social-cron-publish] Failed to publish to page "${targetPageName}": ${publishResult.error}`);
+              pageErrors.push(`Page "${targetPageName}": ${publishResult.error}`);
+            } else {
+              console.log(`[social-cron-publish] Published to page "${targetPageName}" successfully (id: ${publishResult.id})`);
+              pageSuccesses.push(targetPageName);
+            }
+          }
+
+          // --- Parallel Instagram publishing ---
+          if (igPublishQueue.length > 0) {
+            console.log(`[social-cron-publish] Publishing to ${igPublishQueue.length} IG accounts in parallel`);
+            const igResults = await Promise.allSettled(
+              igPublishQueue.map(({ igAccountId, pageAccessToken: pat, targetPageName: tpn }) =>
+                publishToInstagram(igAccountId, pat, message, igImageUrl, post.content_type || "post", post.cover_image_url)
+                  .then(r => ({ ...r, targetPageName: tpn }))
+                  .catch(e => ({ error: e?.message || String(e), targetPageName: tpn }))
+              )
+            );
+            for (const settled of igResults) {
+              const r = settled.status === "fulfilled" ? settled.value : { error: (settled.reason?.message || String(settled.reason)), targetPageName: "unknown" };
+              if (r.error) {
+                console.error(`[social-cron-publish] IG parallel failed on "${r.targetPageName}": ${r.error}`);
+                pageErrors.push(`Page "${r.targetPageName}": ${r.error}`);
+              } else {
+                console.log(`[social-cron-publish] IG parallel published to "${r.targetPageName}" (id: ${(r as any).id})`);
+                pageSuccesses.push(r.targetPageName);
+              }
+            }
+          }
+        } else if (post.platform === "linkedin") {
+          // Support multi-page LinkedIn (personal + company pages)
+          const linkedInPages = individualPages.length > 0 ? individualPages : [null];
+          for (const targetPage of linkedInPages) {
+            const publishResult = await publishToLinkedIn(supabase, post.user_id, message, post.image_url, true, targetPage || undefined);
+            if (publishResult.error) {
+              pageErrors.push(`${targetPage || "linkedin"}: ${publishResult.error}`);
+            } else {
+              pageSuccesses.push(targetPage || "linkedin");
+            }
+          }
+        }
+
+        // Determine final status based on per-page results
+        if (pageSuccesses.length > 0) {
+          const partialError = pageErrors.length > 0 ? ` (failed on: ${pageErrors.join("; ")})` : "";
+          await releasePublishLock(supabase, post.id, lockId, "published", {
+            qa_status: "published",
+            ...(partialError ? { last_error: partialError } : {}),
+          });
+          results.push({ postId: post.id, platform: post.platform, success: true, pages: pageSuccesses });
+          if (pageErrors.length > 0) {
+            console.warn(`[social-cron-publish] Post ${post.id} partially published. Successes: [${pageSuccesses.join(", ")}], Failures: [${pageErrors.join("; ")}]`);
+          }
+        } else {
+          const errMsg = pageErrors.join("; ") || "Unknown publishing error";
+          console.error(`[social-cron-publish] FINAL FAILURE for post ${post.id}: ${errMsg}`);
+          await releasePublishLock(supabase, post.id, lockId, "failed", { last_error: errMsg, qa_status: "needs_review" });
+          results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
+        }
+      } catch (err) {
+        console.error(`Failed to publish post ${post.id}:`, err);
+        const errMsg = err instanceof Error ? err.message : "Unknown error";
+        // Try to release lock if we have one — but we might not
+        await supabase.from("social_posts").update({
+          status: "failed", qa_status: "needs_review", last_error: errMsg,
+          publishing_lock_id: null, publishing_started_at: null,
+        }).eq("id", post.id);
+        results.push({ postId: post.id, platform: post.platform, success: false, error: errMsg });
+      }
+    }
+
+    const published = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+
+    console.log(`Cron publish complete: ${published} published, ${failed} failed`);
+
+    return new Response(
+      JSON.stringify({ published, failed, results }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }, { functionName: "social-cron-publish", authMode: "none", requireCompany: false, wrapResult: false, internalOnly: true })
+);
+
+// ── Publishing Functions ──────────────────────────────────────────
+
+async function publishToFacebook(
+  pageId: string, accessToken: string, message: string, imageUrl?: string | null,
+  contentType: string = "post"
+): Promise<{ id?: string; error?: string }> {
+  try {
+    const params: Record<string, string> = { access_token: accessToken };
+    let url: string;
+
+    // Detect video content (same pattern as Instagram)
+    let isVideo = false;
+    if (imageUrl) {
+      isVideo = /\.(mp4|mov|avi|wmv|webm)(\?|$)/i.test(imageUrl);
+      if (!isVideo) {
+        try {
+          const head = await fetch(imageUrl, { method: "HEAD" });
+          const ct = head.headers.get("content-type") || "";
+          isVideo = ct.startsWith("video/");
+        } catch { /* ignore HEAD failures */ }
+      }
+    }
+
+    if (imageUrl && isVideo) {
+      // Video → use /videos endpoint
+      url = `${GRAPH_API}/${pageId}/videos`;
+      params.file_url = imageUrl;
+      params.description = message;
+      console.log(`[social-cron-publish] Facebook video detected, using /videos endpoint`);
+    } else if (imageUrl) {
+      url = `${GRAPH_API}/${pageId}/photos`;
+      params.url = imageUrl;
+      params.message = message;
+    } else {
+      url = `${GRAPH_API}/${pageId}/feed`;
+      params.message = message;
+    }
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(params),
+    });
+    const data = await res.json();
+    if (data.error) return { error: `Facebook: ${data.error.message}` };
+    return { id: data.id || data.post_id };
+  } catch (err) {
+    return { error: `Facebook: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+}
+
+async function publishToInstagram(
+  igAccountId: string, accessToken: string, caption: string, imageUrl?: string | null,
+  contentType: string = "post", coverImageUrl?: string | null
+): Promise<{ id?: string; error?: string }> {
+  return publishInstagramMedia({
+    igAccountId,
+    accessToken,
+    caption,
+    imageUrl,
+    contentType,
+    coverImageUrl,
+    logPrefix: "[social-cron-publish][IG]",
+  });
+}
+
+async function publishToLinkedIn(
+  supabase: ReturnType<typeof createClient>, userId: string, text: string,
+  imageUrl?: string | null, ownerOnly: boolean = false, pageName?: string
+): Promise<{ id?: string; error?: string }> {
+  try {
+    let { data: connection } = await supabase
+      .from("integration_connections")
+      .select("config")
+      .eq("user_id", userId)
+      .eq("integration_id", "linkedin")
+      .maybeSingle();
+
+    // Team fallback: find any teammate in same company with valid LinkedIn connection
+    if (!connection) {
+      const { data: ownerProfile } = await supabase
+        .from("profiles")
+        .select("company_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (ownerProfile?.company_id) {
+        const { data: teammates } = await supabase
+          .from("profiles")
+          .select("user_id")
+          .eq("company_id", ownerProfile.company_id)
+          .neq("user_id", userId);
+
+        for (const tm of teammates || []) {
+          const { data: tmConn } = await supabase
+            .from("integration_connections")
+            .select("config")
+            .eq("user_id", tm.user_id)
+            .eq("integration_id", "linkedin")
+            .maybeSingle();
+          if (tmConn) {
+            const tmConfig = tmConn.config as { expires_at: number };
+            if (tmConfig.expires_at > Date.now()) {
+              connection = tmConn;
+              console.log(`[social-cron] LinkedIn team fallback: using token from user ${tm.user_id}`);
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    if (!connection) return { error: "LinkedIn not connected for any team member." };
+    const config = connection.config as { access_token: string; expires_at: number; organization_ids?: Record<string, string> };
+
+    if (config.expires_at < Date.now()) return { error: "LinkedIn token expired — please reconnect LinkedIn in Settings → Integrations" };
+
+    // Determine author URN based on pageName
+    const personalName = (config as any).profile_name || "Sattar Esmaeili-Oureh";
+    const isPersonal = !pageName || pageName === personalName;
+    let authorUrn: string;
+
+    if (isPersonal) {
+      const profileRes = await fetch("https://api.linkedin.com/v2/userinfo", {
+        headers: { Authorization: `Bearer ${config.access_token}` },
+      });
+      if (!profileRes.ok) return { error: "Failed to get LinkedIn identity" };
+      const profile = await profileRes.json();
+      authorUrn = `urn:li:person:${profile.sub}`;
+    } else {
+      // page_name may be comma-separated (e.g. "Rebar.shop Ontario, Rebar.shop")
+      const orgIds = config.organization_ids || {};
+      const cPages = (pageName || "").split(",").map((s: string) => s.trim());
+      let orgId: string | undefined;
+      let matchedPage = pageName;
+      for (const pn of cPages) {
+        if (orgIds[pn]) { orgId = orgIds[pn]; matchedPage = pn; break; }
+      }
+      if (!orgId) {
+        return { error: `LinkedIn organization ID not configured for "${pageName}". Please reconnect LinkedIn to auto-discover organization pages.` };
+      }
+      console.log(`[linkedin-cron] Matched page "${matchedPage}" → org ${orgId}`);
+      authorUrn = `urn:li:organization:${orgId}`;
+    }
+
+    const payload: any = {
+      author: authorUrn,
+      lifecycleState: "PUBLISHED",
+      specificContent: {
+        "com.linkedin.ugc.ShareContent": {
+          shareCommentary: { text },
+          shareMediaCategory: "NONE",
+        },
+      },
+      visibility: { "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC" },
+    };
+
+    if (imageUrl) {
+      try {
+        const registerRes = await fetch("https://api.linkedin.com/v2/assets?action=registerUpload", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${config.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            registerUploadRequest: {
+              recipes: ["urn:li:digitalmediaRecipe:feedshare-image"],
+              owner: authorUrn,
+              serviceRelationships: [{ relationshipType: "OWNER", identifier: "urn:li:userGeneratedContent" }],
+            },
+          }),
+        });
+
+        if (registerRes.ok) {
+          const registerData = await registerRes.json();
+          const uploadUrl = registerData.value?.uploadMechanism?.["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]?.uploadUrl;
+          const asset = registerData.value?.asset;
+
+          if (uploadUrl && asset) {
+            const imgRes = await fetch(imageUrl);
+            if (imgRes.ok) {
+              const imgBlob = await imgRes.blob();
+              await fetch(uploadUrl, {
+                method: "PUT",
+                headers: {
+                  Authorization: `Bearer ${config.access_token}`,
+                  "Content-Type": imgBlob.type || "image/png",
+                },
+                body: imgBlob,
+              });
+
+              payload.specificContent["com.linkedin.ugc.ShareContent"].shareMediaCategory = "IMAGE";
+              payload.specificContent["com.linkedin.ugc.ShareContent"].media = [{
+                status: "READY",
+                media: asset,
+              }];
+            }
+          }
+        }
+      } catch (e) {
+        console.error("LinkedIn image upload error (non-critical):", e);
+      }
+    }
+
+    const postRes = await fetch("https://api.linkedin.com/v2/ugcPosts", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.access_token}`,
+        "Content-Type": "application/json",
+        "X-Restli-Protocol-Version": "2.0.0",
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!postRes.ok) {
+      const errText = await postRes.text();
+      console.error("LinkedIn post error:", errText);
+      return { error: `LinkedIn API error (${postRes.status})` };
+    }
+
+    return { id: postRes.headers.get("x-restli-id") || "published" };
+  } catch (err) {
+    return { error: `LinkedIn: ${err instanceof Error ? err.message : "Unknown"}` };
+  }
+}

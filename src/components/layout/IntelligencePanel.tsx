@@ -1,0 +1,174 @@
+// forwardRef cache bust
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { X, Send, Loader2, Sparkles, Trash2, Square } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Textarea } from "@/components/ui/textarea";
+import { useWorkspace } from "@/contexts/WorkspaceContext";
+import { useAuth } from "@/lib/auth";
+import { useAdminChat } from "@/hooks/useAdminChat";
+import { cn } from "@/lib/utils";
+import { RichMarkdown } from "@/components/chat/RichMarkdown";
+import { ContentActions } from "@/components/shared/ContentActions";
+import { parseQuickReplies } from "@/lib/parseQuickReplies";
+import { QuickReplies } from "@/components/chat/QuickReplies";
+import { useVizzyAutoSpeak } from "@/hooks/useVizzyAutoSpeak";
+
+export const IntelligencePanel = React.forwardRef<HTMLElement, {}>(function IntelligencePanel(_props, ref) {
+  const { user } = useAuth();
+  const { intelligencePanelOpen, setIntelligencePanelOpen } = useWorkspace();
+  const { messages, isStreaming, sendMessage, clearChat, cancelStream, deleteMessage } = useAdminChat();
+  const [input, setInput] = useState("");
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const { speakText } = useVizzyAutoSpeak();
+  const lastSpokenIdRef = useRef<string | null>(null);
+
+  // Auto-speak: trigger TTS when streaming finishes and last message is assistant
+  useEffect(() => {
+    if (isStreaming) return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== "assistant") return;
+    if (last.id === lastSpokenIdRef.current) return;
+    lastSpokenIdRef.current = last.id;
+    speakText(last.content);
+  }, [messages, isStreaming, speakText]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = () => {
+    if (!input.trim() || isStreaming) return;
+    sendMessage(input);
+    setInput("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  // Hard block: ai@rebar.shop must never see Vizzy
+  if (user?.email === "ai@rebar.shop") return null;
+
+  if (!intelligencePanelOpen) return null;
+
+  return (
+    <aside ref={ref} className="w-80 shrink-0 border-l border-border bg-card flex flex-col h-full animate-slide-in">
+      {/* Header */}
+      <div className="h-12 flex items-center justify-between px-3 border-b border-border shrink-0">
+        <div className="flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-primary" />
+          <span className="text-xs font-bold tracking-wider uppercase">Vizzy</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {messages.length > 0 && (
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={clearChat} title="Clear chat">
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setIntelligencePanelOpen(false)}>
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Chat messages */}
+      <ScrollArea className="flex-1">
+        <div className="p-3 space-y-3">
+          {messages.length === 0 && (
+            <div className="text-center py-12">
+              <Sparkles className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
+              <p className="text-sm font-medium text-foreground">Vizzy</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Your executive intelligence assistant.
+              </p>
+              <div className="mt-4 space-y-1.5 text-[10px] text-muted-foreground/60">
+                <p>"What's the biggest risk today?"</p>
+                <p>"Diagnose why AR is climbing"</p>
+                <p>"Who needs follow-up this week?"</p>
+                <p>"Plan tomorrow's priorities"</p>
+              </div>
+            </div>
+          )}
+
+          {messages.map((msg, idx) => {
+            const isLastAssistant = msg.role === "assistant" && idx === messages.length - 1;
+            const parsed = msg.role === "assistant" ? parseQuickReplies(msg.content) : null;
+            const displayContent = parsed ? parsed.content : msg.content;
+
+            return (
+              <div
+                key={msg.id}
+                className={cn(
+                  "group/msg relative rounded-lg px-3 py-2 text-xs max-w-[95%]",
+                  msg.role === "user"
+                    ? "ml-auto bg-primary text-primary-foreground"
+                    : "mr-auto bg-muted text-foreground"
+                )}
+              >
+                <button
+                  onClick={() => deleteMessage(msg.id)}
+                  className="absolute -top-1.5 -right-1.5 opacity-0 group-hover/msg:opacity-100 transition-opacity bg-destructive text-destructive-foreground rounded-full w-4 h-4 flex items-center justify-center shadow-sm z-10"
+                  title="Delete"
+                >
+                  <Trash2 className="w-2.5 h-2.5" />
+                </button>
+                {msg.role === "assistant" ? (
+                  <RichMarkdown content={displayContent} className="text-xs [&_h1]:text-sm [&_h2]:text-xs [&_h3]:text-xs [&_p]:text-xs" />
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+                <p className="text-[9px] opacity-50 mt-1">
+                  {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                </p>
+                {msg.role === "assistant" && (
+                  <ContentActions content={displayContent} size="xs" source="admin-console" className="mt-1" />
+                )}
+                {isLastAssistant && !isStreaming && parsed && parsed.replies.length > 0 && (
+                  <QuickReplies replies={parsed.replies} onSelect={sendMessage} disabled={isStreaming} />
+                )}
+              </div>
+            );
+          })}
+
+          {isStreaming && messages[messages.length - 1]?.role !== "assistant" && (
+            <div className="mr-auto bg-muted rounded-lg px-3 py-2 text-xs flex items-center gap-2">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="text-muted-foreground">Thinking...</span>
+            </div>
+          )}
+
+          <div ref={bottomRef} />
+        </div>
+      </ScrollArea>
+
+      {/* Input */}
+      <div className="border-t border-border p-3 shrink-0">
+        <div className="flex gap-1.5 items-end">
+          <Textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Ask or command..."
+            className="min-h-[36px] max-h-[120px] text-xs resize-none"
+            rows={1}
+            onKeyDown={handleKeyDown}
+            disabled={isStreaming}
+          />
+          {isStreaming ? (
+            <Button size="sm" variant="destructive" className="h-9 w-9 p-0 shrink-0" onClick={cancelStream}>
+              <Square className="w-3 h-3" />
+            </Button>
+          ) : (
+            <Button size="sm" className="h-9 w-9 p-0 shrink-0" onClick={handleSend} disabled={!input.trim()}>
+              <Send className="w-3.5 h-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+});
+IntelligencePanel.displayName = "IntelligencePanel";

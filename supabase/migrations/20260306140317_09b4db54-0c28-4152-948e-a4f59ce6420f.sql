@@ -1,0 +1,1 @@
+ALTER TABLE public.time_clock_entries ADD COLUMN source text DEFAULT 'manual';

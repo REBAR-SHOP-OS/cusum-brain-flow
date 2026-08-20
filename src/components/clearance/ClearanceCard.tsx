@@ -1,0 +1,653 @@
+import { useState, useRef, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { formatCutLength } from "@/lib/cutLengthDisplay";
+import { useQueryClient } from "@tanstack/react-query";
+import { useToast } from "@/hooks/use-toast";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+} from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
+  Camera,
+  CheckCircle2,
+  ShieldCheck,
+  Loader2,
+  AlertTriangle,
+  XCircle,
+} from "lucide-react";
+import { format } from "date-fns";
+import type { ClearanceItem } from "@/hooks/useClearanceData";
+import { compressImage } from "@/lib/imageCompressor";
+import { useUserRole } from "@/hooks/useUserRole";
+import { OverrideReasonDialog } from "@/components/shopfloor/OverrideReasonDialog";
+import { assertEvidenceComplete, ClearanceGateError } from "@/lib/clearanceEvidenceGate";
+import { useReleaseState } from "@/hooks/useReleaseState";
+import { itemSubStateLabel } from "@/lib/releaseStateLabels";
+import { Badge } from "@/components/ui/badge";
+
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
+interface ClearanceCardProps {
+  item: ClearanceItem;
+  canWrite: boolean;
+  userId?: string;
+}
+
+interface ValidationResult {
+  valid: boolean;
+  confidence: string;
+  reason: string;
+  detected_mark?: string | null;
+  detected_drawing?: string | null;
+  mark_match?: boolean | null;
+  drawing_match?: boolean | null;
+}
+
+export function ClearanceCard({ item, canWrite, userId }: ClearanceCardProps) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { isAdmin, isShopSupervisor } = useUserRole();
+  const canOverride = isAdmin || isShopSupervisor;
+  const { itemSubStateById } = useReleaseState();
+  const subState = itemSubStateById.get(item.id);
+  const [uploading, setUploading] = useState<"material" | "tag" | null>(null);
+  const [deleting, setDeleting] = useState<"material" | "tag" | null>(null);
+  const [verifying, setVerifying] = useState(false);
+  const [signedUrls, setSignedUrls] = useState<{ material?: string; tag?: string }>({});
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+  const [validating, setValidating] = useState(false);
+  const [gateError, setGateError] = useState<string | null>(null);
+  const [overrideOpen, setOverrideOpen] = useState(false);
+  const materialRef = useRef<HTMLInputElement>(null);
+  const tagRef = useRef<HTMLInputElement>(null);
+
+  // Resolve signed URLs for private bucket photos
+  useEffect(() => {
+    async function resolveUrls() {
+      const urls: { material?: string; tag?: string } = {};
+      for (const [key, storedUrl] of [["material", item.material_photo_url], ["tag", item.tag_scan_url]] as const) {
+        if (!storedUrl) continue;
+        if (storedUrl.includes("/object/sign/") || storedUrl.includes("token=")) {
+          urls[key] = storedUrl;
+          continue;
+        }
+        let storagePath = storedUrl;
+        const publicMarker = "/object/public/clearance-photos/";
+        const idx = storedUrl.indexOf(publicMarker);
+        if (idx !== -1) {
+          storagePath = storedUrl.substring(idx + publicMarker.length);
+        }
+        const { data } = await supabase.storage
+          .from("clearance-photos")
+          .createSignedUrl(storagePath, 3600);
+        if (data?.signedUrl) urls[key] = data.signedUrl;
+      }
+      setSignedUrls(urls);
+    }
+    resolveUrls();
+  }, [item.material_photo_url, item.tag_scan_url]);
+
+  const isCleared = item.evidence_status === "cleared";
+  const isFlagged = item.evidence_status === "flagged";
+  const hasEvidence = !!signedUrls.material;
+
+  const validatePhoto = async (storagePath: string, photoType: "material" | "tag") => {
+    setValidating(true);
+    setValidationResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("validate-clearance-photo", {
+        body: {
+          photo_storage_path: storagePath,
+          expected_mark_number: item.mark_number,
+          expected_drawing_ref: item.drawing_ref,
+          photo_type: photoType,
+        },
+      });
+
+      if (error) {
+        console.error("Validation error:", error);
+        setValidationResult({ valid: true, confidence: "unreadable", reason: "Validation service unavailable" });
+        return true;
+      }
+
+      setValidationResult(data);
+
+      if (!data.valid) {
+        toast({
+          title: "⚠️ Mark mismatch detected",
+          description: `Expected "${item.mark_number}" but detected "${data.detected_mark || "unreadable"}". Photo rejected.`,
+          variant: "destructive",
+          duration: 8000,
+        });
+        return false;
+      }
+
+      if (data.confidence === "unreadable") {
+        toast({
+          title: "⚠️ Could not verify",
+          description: "No readable text found in photo. Photo accepted — verify manually.",
+          duration: 6000,
+        });
+      } else if (data.confidence === "low") {
+        toast({
+          title: "Low confidence match",
+          description: data.reason || "Photo accepted but please double-check.",
+          duration: 5000,
+        });
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Validation failed:", err);
+      setValidationResult({ valid: true, confidence: "unreadable", reason: "Validation unavailable" });
+      return true; // Don't block on validation failure
+    } finally {
+      setValidating(false);
+    }
+  };
+
+  const handleUpload = async (type: "material" | "tag", file: File) => {
+    if (!canWrite) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      toast({ title: "File too large", description: "Max 50MB per photo.", variant: "destructive" });
+      return;
+    }
+
+    setUploading(type);
+    try {
+      // Compress image client-side before upload
+      const compressed = await compressImage(file);
+      const ext = compressed.name.split(".").pop() || "jpg";
+      const path = `${item.id}/${type}-${Date.now()}.${ext}`;
+
+      const { error: uploadErr } = await supabase.storage
+        .from("clearance-photos")
+        .upload(path, compressed, { upsert: true });
+      if (uploadErr) throw uploadErr;
+
+      // Run AI validation on the uploaded photo
+      const isValid = await validatePhoto(path, type);
+
+      if (!isValid) {
+        // Delete the rejected photo
+        await supabase.storage.from("clearance-photos").remove([path]);
+        return;
+      }
+
+      const photoUrl = path;
+      const field = type === "material" ? "material_photo_url" : "tag_scan_url";
+
+      if (item.evidence_id) {
+        await supabase
+          .from("clearance_evidence")
+          .update({ [field]: photoUrl })
+          .eq("id", item.evidence_id);
+      } else {
+        await supabase
+          .from("clearance_evidence")
+          .insert({ cut_plan_item_id: item.id, [field]: photoUrl });
+      }
+
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: `${type === "material" ? "Material" : "Tag"} photo uploaded` });
+    } catch (err: any) {
+      toast({ title: "Upload failed", description: err.message, variant: "destructive" });
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleDeletePhoto = async (type: "material" | "tag") => {
+    if (!canWrite || !item.evidence_id) return;
+    setDeleting(type);
+    try {
+      const field = type === "material" ? "material_photo_url" : "tag_scan_url";
+      const storedPath = type === "material" ? item.material_photo_url : item.tag_scan_url;
+
+      if (storedPath) {
+        let path = storedPath;
+        const marker = "/object/public/clearance-photos/";
+        const idx = storedPath.indexOf(marker);
+        if (idx !== -1) path = storedPath.substring(idx + marker.length);
+        await supabase.storage.from("clearance-photos").remove([path]);
+      }
+
+      await supabase.from("clearance_evidence")
+        .update({ [field]: null })
+        .eq("id", item.evidence_id);
+
+      setValidationResult(null);
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: `${type === "material" ? "Material" : "Tag"} photo removed` });
+    } catch (err: any) {
+      toast({ title: "Delete failed", description: err.message, variant: "destructive" });
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  // Zone is now assigned at the manifest (project) level — see ClearanceStation.
+
+
+  const handleVerify = async () => {
+    if (!canWrite || isCleared) return;
+    if (!item.storage_zone) {
+      setGateError("Assign a storage zone before marking clearance complete.");
+      toast({
+        title: "Storage zone required",
+        description: "Pick a zone (Zone 1–7) before verifying.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setVerifying(true);
+    setGateError(null);
+    try {
+      if (item.evidence_id) {
+        // HARD GATE — confirm both photos are on the SAME evidence row before
+        // flipping status to cleared. Mirrors the auto-clearance finalize gate.
+        await assertEvidenceComplete(item.evidence_id, item.id);
+        const { error: evErr } = await supabase
+          .from("clearance_evidence")
+          .update({
+            status: "cleared",
+            verified_by: userId,
+            verified_at: new Date().toISOString(),
+            verification_state: "complete",
+            evidence_valid: true,
+            invalidated_at: null,
+            ai_confidence: 1.0,
+          })
+          .eq("id", item.evidence_id);
+        if (evErr) throw evErr;
+      } else {
+        const { error: evErr } = await supabase
+          .from("clearance_evidence")
+          .insert({
+            cut_plan_item_id: item.id,
+            status: "cleared",
+            verified_by: userId,
+            verified_at: new Date().toISOString(),
+            verification_state: "complete",
+            evidence_valid: true,
+            ai_confidence: 1.0,
+          });
+        if (evErr) throw evErr;
+      }
+
+
+      // Idempotent: only hop clearance -> cleared if the evidence trigger
+      // hasn't already advanced the item (trigger may have moved it to
+      // cleared and the bridge trigger then to complete).
+      const { error: phErr } = await supabase
+        .from("cut_plan_items")
+        .update({ phase: "cleared" })
+        .eq("id", item.id)
+        .eq("phase", "clearance");
+      if (phErr) throw phErr;
+
+
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: "Item cleared", description: `${item.mark_number || "Item"} verified` });
+    } catch (err: any) {
+      const message = err?.message ?? String(err);
+      if (err instanceof ClearanceGateError) {
+        setGateError(message);
+        toast({
+          title: "Missing evidence",
+          description: message,
+          variant: "destructive",
+        });
+      } else if (/WORKFLOW_GATE_/.test(message)) {
+        setGateError(message);
+        toast({
+          title: "Blocked by release gate",
+          description: message,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Error", description: message, variant: "destructive" });
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  const handleFlag = async () => {
+    if (!canWrite) return;
+    try {
+      if (item.evidence_id) {
+        await supabase
+          .from("clearance_evidence")
+          .update({ status: "flagged" })
+          .eq("id", item.evidence_id);
+      } else {
+        await supabase
+          .from("clearance_evidence")
+          .insert({ cut_plan_item_id: item.id, status: "flagged" });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+      toast({ title: "Flagged", description: `${item.mark_number || "Item"} flagged for review` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+  };
+
+  const borderClass = isCleared
+    ? "border-primary/40 bg-primary/5"
+    : isFlagged
+    ? "border-amber-500/60 bg-amber-500/5"
+    : "border-border bg-card";
+
+  return (
+    <TooltipProvider>
+      <div className={`rounded-xl border ${borderClass} p-4 flex flex-col gap-3`}>
+        {/* Header */}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[9px] tracking-wider uppercase text-primary font-semibold">
+              Clearance Item:
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-2xl font-black text-foreground">
+                {item.mark_number || "—"}
+              </span>
+              {item.drawing_ref && (
+                <span className="text-xs text-primary font-medium">
+                  | DWG# {item.drawing_ref}
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              Size: {item.bar_code} | L: {formatCutLength({ cut_length_mm: item.cut_length_mm, unit_system: (item as any).unit_system, source_total_length_text: (item as any).source_total_length_text }).value}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            {subState && (
+              <Badge variant="outline" className="text-[9px] uppercase tracking-wider">
+                {itemSubStateLabel(subState)}
+              </Badge>
+            )}
+            {isCleared && <CheckCircle2 className="w-6 h-6 text-primary" />}
+            {isFlagged && <AlertTriangle className="w-6 h-6 text-amber-500" />}
+          </div>
+        </div>
+
+
+        {/* Photo slots */}
+        <div className="grid grid-cols-2 gap-3">
+          <PhotoSlot
+            label="Material"
+            url={signedUrls.material || null}
+            loading={uploading === "material" || (validating && uploading === null) || deleting === "material"}
+            disabled={!canWrite || isCleared}
+            inputRef={materialRef}
+            onFileSelect={(f) => handleUpload("material", f)}
+            onPreview={(url) => setPreviewUrl(url)}
+            onDelete={() => handleDeletePhoto("material")}
+          />
+          <PhotoSlot
+            label="Tag Scan"
+            url={signedUrls.tag || null}
+            loading={uploading === "tag" || deleting === "tag"}
+            disabled={!canWrite || isCleared}
+            inputRef={tagRef}
+            onFileSelect={(f) => handleUpload("tag", f)}
+            onPreview={(url) => setPreviewUrl(url)}
+            onDelete={() => handleDeletePhoto("tag")}
+          />
+        </div>
+
+        {/* Validation result banner */}
+        {validationResult && !isCleared && (
+          <ValidationBanner result={validationResult} />
+        )}
+
+        {/* Cleared by info */}
+        {isCleared && (item.verified_by_name || item.verified_at) && (
+          <p className="text-[10px] text-muted-foreground">
+            {item.verified_by_name
+              ? `Cleared by ${item.verified_by_name}`
+              : "Cleared"}
+            {item.verified_at && ` · ${format(new Date(item.verified_at), "MMM d, yyyy")}`}
+          </p>
+        )}
+
+        {/* Workflow-gate blocker */}
+        {gateError && !isCleared && (
+          <div
+            role="alert"
+            className="flex items-start gap-2 rounded-lg bg-destructive/10 border border-destructive/30 px-3 py-2"
+          >
+            <AlertTriangle className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-semibold text-destructive">
+                Evidence not release-ready
+              </p>
+              <p className="text-[10px] text-muted-foreground break-words">
+                {gateError}
+              </p>
+              {canOverride && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 h-7 text-[10px]"
+                  onClick={() => setOverrideOpen(true)}
+                >
+                  Request supervisor override
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* A8: Storage zone — assigned at manifest level; shown read-only here */}
+        {!isCleared && (
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
+              Storage zone
+            </span>
+            {item.storage_zone ? (
+              <Badge variant="outline" className="text-[10px]">
+                {item.storage_zone}
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="text-[9px] border-amber-500/40 text-amber-600">
+                Assign at manifest header
+              </Badge>
+            )}
+          </div>
+        )}
+        {isCleared && item.storage_zone && (
+          <p className="text-[10px] text-muted-foreground">Stored at {item.storage_zone}</p>
+        )}
+
+
+        <div className="flex gap-2 mt-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex-1">
+                <Button
+                  className="w-full gap-1.5"
+                  variant={isCleared ? "secondary" : "default"}
+                  disabled={!canWrite || isCleared || verifying || !hasEvidence || validating || !item.storage_zone}
+                  onClick={handleVerify}
+                >
+                  {verifying ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : isCleared ? (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Cleared
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      Manual Verify
+                    </>
+                  )}
+                </Button>
+              </span>
+            </TooltipTrigger>
+            {!isCleared && (!hasEvidence || !item.storage_zone) && (
+              <TooltipContent>
+                {!hasEvidence
+                  ? "Upload material photo before verifying"
+                  : "Assign a storage zone before verifying"}
+              </TooltipContent>
+            )}
+          </Tooltip>
+          {!isCleared && (
+            <Button
+              variant="destructive"
+              size="icon"
+              className="shrink-0"
+              disabled={!canWrite || isFlagged}
+              onClick={handleFlag}
+            >
+              <AlertTriangle className="w-4 h-4" />
+            </Button>
+          )}
+        </div>
+
+        {/* Fullscreen photo preview */}
+        <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
+          <DialogContent className="max-w-[90vw] max-h-[90vh] p-2 flex items-center justify-center overflow-hidden">
+            {previewUrl && (
+              <img src={previewUrl} alt="Evidence preview" className="max-w-full max-h-[80vh] object-contain rounded" loading="lazy" />
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <OverrideReasonDialog
+          open={overrideOpen}
+          onOpenChange={setOverrideOpen}
+          entityType="cut_plan_item"
+          entityId={item.id}
+          fromState="clearance"
+          toState="cleared"
+          onSuccess={() => {
+            setGateError(null);
+            queryClient.invalidateQueries({ queryKey: ["clearance-items"] });
+          }}
+        />
+      </div>
+    </TooltipProvider>
+  );
+}
+
+ClearanceCard.displayName = "ClearanceCard";
+
+// ─── Validation Banner ─────────────────────────────────────
+function ValidationBanner({ result }: { result: ValidationResult }) {
+  if (result.valid && result.confidence !== "unreadable" && result.confidence !== "low") {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-primary/10 border border-primary/20 px-3 py-2">
+        <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold text-primary">AI Verified ✓</p>
+          <p className="text-[9px] text-muted-foreground truncate">{result.reason}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!result.valid) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2">
+        <XCircle className="w-4 h-4 text-destructive shrink-0" />
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold text-destructive">Mark Mismatch — Photo Rejected</p>
+          <p className="text-[9px] text-muted-foreground">
+            Detected: "{result.detected_mark || "?"}" vs Expected: tag on card. {result.reason}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Unreadable or low confidence
+  return (
+    <div className="flex items-center gap-2 rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+      <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold text-amber-600">Manual Check Required</p>
+        <p className="text-[9px] text-muted-foreground truncate">{result.reason}</p>
+      </div>
+    </div>
+  );
+}
+
+ValidationBanner.displayName = "ValidationBanner";
+
+// ─── Photo Upload Slot ─────────────────────────────────────
+interface PhotoSlotProps {
+  label: string;
+  url: string | null;
+  loading: boolean;
+  disabled: boolean;
+  inputRef: React.RefObject<HTMLInputElement>;
+  onFileSelect: (file: File) => void;
+  onPreview: (url: string) => void;
+  onDelete?: () => void;
+}
+
+function PhotoSlot({ label, url, loading, disabled, inputRef, onFileSelect, onPreview, onDelete }: PhotoSlotProps) {
+  return (
+    <div
+      className={`relative aspect-[4/3] rounded-lg border border-border bg-muted/30 overflow-hidden flex items-center justify-center cursor-pointer hover:bg-muted/50 transition-colors ${disabled ? "opacity-60 pointer-events-none" : ""}`}
+      onClick={() => {
+        if (url) {
+          onPreview(url);
+        } else {
+          inputRef.current?.click();
+        }
+      }}
+    >
+      {url && !disabled && onDelete && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="absolute top-1 right-1 p-1 rounded-full bg-black/60 hover:bg-destructive text-white z-10"
+        >
+          <XCircle className="w-4 h-4" />
+        </button>
+      )}
+      {url ? (
+        <img src={url} alt={label} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+      ) : loading ? (
+        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin" />
+          <span className="text-[8px] tracking-wider uppercase">Validating…</span>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center gap-1 text-muted-foreground">
+          <Camera className="w-6 h-6" />
+          <span className="text-[9px] tracking-wider uppercase font-medium">{label}</span>
+        </div>
+      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) onFileSelect(file);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+PhotoSlot.displayName = "PhotoSlot";
