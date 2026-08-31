@@ -1,4 +1,5 @@
-import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors';
+import { corsHeaders } from "../_shared/auth.ts";
+import { callAI, AIError } from "../_shared/aiRouter.ts";
 
 interface Candidate {
   id: string;
@@ -210,9 +211,6 @@ Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) throw new Error('LOVABLE_API_KEY not configured');
-
     const { imageBase64, candidates } = await req.json() as {
       imageBase64: string;
       candidates: Candidate[];
@@ -228,78 +226,55 @@ Deno.serve(async (req) => {
       ? imageBase64
       : `data:image/jpeg;base64,${imageBase64}`;
 
-    const aiResp = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-lite',
-        messages: [
-          {
-            role: 'system',
-            content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG, REF. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields. MARK, DWG and REF are critical identifiers; never skip them when visible.',
-          },
-          {
-            role: 'user',
-            content: [
-              { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- dwg: the DWG / DRAWING cell content, e.g. "SD14", "S-14", "DWG-3"\n- ref: the REF / REFERENCE cell content (distinct from DWG), e.g. "R7", "REF-12"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear. MARK, DWG and REF are mandatory whenever readable.' },
-              { type: 'image_url', image_url: { url: dataUrl } },
-            ],
-          },
-        ],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'extract_tag',
-            description: 'Return the extracted tag fields. MARK, DWG and REF are mandatory whenever they are visible on the tag.',
-            parameters: {
-              type: 'object',
-              properties: {
-                tag_number: { type: 'string' },
-                mark: { type: 'string' },
-                dwg: { type: 'string' },
-                ref: { type: 'string' },
-                bar_size: { type: 'string' },
-                grade: { type: 'string' },
-                length_text: { type: 'string' },
-                length_mm: { type: 'number' },
-                quantity: { type: 'number' },
-                shape_code: { type: 'string' },
-                raw_text: { type: 'string' },
-                confidence_ocr: { type: 'number' },
-              },
-              additionalProperties: false,
+    const result = await callAI({
+      provider: 'gemini',
+      model: 'gemini-2.5-flash-lite',
+      agentName: 'shopfloor',
+      messages: [
+        {
+          role: 'system',
+          content: 'You read printed rebar fabrication tags. The tag is a printed grid with cells labeled MARK, SIZE, GRADE, QTY, LENGTH, DWG, REF. Read whatever you can — partial reads are fine. Always return raw_text containing every readable word on the tag, even if you cannot identify the fields. MARK, DWG and REF are critical identifiers; never skip them when visible.',
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Extract every field you can see on this rebar tag. Fields:\n- mark: the MARK cell content, e.g. "A1501", "12B", "A-1501"\n- dwg: the DWG / DRAWING cell content, e.g. "SD14", "S-14", "DWG-3"\n- ref: the REF / REFERENCE cell content (distinct from DWG), e.g. "R7", "REF-12"\n- bar_size: the SIZE cell, e.g. "15M", "20M", "#4"\n- grade: the GRADE cell, e.g. "400W", "60", "400"\n- quantity: integer in the QTY cell\n- length_text: LENGTH cell exactly as printed (keep imperial like 14\'2" or metric)\n- shape_code: shape designation if printed\n- raw_text: EVERY readable word on the tag (mandatory — never empty if any text is visible)\n- confidence_ocr: 0..1, your overall confidence the image contains a readable tag\n\nReturn partial data — never refuse just because some cells are unclear. MARK, DWG and REF are mandatory whenever readable.' },
+            { type: 'image_url', image_url: { url: dataUrl } },
+          ],
+        },
+      ],
+      tools: [{
+        type: 'function',
+        function: {
+          name: 'extract_tag',
+          description: 'Return the extracted tag fields. MARK, DWG and REF are mandatory whenever they are visible on the tag.',
+          parameters: {
+            type: 'object',
+            properties: {
+              tag_number: { type: 'string' },
+              mark: { type: 'string' },
+              dwg: { type: 'string' },
+              ref: { type: 'string' },
+              bar_size: { type: 'string' },
+              grade: { type: 'string' },
+              length_text: { type: 'string' },
+              length_mm: { type: 'number' },
+              quantity: { type: 'number' },
+              shape_code: { type: 'string' },
+              raw_text: { type: 'string' },
+              confidence_ocr: { type: 'number' },
             },
+            additionalProperties: false,
           },
-        }],
-        tool_choice: { type: 'function', function: { name: 'extract_tag' } },
-        // Tool-call response is a small JSON object — cap to keep latency tight.
-        max_tokens: 256,
-      }),
+        },
+      }],
+      toolChoice: { type: 'function', function: { name: 'extract_tag' } },
+      // Tool-call response is a small JSON object — cap to keep latency tight.
+      maxTokens: 256,
+      temperature: 0.1,
     });
 
-    if (!aiResp.ok) {
-      const t = await aiResp.text();
-      console.error('AI gateway error', aiResp.status, t);
-      if (aiResp.status === 429) {
-        return new Response(JSON.stringify({ error: 'Rate limit exceeded, please retry shortly.' }), {
-          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      if (aiResp.status === 402) {
-        return new Response(JSON.stringify({ error: 'AI credits exhausted. Add funds in Settings > Workspace > Usage.' }), {
-          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(JSON.stringify({ error: 'AI gateway error' }), {
-        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
-
-    const aiJson = await aiResp.json();
-    const toolCall = aiJson.choices?.[0]?.message?.tool_calls?.[0];
+    const toolCall = result.toolCalls?.[0];
     let ocr: ExtractedTag = {};
     try {
       ocr = JSON.parse(toolCall?.function?.arguments || '{}');
@@ -412,6 +387,17 @@ Deno.serve(async (req) => {
     });
 
   } catch (e) {
+    if (e instanceof AIError) {
+      console.error('match-tag-photo AI error', e.status, e.message);
+      if (e.status === 429) {
+        return new Response(JSON.stringify({ error: 'Rate limit exceeded, please retry shortly.' }), {
+          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify({ error: 'AI service unavailable — please retry.' }), {
+        status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     console.error('match-tag-photo error', e);
     return new Response(JSON.stringify({ error: e instanceof Error ? e.message : 'Unknown error' }), {
       status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
