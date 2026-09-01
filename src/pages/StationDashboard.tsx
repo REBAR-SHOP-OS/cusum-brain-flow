@@ -240,7 +240,7 @@ export default function StationDashboard() {
                   onStatusChanged={(name, action) => toast({ title: action, description: name })}
                 />
               </ProductionQueuePanel>
-              <ActiveProductionPanel lanes={projectLanes} />
+              <ActiveProductionPanel />
             </div>
           </>
         )}
