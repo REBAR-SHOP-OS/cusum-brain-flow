@@ -394,6 +394,16 @@ Deno.serve(async (req) => {
           status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      // Credits exhausted is NOT a retry-able condition. The pre-router code
+      // handled 402 separately and said what to actually do about it; the
+      // router preserves the upstream status on AIError.status, so keep that
+      // branch. Folding it into the generic 500 below tells an operator on the
+      // shop floor to "please retry" against a wall that will never clear.
+      if (e.status === 402) {
+        return new Response(JSON.stringify({ error: 'AI credits exhausted. Add funds in Settings > Workspace > Usage.' }), {
+          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
+      }
       return new Response(JSON.stringify({ error: 'AI service unavailable — please retry.' }), {
         status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
