@@ -1,23 +1,18 @@
 import { useNavigate } from "react-router-dom";
-import { Activity, Pause } from "lucide-react";
+import { Activity, Pause, Cog } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { ProjectLane } from "@/hooks/useProductionQueues";
+import { useActiveProduction } from "@/hooks/useActiveProduction";
 
 /**
  * Active production list — currently-running tasks across all machines.
- * Operators / supervisors can glance at what is on the floor in real time.
+ * Wires to live machine_runs + cut_plan_items for real item-phase progress.
  */
-export function ActiveProductionPanel({ lanes }: { lanes: ProjectLane[] }) {
+export function ActiveProductionPanel() {
   const navigate = useNavigate();
+  const { items, isLoading } = useActiveProduction();
 
-  const running = lanes
-    .flatMap((l) =>
-      l.items
-        .filter((i) => i.status === "running")
-        .map((i) => ({ ...i, projectName: l.projectName ?? "Unassigned" })),
-    )
-    .slice(0, 50);
+  const running = items.filter((i) => i.status === "running");
 
   return (
     <div className="rounded-md border border-border bg-card">
@@ -39,17 +34,25 @@ export function ActiveProductionPanel({ lanes }: { lanes: ProjectLane[] }) {
       </div>
 
       <div className="max-h-[420px] overflow-y-auto divide-y divide-border">
-        {running.length === 0 ? (
+        {isLoading ? (
+          <div className="py-12 text-center text-xs text-muted-foreground">
+            Loading live production…
+          </div>
+        ) : running.length === 0 ? (
           <div className="py-12 text-center text-xs text-muted-foreground">
             Nothing running right now.
           </div>
         ) : (
           running.map((item) => {
             const progress =
-              item.task && item.task.qty_required
+              item.total_pieces > 0
                 ? Math.min(
                     100,
-                    Math.round(((item.task.qty_completed ?? 0) / item.task.qty_required) * 100),
+                    Math.round(
+                      item.process === "bend"
+                        ? (item.bend_completed_pieces / item.total_pieces) * 100
+                        : (item.completed_pieces / item.total_pieces) * 100,
+                    ),
                   )
                 : null;
 
@@ -62,7 +65,10 @@ export function ActiveProductionPanel({ lanes }: { lanes: ProjectLane[] }) {
                   <div className="flex min-w-0 items-center gap-2">
                     <Activity className="h-3.5 w-3.5 shrink-0 text-info" />
                     <span className="truncate text-xs font-semibold uppercase tracking-wide text-foreground">
-                      {item.projectName}
+                      {item.customer_name || "UNKNOWN CUSTOMER"}
+                      {" — "}
+                      {item.project_name || item.work_order_number || "UNKNOWN PROJECT"}
+                      {item.current_phase ? ` · ${item.current_phase}` : ""}
                     </span>
                   </div>
                   <Badge className="bg-success/20 text-success border-success/30 text-[10px]">
@@ -71,11 +77,19 @@ export function ActiveProductionPanel({ lanes }: { lanes: ProjectLane[] }) {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                  {item.task?.mark_number && <span>mark {item.task.mark_number}</span>}
-                  {item.task?.task_type && <span>· {item.task.task_type}</span>}
-                  {item.task?.qty_required != null && (
+                  <span className="flex items-center gap-1">
+                    <Cog className="h-3 w-3" />
+                    {item.machine_name}
+                  </span>
+                  {item.process && <span>· {item.process}</span>}
+                  {item.operator_name && <span>· {item.operator_name}</span>}
+                  {item.total_pieces > 0 && (
                     <span className="tabular-nums">
-                      · {item.task.qty_completed ?? 0}/{item.task.qty_required} pcs
+                      ·
+                      {item.process === "bend"
+                        ? item.bend_completed_pieces
+                        : item.completed_pieces}
+                      /{item.total_pieces} pcs
                     </span>
                   )}
                 </div>
