@@ -1,6 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { corsHeaders } from "../_shared/auth.ts";
 import { handleRequest } from "../_shared/requestHandler.ts";
+import { deriveCutLength } from "../_shared/drawingParser.ts";
 
 function supabaseAdmin() {
   return createClient(
@@ -745,7 +746,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
       bar_code: row.bar_size_mapped || row.bar_size || null,
       grade: row.grade_mapped || row.grade || null,
       shape_code: row.shape_code_mapped || row.shape_type || null,
-      cut_length_mm: row.total_length_mm || null,
+      cut_length_mm: deriveCutLength(row),
       dims_json: buildDimensions(row),
       weight_kg: row.weight_kg || null,
       drawing_ref: row.dwg || null,
@@ -861,7 +862,7 @@ async function approveExtract(sb: any, sessionId: string, userId: string, optimi
     const STOCK_LENGTH_MM = optimizerConfig?.stockLengthMm || 12000;
     const KERF_MM = optimizerConfig?.kerfMm || 5;
     const cutItems = rows.map((row: any) => {
-      const cutLen = row.total_length_mm || 0;
+      const cutLen = deriveCutLength(row) ?? 0;
       const totalPieces = row.quantity || 1;
       const effectiveCut = cutLen + KERF_MM;
       const piecesPerBar = cutLen > 0 ? Math.floor(STOCK_LENGTH_MM / effectiveCut) : 1;
